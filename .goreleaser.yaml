@@ -7,7 +7,6 @@ project_name: antimetal-agent
 before:
   hooks:
     - go mod tidy
-    - make vendor
 
 builds:
   - id: agent

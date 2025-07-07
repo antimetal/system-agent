@@ -7,7 +7,7 @@ LOCALBIN ?= $(ROOT)/bin
 ## Location to store build & release artifacts
 DIST ?= $(ROOT)/dist
 
-GO_OS ?= $(shell go env GOOS)
+GO_OS ?= linux
 GO_ARCH ?= $(shell go env GOARCH)
 GO_TOOLCHAIN ?= $(shell grep -oE "^toolchain go[[:digit:]]*\.[[:digit:]]*\.+[[:digit:]]*" go.mod | cut -d ' ' -f2)
 
@@ -102,8 +102,8 @@ vendor:
 
 ##@ Build
 
-build: goreleaser manifests fmt vet ## Build agent binary for current GOOS and GOARCH.
-	$(GORELEASER) build --snapshot --clean --single-target
+build: goreleaser vendor manifests fmt vet ## Build agent binary for current GOOS and GOARCH.
+	GOOS=$(GO_OS) $(GORELEASER) build --snapshot --clean --single-target
 
 .PHONY: build-all
 build-all: goreleaser manifests fmt vet ## Build agent binary for all platforms.
