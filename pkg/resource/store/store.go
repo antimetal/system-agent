@@ -128,11 +128,17 @@ func (s *store) AddResource(rsrc *resourcev1.Resource) error {
 	if err != nil {
 		return fmt.Errorf("failed to add resource: %w", err)
 	}
+
+	// Create a new copy of the Any object.
+	// Set explicitly rather than proto.Clone to avoid using reflection.
 	s.eventRouter <- resource.Event{
 		Type: resource.EventTypeAdd,
 		Objs: []*resourcev1.Object{{
-			Type:   rsrc.GetType(),
-			Object: objAny,
+			Type: rsrc.GetType(),
+			Object: &anypb.Any{
+				TypeUrl: objAny.GetTypeUrl(),
+				Value:   bytes.Clone(objAny.GetValue()),
+			},
 		}},
 	}
 	return nil
@@ -199,11 +205,17 @@ func (s *store) UpdateResource(rsrc *resourcev1.Resource) error {
 	if err != nil {
 		return fmt.Errorf("failed to update resource: %w", err)
 	}
+
+	// Create a new copy of the Any object.
+	// Set explicitly rather than proto.Clone to avoid using reflection.
 	s.eventRouter <- resource.Event{
 		Type: resource.EventTypeUpdate,
 		Objs: []*resourcev1.Object{{
-			Type:   rsrc.GetType(),
-			Object: objAny,
+			Type: rsrc.GetType(),
+			Object: &anypb.Any{
+				TypeUrl: objAny.GetTypeUrl(),
+				Value:   bytes.Clone(objAny.GetValue()),
+			},
 		}},
 	}
 	return nil
@@ -333,11 +345,17 @@ func (s *store) DeleteResource(ref *resourcev1.ResourceRef) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal resource: %w", err)
 	}
+
+	// Create a new copy of the Any object.
+	// Set explicitly rather than proto.Clone to avoid using reflection.
 	s.eventRouter <- resource.Event{
 		Type: resource.EventTypeDelete,
 		Objs: []*resourcev1.Object{{
-			Type:   rsrc.GetType(),
-			Object: objAny,
+			Type: rsrc.GetType(),
+			Object: &anypb.Any{
+				TypeUrl: objAny.GetTypeUrl(),
+				Value:   bytes.Clone(objAny.GetValue()),
+			},
 		}},
 	}
 	return nil
@@ -408,9 +426,14 @@ func (s *store) AddRelationships(rels ...*resourcev1.Relationship) error {
 				return fmt.Errorf("failed to update subject index: %w", err)
 			}
 
+			// Create a new copy of the Any object.
+			// Set explicitly rather than proto.Clone to avoid using reflection.
 			objs[i] = &resourcev1.Object{
-				Type:   rel.GetType(),
-				Object: objAny,
+				Type: rel.GetType(),
+				Object: &anypb.Any{
+					TypeUrl: objAny.GetTypeUrl(),
+					Value:   bytes.Clone(objAny.GetValue()),
+				},
 			}
 		}
 		return nil
