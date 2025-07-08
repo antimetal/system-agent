@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cenkalti/backoff/v5"
@@ -29,11 +30,18 @@ import (
 )
 
 const (
-	workerName        = "intake-worker"
-	headerAuthorize   = "authorization"
-	defaultDeltaTTL   = 5 * time.Minute
-	heartbeatInterval = 1 * time.Minute
+	workerName          = "intake-worker"
+	headerAuthorize     = "authorization"
+	defaultDeltaTTL     = 5 * time.Minute
+	heartbeatInterval   = 1 * time.Minute
+	defaultMaxBatchSize = 100         // Default maximum number of deltas in a batch
+	defaultFlushPeriod  = time.Second // Default flush period
 )
+
+type deltasBatch struct {
+	deltas []*intakev1.Delta
+	id     uint64
+}
 
 var deltaVersion string
 
@@ -47,12 +55,27 @@ func init() {
 	deltaVersion = hex.EncodeToString(b)
 }
 
+var batchCounter uint64
+
+func newDeltasBatch(deltas []*intakev1.Delta) *deltasBatch {
+	return &deltasBatch{
+		deltas: deltas,
+		id:     atomic.AddUint64(&batchCounter, 1),
+	}
+}
+
 type worker struct {
 	apiKey string
 	client intakev1.IntakeServiceClient
 	store  resource.Store
 	logger logr.Logger
-	queue  workqueue.TypedRateLimitingInterface[*intakev1.Delta]
+	queue  workqueue.TypedRateLimitingInterface[*deltasBatch]
+	batch  *deltasBatch
+	mu     sync.Mutex
+
+	// configurable options
+	maxBatchSize int
+	flushPeriod  time.Duration
 
 	// runtime fields
 	stream intakev1.IntakeService_DeltaClient
@@ -78,21 +101,38 @@ func WithAPIKey(apiKey string) WorkerOpts {
 	}
 }
 
+func WithMaxBatchSize(size int) WorkerOpts {
+	return func(w *worker) {
+		w.maxBatchSize = size
+	}
+}
+
+func WithFlushPeriod(period time.Duration) WorkerOpts {
+	return func(w *worker) {
+		w.flushPeriod = period
+	}
+}
+
 func NewWorker(store resource.Store, opts ...WorkerOpts) (*worker, error) {
 	if store == nil {
 		return nil, fmt.Errorf("store can't be nil")
 	}
 
-	ratelimiter := workqueue.DefaultTypedControllerRateLimiter[*intakev1.Delta]()
+	ratelimiter := workqueue.DefaultTypedControllerRateLimiter[*deltasBatch]()
 	queue := workqueue.NewTypedRateLimitingQueueWithConfig(ratelimiter,
-		workqueue.TypedRateLimitingQueueConfig[*intakev1.Delta]{
+		workqueue.TypedRateLimitingQueueConfig[*deltasBatch]{
 			Name: workerName,
 		},
 	)
 
+	batch := newDeltasBatch([]*intakev1.Delta{})
+
 	w := &worker{
-		store: store,
-		queue: queue,
+		store:        store,
+		queue:        queue,
+		batch:        batch,
+		maxBatchSize: defaultMaxBatchSize,
+		flushPeriod:  defaultFlushPeriod,
 	}
 	for _, opt := range opts {
 		opt(w)
@@ -102,6 +142,18 @@ func NewWorker(store resource.Store, opts ...WorkerOpts) (*worker, error) {
 		return nil, fmt.Errorf("can't create client")
 	}
 	return w, nil
+}
+
+func (w *worker) flushBatch() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if len(w.batch.deltas) == 0 {
+		return
+	}
+
+	w.queue.AddRateLimited(w.batch)
+	w.batch = newDeltasBatch([]*intakev1.Delta{})
 }
 
 func (w *worker) Start(ctx context.Context) error {
@@ -118,22 +170,52 @@ func (w *worker) Start(ctx context.Context) error {
 		w.heartbeatWorker(ctx)
 	}()
 
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		w.batchFlusher(ctx)
+	}()
+
 	for event := range w.store.Subscribe(nil) {
 		for _, obj := range event.Objs {
 			obj.Ttl = durationpb.New(defaultDeltaTTL)
 			obj.DeltaVersion = deltaVersion
 		}
 
-		w.queue.AddRateLimited(&intakev1.Delta{
+		delta := &intakev1.Delta{
 			Op:      eventTypeToOp(event.Type),
 			Objects: event.Objs,
-		})
+		}
+
+		w.mu.Lock()
+		w.batch.deltas = append(w.batch.deltas, delta)
+		shouldFlush := len(w.batch.deltas) >= w.maxBatchSize
+		w.mu.Unlock()
+
+		if shouldFlush {
+			w.flushBatch()
+		}
 	}
 
 	w.logger.Info("shutting down intake worker")
+	w.flushBatch()
 	w.queue.ShutDownWithDrain()
 	wg.Wait()
 	return nil
+}
+
+func (w *worker) batchFlusher(ctx context.Context) {
+	ticker := time.NewTicker(w.flushPeriod)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			w.flushBatch()
+		}
+	}
 }
 
 func (w *worker) streamer(ctx context.Context) {
@@ -161,7 +243,7 @@ func (w *worker) heartbeatWorker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			w.queue.AddRateLimited(&intakev1.Delta{
+			w.queue.AddRateLimited(newDeltasBatch([]*intakev1.Delta{{
 				Op: intakev1.DeltaOperation_DELTA_OPERATION_HEARTBEAT,
 				Objects: []*resourcev1.Object{
 					{
@@ -169,17 +251,17 @@ func (w *worker) heartbeatWorker(ctx context.Context) {
 						Ttl:          durationpb.New(defaultDeltaTTL),
 					},
 				},
-			})
+			}}))
 		}
 	}
 }
 
 func (w *worker) sendDelta(ctx context.Context) {
-	delta, shutdown := w.queue.Get()
+	batch, shutdown := w.queue.Get()
 	if shutdown {
 		return
 	}
-	defer w.queue.Done(delta)
+	defer w.queue.Done(batch)
 
 	if w.stream == nil {
 		for {
@@ -207,8 +289,8 @@ func (w *worker) sendDelta(ctx context.Context) {
 		}
 	}
 
-	w.logger.V(1).Info("sending delta", "op", delta.Op, "numObjects", len(delta.Objects), "version", deltaVersion)
-	err := w.stream.Send(&intakev1.DeltaRequest{Deltas: []*intakev1.Delta{delta}})
+	w.logger.V(1).Info("sending deltas", "numDeltas", len(batch.deltas), "version", deltaVersion)
+	err := w.stream.Send(&intakev1.DeltaRequest{Deltas: batch.deltas})
 	if err != nil {
 		_, err = w.stream.CloseAndRecv()
 		if err != nil {
@@ -222,11 +304,11 @@ func (w *worker) sendDelta(ctx context.Context) {
 		}
 		w.stream = nil
 		if !w.queue.ShuttingDown() {
-			w.queue.AddRateLimited(delta)
+			w.queue.AddRateLimited(batch)
 		}
 		return
 	}
-	w.queue.Forget(delta)
+	w.queue.Forget(batch)
 }
 
 func eventTypeToOp(e resource.EventType) intakev1.DeltaOperation {
