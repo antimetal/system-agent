@@ -78,9 +78,9 @@ type worker struct {
 	flushPeriod  time.Duration
 
 	// runtime fields
-	stream          intakev1.IntakeService_DeltaClient
-	streamCreatedAt time.Time
-	maxStreamAge    time.Duration
+	stream       intakev1.IntakeService_DeltaClient
+	streamCancel context.CancelFunc
+	maxStreamAge time.Duration
 }
 
 type WorkerOpts func(*worker)
@@ -235,6 +235,12 @@ func (w *worker) streamer(ctx context.Context) {
 				if _, err := w.stream.CloseAndRecv(); err != nil {
 					w.logger.Error(err, "error closing intake stream")
 				}
+
+				if w.streamCancel != nil {
+					w.streamCancel()
+					w.streamCancel = nil
+				}
+				w.stream = nil
 			}
 			return
 		default:
@@ -272,27 +278,22 @@ func (w *worker) sendDelta(ctx context.Context) {
 	}
 	defer w.queue.Done(batch)
 
-	if w.stream == nil || time.Since(w.streamCreatedAt) > w.maxStreamAge {
-
-		if w.stream != nil {
-			err := w.stream.CloseSend()
-			if err != nil {
-				w.logger.Error(err, "failed to close old intake stream")
-			}
-		}
-
+	if w.stream == nil {
 		for {
 			_, err := backoff.Retry(ctx, func() (bool, error) {
+				innerCtx, cancel := context.WithTimeout(context.Background(), w.maxStreamAge)
 				streamCtx := metadata.NewOutgoingContext(
-					context.Background(), metadata.Pairs(headerAuthorize, fmt.Sprintf("bearer %s", w.apiKey)),
+					innerCtx, metadata.Pairs(headerAuthorize, fmt.Sprintf("bearer %s", w.apiKey)),
 				)
 				stream, err := w.client.Delta(streamCtx)
 				if err != nil {
+					cancel()
 					w.logger.Error(err, "failed to create intake stream, retrying...")
 					return false, err
 				}
+
 				w.stream = stream
-				w.streamCreatedAt = time.Now()
+				w.streamCancel = cancel
 				return true, nil
 			}, backoff.WithBackOff(backoff.NewExponentialBackOff()))
 
@@ -320,7 +321,14 @@ func (w *worker) sendDelta(ctx context.Context) {
 				w.logger.Error(err, "failed to send to intake stream")
 			}
 		}
+
+		// Cancel the stream context when stream fails
+		if w.streamCancel != nil {
+			w.streamCancel()
+			w.streamCancel = nil
+		}
 		w.stream = nil
+
 		if !w.queue.ShuttingDown() {
 			w.queue.AddRateLimited(batch)
 		}
