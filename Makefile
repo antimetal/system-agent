@@ -149,7 +149,9 @@ ebpf-generate: ## Generate eBPF Go bindings (requires Linux/Docker)
 		echo "Running eBPF generation in Docker (macOS detected)..."; \
 		$(ROOT)/scripts/generate-ebpf.sh; \
 	else \
-		cd pkg/ebpf && GOPACKAGE=ebpf go run github.com/cilium/ebpf/cmd/bpf2go@v0.19.0 -cc clang -target amd64,arm64 hello ../../ebpf/programs/hello.bpf.c; \
+		echo "Running eBPF generation natively (Linux detected)..."; \
+		ARCH_TRIPLET=$$(case $$(dpkg --print-architecture) in arm64) echo "aarch64-linux-gnu";; amd64) echo "x86_64-linux-gnu";; *) echo "$$(dpkg --print-architecture)-linux-gnu";; esac); \
+		cd pkg/ebpf && GOPACKAGE=ebpf go run github.com/cilium/ebpf/cmd/bpf2go@v0.19.0 -cc clang -cflags "-I/usr/include/$$ARCH_TRIPLET -I/usr/include" -target amd64,arm64 hello ../../ebpf/programs/hello.bpf.c; \
 	fi
 
 .PHONY: ebpf-build
