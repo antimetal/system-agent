@@ -78,7 +78,9 @@ type worker struct {
 	flushPeriod  time.Duration
 
 	// runtime fields
-	stream intakev1.IntakeService_DeltaClient
+	stream          intakev1.IntakeService_DeltaClient
+	streamCreatedAt time.Time
+	maxStreamAge    time.Duration
 }
 
 type WorkerOpts func(*worker)
@@ -98,6 +100,12 @@ func WithLogger(logger logr.Logger) WorkerOpts {
 func WithAPIKey(apiKey string) WorkerOpts {
 	return func(w *worker) {
 		w.apiKey = apiKey
+	}
+}
+
+func WithMaxStreamAge(maxStreamAge time.Duration) WorkerOpts {
+	return func(w *worker) {
+		w.maxStreamAge = maxStreamAge
 	}
 }
 
@@ -130,6 +138,7 @@ func NewWorker(store resource.Store, opts ...WorkerOpts) (*worker, error) {
 	w := &worker{
 		store:        store,
 		queue:        queue,
+		maxStreamAge: 10 * time.Minute,
 		batch:        batch,
 		maxBatchSize: defaultMaxBatchSize,
 		flushPeriod:  defaultFlushPeriod,
@@ -263,7 +272,7 @@ func (w *worker) sendDelta(ctx context.Context) {
 	}
 	defer w.queue.Done(batch)
 
-	if w.stream == nil {
+	if w.stream == nil || time.Since(w.streamCreatedAt) > w.maxStreamAge {
 		for {
 			_, err := backoff.Retry(ctx, func() (bool, error) {
 				streamCtx := metadata.NewOutgoingContext(
@@ -275,6 +284,7 @@ func (w *worker) sendDelta(ctx context.Context) {
 					return false, err
 				}
 				w.stream = stream
+				w.streamCreatedAt = time.Now()
 				return true, nil
 			}, backoff.WithBackOff(backoff.NewExponentialBackOff()))
 

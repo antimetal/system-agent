@@ -55,6 +55,7 @@ var (
 	eksRegion            string
 	eksClusterName       string
 	eksAutodiscover      bool
+	maxStreamAge         time.Duration
 )
 
 func init() {
@@ -97,6 +98,8 @@ func init() {
 		"The name of the EKS cluster")
 	flag.BoolVar(&eksAutodiscover, "kubernetes-provider-eks-autodiscover", true,
 		"Autodiscover EKS cluster name")
+	flag.DurationVar(&maxStreamAge, "max-stream-age", 10*time.Minute,
+		"Maximum age of the intake stream before it is reset")
 
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
@@ -197,6 +200,7 @@ func main() {
 		intake.WithLogger(mgr.GetLogger().WithName("intake-worker")),
 		intake.WithGRPCConn(intakeConn),
 		intake.WithAPIKey(intakeAPIKey),
+		intake.WithMaxStreamAge(maxStreamAge),
 	)
 	if err != nil {
 		setupLog.Error(err, "unable to create intake worker")
