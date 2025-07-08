@@ -1,0 +1,7 @@
+# Ignore generated files
+*.o
+*_bpfel.go
+
+# Ignore programs and headers (we'll mount them)
+programs/
+headers/

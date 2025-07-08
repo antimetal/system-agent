@@ -53,11 +53,12 @@ clean: ## Removes build artifacts.
 	rm -rf $(LOCALBIN)
 	rm -rf $(DIST)
 	rm -f $(TESTCOVERAGE_OUT)
+	rm -f pkg/ebpf/*_bpfel.go pkg/ebpf/*_bpfel.o
 
 ##@ Development
 
 .PHONY: generate
-generate: manifests ## Generate all artifacts
+generate: manifests ebpf-generate ## Generate all artifacts
 
 .PHONY: gen-check
 gen-check: generate ## Check if generated files are up to date.
@@ -138,6 +139,51 @@ docker-push: ## Push docker image.
 
 .PHONY: docker-build-and-push
 docker-build-and-push: docker-build-all docker-push ## Build and push docker image.
+
+##@ eBPF
+
+.PHONY: ebpf-generate
+ebpf-generate: ## Generate eBPF Go bindings (requires Linux/Docker)
+	@echo "Generating eBPF Go bindings..."
+	@if [ "$(shell uname)" = "Darwin" ]; then \
+		echo "Running eBPF generation in Docker (macOS detected)..."; \
+		$(ROOT)/scripts/generate-ebpf.sh; \
+	else \
+		cd pkg/ebpf && go generate; \
+	fi
+
+.PHONY: ebpf-build
+ebpf-build: ## Build eBPF test program
+	@echo "Building eBPF test program..."
+	@go build -o $(LOCALBIN)/ebpf-hello ./cmd/ebpf-hello
+
+.PHONY: ebpf-test
+ebpf-test: ## Run eBPF test program (Linux only, requires root)
+	@if [ "$(shell uname)" = "Darwin" ]; then \
+		echo "ERROR: eBPF programs cannot run on macOS"; \
+		echo ""; \
+		echo "eBPF is a Linux kernel technology and requires a Linux environment."; \
+		echo "To test the eBPF implementation, you can:"; \
+		echo "  1. Deploy to a KIND cluster: make cluster && make deploy"; \
+		echo "  2. Run in a Linux VM or container"; \
+		echo "  3. Deploy to a Linux machine with: make ebpf-build && sudo ./bin/ebpf-hello"; \
+		echo ""; \
+		echo "The eBPF bindings have been generated and will work when deployed to Linux."; \
+		exit 1; \
+	elif [ "$(shell uname)" = "Linux" ]; then \
+		echo "Running eBPF test program..."; \
+		if [ "$(shell id -u)" = "0" ]; then \
+			$(LOCALBIN)/ebpf-hello; \
+		else \
+			echo "ERROR: eBPF test requires root privileges on Linux"; \
+			echo "Run: sudo make ebpf-test"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "ERROR: Unsupported operating system: $(shell uname)"; \
+		echo "eBPF is only supported on Linux"; \
+		exit 1; \
+	fi
 
 ##@ Deployment
 

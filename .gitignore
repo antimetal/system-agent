@@ -24,3 +24,8 @@ go.work.sum
 
 # Added by goreleaser init:
 dist/
+
+# eBPF generated files
+pkg/ebpf/*_bpfel.go
+pkg/ebpf/*_bpfel.o
+ebpf-hello
