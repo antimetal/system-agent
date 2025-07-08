@@ -273,6 +273,14 @@ func (w *worker) sendDelta(ctx context.Context) {
 	defer w.queue.Done(batch)
 
 	if w.stream == nil || time.Since(w.streamCreatedAt) > w.maxStreamAge {
+
+		if w.stream != nil {
+			err := w.stream.CloseSend()
+			if err != nil {
+				w.logger.Error(err, "failed to close old intake stream")
+			}
+		}
+
 		for {
 			_, err := backoff.Retry(ctx, func() (bool, error) {
 				streamCtx := metadata.NewOutgoingContext(
