@@ -68,6 +68,26 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: status.podIP
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: HOST_PROC
+          value: /host/proc
+        - name: HOST_SYS
+          value: /host/sys
+        - name: HOST_DEV
+          value: /host/dev
+        volumeMounts:
+        - name: proc
+          mountPath: /host/proc
+          readOnly: true
+        - name: sys
+          mountPath: /host/sys
+          readOnly: true
+        - name: dev
+          mountPath: /host/dev
+          readOnly: true
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -95,3 +115,16 @@ spec:
       serviceAccountName: agent
       terminationGracePeriodSeconds: 10
       automountServiceAccountToken: true
+      volumes:
+      - name: proc
+        hostPath:
+          path: /proc
+          type: Directory
+      - name: sys
+        hostPath:
+          path: /sys
+          type: Directory
+      - name: dev
+        hostPath:
+          path: /dev
+          type: Directory
