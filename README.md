@@ -20,6 +20,13 @@ For questions and support feel free to post a Github Issue.
 For commercial support, contact us at support@antimetal.com.
 
 ## License
+
+### Main Project
 The source code is licensed using PolyForm Shield.
 If you are an end user, broadly you can do whatever you want with this code.
 See the License FAQ for more information.
+
+### eBPF Programs
+The eBPF programs in the `ebpf/` directory are dual-licensed under GPLv2 and BSD 2-Clause licenses.
+This dual licensing is required for kernel compatibility while allowing permissive downstream use.
+See [ebpf/LICENSE](ebpf/LICENSE) for details.

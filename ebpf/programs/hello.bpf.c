@@ -1,5 +1,8 @@
 //go:build ignore
 
+// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+// Copyright (c) 2024 Antimetal
+
 #include <linux/bpf.h>
 #include <linux/types.h>
 #include <bpf/bpf_helpers.h>
@@ -50,4 +53,4 @@ int hello_world(void *ctx) {
     return 0;
 }
 
-char LICENSE[] SEC("license") = "GPL";
+char LICENSE[] SEC("license") = "Dual BSD/GPL";
