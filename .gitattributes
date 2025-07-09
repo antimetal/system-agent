@@ -1,0 +1,3 @@
+# Treat vmlinux.h as binary to avoid polluting diffs
+# This file is auto-generated and contains thousands of lines
+ebpf/include/vmlinux.h binary -diff
