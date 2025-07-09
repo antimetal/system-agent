@@ -12,8 +12,9 @@ echo "Generating eBPF Go bindings..."
 # Generate Go bindings for each eBPF program
 cd "${PROJECT_ROOT}"
 
-# Download dependencies including bpf2go
-go mod download
+# Download only the bpf2go tool dependency
+echo "Downloading bpf2go tool..."
+go mod download github.com/cilium/ebpf
 
 echo "Generating bindings for bpf programs..."
 go generate ./pkg/ebpf/...
