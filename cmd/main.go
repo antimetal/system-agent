@@ -56,6 +56,7 @@ var (
 	eksClusterName       string
 	eksAutodiscover      bool
 	maxStreamAge         time.Duration
+	pprofAddr            string
 )
 
 func init() {
@@ -100,6 +101,8 @@ func init() {
 		"Autodiscover EKS cluster name")
 	flag.DurationVar(&maxStreamAge, "max-stream-age", 10*time.Minute,
 		"Maximum age of the intake stream before it is reset")
+	flag.StringVar(&pprofAddr, "pprof-address", "0",
+		"The address the pprof server binds to. Set this to '0' to disable the pprof server")
 
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
@@ -148,6 +151,7 @@ func main() {
 		Scheme:                 scheme.Get(),
 		Metrics:                metricsServerOpts,
 		HealthProbeBindAddress: probeAddr,
+		PprofBindAddress:       pprofAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "4927b366.antimetal.com",
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
