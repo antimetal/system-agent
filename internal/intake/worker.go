@@ -279,6 +279,7 @@ func (w *worker) sendDelta(ctx context.Context) {
 	defer w.queue.Done(batch)
 
 	if w.stream == nil {
+		// Continously try to create a new stream
 		for {
 			_, err := backoff.Retry(ctx, func() (bool, error) {
 				innerCtx, cancel := context.WithTimeout(context.Background(), w.maxStreamAge)
@@ -308,21 +309,20 @@ func (w *worker) sendDelta(ctx context.Context) {
 		}
 	}
 
-	w.logger.V(1).Info("sending deltas", "numDeltas", len(batch.deltas), "version", deltaVersion)
+	w.logger.V(1).Info("sending deltas", "numDeltas", len(batch.deltas), "version", deltaVersion, "batchID", batch.id)
 	err := w.stream.Send(&intakev1.DeltaRequest{Deltas: batch.deltas})
 	if err != nil {
 		_, err = w.stream.CloseAndRecv()
 		if err != nil {
 			code := status.Code(err)
-			if code == codes.Unavailable || code == codes.Canceled {
-				// Resetting stream due server max connection age
+			if code == codes.Unavailable || code == codes.Canceled || code == codes.DeadlineExceeded {
 				w.logger.V(1).Info("resetting intake stream")
 			} else {
-				w.logger.Error(err, "failed to send to intake stream")
+				w.logger.Error(err, "failed to send to intake stream, resetting stream...")
 			}
 		}
 
-		// Cancel the stream context when stream fails
+		// Cancel the stream context when stream is terminated
 		if w.streamCancel != nil {
 			w.streamCancel()
 			w.streamCancel = nil
