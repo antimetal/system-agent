@@ -155,7 +155,7 @@ deploy: manifests kustomize ## Deploy agent to the K8s cluster specified in the 
 
 .PHONY: undeploy
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in the current context in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
-	@mkdir -p $(ROOT)/tmp && cp -r $(ROOT)/config/ $(ROOT)/tmp
+	@mkdir -p $(ROOT)/tmp && cp -r $(ROOT)/config $(ROOT)/tmp
 	@cd $(ROOT)/tmp/config/default && \
 		$(KUSTOMIZE) edit set image amagent=$(IMG) && \
 		kubectl delete --ignore-not-found -k .
@@ -163,7 +163,7 @@ undeploy: kustomize ## Undeploy controller from the K8s cluster specified in the
 
 .PHONY: preview-deploy
 preview-deploy: manifests kustomize ## Generate a consolidated YAML for deployment.
-	@mkdir -p $(ROOT)/tmp && cp -r $(ROOT)/config/ $(ROOT)/tmp
+	@mkdir -p $(ROOT)/tmp && cp -r $(ROOT)/config $(ROOT)/tmp
 	@cd $(ROOT)/tmp/config/default && $(KUSTOMIZE) edit set image agent=$(IMG)
 	$(KUSTOMIZE) build $(ROOT)/tmp/config/default
 	@rm -r $(ROOT)/tmp
