@@ -8,6 +8,8 @@ RUN apt-get update && apt-get install -y \
     make \
     clang \
     llvm \
+    libbpf-dev \
+    linux-libc-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install bpftool from Ubuntu packages (stable version)
