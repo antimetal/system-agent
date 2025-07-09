@@ -24,3 +24,7 @@ go.work.sum
 
 # Added by goreleaser init:
 dist/
+
+# eBPF generated files
+*_bpfe*.go
+*_bpfe*.o
