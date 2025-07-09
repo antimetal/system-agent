@@ -232,7 +232,7 @@ endef
 
 .PHONY: tools
 tools: ## Download all tool dependencies if neccessary.
-tools: controller-gen envtest golangci-lint kind ktf kustomize goreleaser
+tools: controller-gen golangci-lint kind ktf kustomize goreleaser
 
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
