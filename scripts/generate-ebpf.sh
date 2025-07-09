@@ -28,7 +28,12 @@ docker run --rm \
         # Generate bindings with correct package name
         # Use the kernel headers from the installed linux-headers package
         CFLAGS=\"-I/usr/include/aarch64-linux-gnu -I/usr/include\"
+        
+        # Generate bindings for hello program
         GOPACKAGE=ebpf bpf2go -cc clang -cflags \"\$CFLAGS\" -target amd64,arm64 hello ../../ebpf/programs/hello.bpf.c
+        
+        # Generate bindings for CPU scheduling program
+        GOPACKAGE=ebpf bpf2go -cc clang -cflags \"\$CFLAGS\" -target amd64,arm64 cpuSched ../../ebpf/programs/cpu_sched.bpf.c
         
         echo 'eBPF Go bindings generated successfully!'
     "
