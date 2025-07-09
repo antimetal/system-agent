@@ -139,6 +139,32 @@ docker-push: ## Push docker image.
 .PHONY: docker-build-and-push
 docker-build-and-push: docker-build-all docker-push ## Build and push docker image.
 
+##@ eBPF
+
+.PHONY: ebpf-generate
+ebpf-generate: ## Generate Go bindings from eBPF C code.
+	@echo "Generating eBPF Go bindings..."
+	@if [ -d "ebpf/src" ] && [ -n "$$(ls -A ebpf/src/*.bpf.c 2>/dev/null)" ]; then \
+		if [ "$$(uname -s)" = "Darwin" ]; then \
+			echo "Running on macOS, using Docker for eBPF compilation..."; \
+			./scripts/generate-ebpf-docker.sh; \
+		else \
+			./scripts/generate-ebpf.sh; \
+		fi; \
+	else \
+		echo "No eBPF programs found in ebpf/src/"; \
+	fi
+
+.PHONY: ebpf-hello
+ebpf-hello: ebpf-generate ## Build the eBPF hello world example.
+	@echo "Building eBPF hello world example..."
+	GOPACKAGE=main go build -o $(LOCALBIN)/ebpf-hello ./cmd/ebpf-hello
+
+.PHONY: ebpf-run
+ebpf-run: ebpf-hello ## Run the eBPF hello world example (requires sudo).
+	@echo "Running eBPF hello world example (requires sudo)..."
+	sudo $(LOCALBIN)/ebpf-hello
+
 ##@ Deployment
 
 ifndef ignore-not-found
