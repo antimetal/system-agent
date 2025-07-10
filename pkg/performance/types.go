@@ -335,7 +335,7 @@ func DefaultCollectionConfig() CollectionConfig {
 // ApplyDefaults fills in zero values with defaults
 func (c *CollectionConfig) ApplyDefaults() {
 	defaults := DefaultCollectionConfig()
-	
+
 	if c.Interval == 0 {
 		c.Interval = defaults.Interval
 	}

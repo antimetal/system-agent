@@ -162,14 +162,12 @@ func (r *CollectorRegistry) RegisterContinuous(collector ContinuousCollector) er
 	return nil
 }
 
-func (r *CollectorRegistry) GetPoint(metricType MetricType) (PointCollector, bool) {
-	collector, ok := r.pointCollectors[metricType]
-	return collector, ok
+func (r *CollectorRegistry) GetPoint(metricType MetricType) PointCollector {
+	return r.pointCollectors[metricType]
 }
 
-func (r *CollectorRegistry) GetContinuous(metricType MetricType) (ContinuousCollector, bool) {
-	collector, ok := r.continuousCollectors[metricType]
-	return collector, ok
+func (r *CollectorRegistry) GetContinuous(metricType MetricType) ContinuousCollector {
+	return r.continuousCollectors[metricType]
 }
 
 func (r *CollectorRegistry) GetAllPoint() []PointCollector {
