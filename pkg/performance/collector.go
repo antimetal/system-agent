@@ -7,31 +7,33 @@ import (
 	"github.com/go-logr/logr"
 )
 
-// PointCollector performs one-shot data collection
-type PointCollector interface {
+// Collector is the base interface for all collectors
+type Collector interface {
 	Type() MetricType
 	Name() string
+	Capabilities() CollectorCapabilities
+}
+
+// PointCollector performs one-shot data collection
+type PointCollector interface {
+	Collector
 
 	// Collect performs a single collection and returns the metrics
-	Collect(ctx context.Context) (interface{}, error)
-
-	Capabilities() CollectorCapabilities
+	Collect(ctx context.Context) (any, error)
 }
 
 // ContinuousCollector performs ongoing data collection with streaming output
 type ContinuousCollector interface {
-	Type() MetricType
-	Name() string
+	Collector
 
 	// Start begins continuous collection and returns a channel for streaming results
-	Start(ctx context.Context) (<-chan interface{}, error)
+	Start(ctx context.Context) (<-chan any, error)
 
 	// Stop halts continuous collection and cleans up resources
 	Stop() error
 
 	Status() CollectorStatus
 	LastError() error
-	Capabilities() CollectorCapabilities
 }
 
 type CollectorCapabilities struct {
@@ -42,7 +44,8 @@ type CollectorCapabilities struct {
 	MinKernelVersion   string
 }
 
-type BasePointCollector struct {
+// BaseCollector provides common functionality for all collectors
+type BaseCollector struct {
 	metricType   MetricType
 	name         string
 	logger       logr.Logger
@@ -50,8 +53,8 @@ type BasePointCollector struct {
 	capabilities CollectorCapabilities
 }
 
-func NewBasePointCollector(metricType MetricType, name string, logger logr.Logger, config CollectionConfig, capabilities CollectorCapabilities) BasePointCollector {
-	return BasePointCollector{
+func NewBaseCollector(metricType MetricType, name string, logger logr.Logger, config CollectionConfig, capabilities CollectorCapabilities) BaseCollector {
+	return BaseCollector{
 		metricType:   metricType,
 		name:         name,
 		logger:       logger.WithName(string(metricType)),
@@ -60,45 +63,29 @@ func NewBasePointCollector(metricType MetricType, name string, logger logr.Logge
 	}
 }
 
-func (b *BasePointCollector) Type() MetricType {
+func (b *BaseCollector) Type() MetricType {
 	return b.metricType
 }
 
-func (b *BasePointCollector) Name() string {
+func (b *BaseCollector) Name() string {
 	return b.name
 }
 
-func (b *BasePointCollector) Capabilities() CollectorCapabilities {
+func (b *BaseCollector) Capabilities() CollectorCapabilities {
 	return b.capabilities
 }
 
 type BaseContinuousCollector struct {
-	metricType   MetricType
-	name         string
-	status       CollectorStatus
-	lastError    error
-	logger       logr.Logger
-	config       CollectionConfig
-	capabilities CollectorCapabilities
+	BaseCollector
+	status    CollectorStatus
+	lastError error
 }
 
 func NewBaseContinuousCollector(metricType MetricType, name string, logger logr.Logger, config CollectionConfig, capabilities CollectorCapabilities) BaseContinuousCollector {
 	return BaseContinuousCollector{
-		metricType:   metricType,
-		name:         name,
-		status:       CollectorStatusDisabled,
-		logger:       logger.WithName(string(metricType)),
-		config:       config,
-		capabilities: capabilities,
+		BaseCollector: NewBaseCollector(metricType, name, logger, config, capabilities),
+		status:        CollectorStatusDisabled,
 	}
-}
-
-func (b *BaseContinuousCollector) Type() MetricType {
-	return b.metricType
-}
-
-func (b *BaseContinuousCollector) Name() string {
-	return b.name
 }
 
 func (b *BaseContinuousCollector) Status() CollectorStatus {
@@ -109,10 +96,6 @@ func (b *BaseContinuousCollector) LastError() error {
 	return b.lastError
 }
 
-func (b *BaseContinuousCollector) Capabilities() CollectorCapabilities {
-	return b.capabilities
-}
-
 func (b *BaseContinuousCollector) SetStatus(status CollectorStatus) {
 	b.status = status
 }
@@ -121,7 +104,7 @@ func (b *BaseContinuousCollector) SetError(err error) {
 	b.lastError = err
 	if err != nil {
 		b.status = CollectorStatusFailed
-		b.logger.Error(err, "collector error")
+		b.BaseCollector.logger.Error(err, "collector error")
 	}
 }
 

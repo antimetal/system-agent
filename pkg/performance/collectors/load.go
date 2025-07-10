@@ -15,7 +15,7 @@ import (
 
 // LoadCollector collects system load statistics from /proc/loadavg
 type LoadCollector struct {
-	performance.BasePointCollector
+	performance.BaseCollector
 	loadavgPath string
 	uptimePath  string
 }
@@ -30,7 +30,7 @@ func NewLoadCollector(logger logr.Logger, config performance.CollectionConfig) *
 	}
 
 	return &LoadCollector{
-		BasePointCollector: performance.NewBasePointCollector(
+		BaseCollector: performance.NewBaseCollector(
 			performance.MetricTypeLoad,
 			"System Load Collector",
 			logger,
@@ -42,7 +42,7 @@ func NewLoadCollector(logger logr.Logger, config performance.CollectionConfig) *
 	}
 }
 
-func (c *LoadCollector) Collect(ctx context.Context) (interface{}, error) {
+func (c *LoadCollector) Collect(ctx context.Context) (any, error) {
 	return c.collectLoadStats()
 }
 
@@ -104,10 +104,7 @@ func (c *LoadCollector) collectLoadStats() (*performance.LoadStats, error) {
 	// Read /proc/uptime for system uptime
 	// Format: uptime_seconds idle_seconds
 	uptimeData, err := os.ReadFile(c.uptimePath)
-	if err != nil {
-		// Log the error and continue without uptime
-		c.Logger.Error(err, fmt.Sprintf("Failed to read uptime from %s", c.uptimePath))
-	} else {
+	if err == nil {
 		uptimeFields := strings.Fields(string(uptimeData))
 		if len(uptimeFields) >= 1 {
 			uptimeSeconds, err := strconv.ParseFloat(uptimeFields[0], 64)
@@ -116,6 +113,7 @@ func (c *LoadCollector) collectLoadStats() (*performance.LoadStats, error) {
 			}
 		}
 	}
+	// If we can't read uptime, just continue without it
 
 	return stats, nil
 }

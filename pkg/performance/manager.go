@@ -41,13 +41,11 @@ func NewManager(opts ManagerOptions) (*Manager, error) {
 		}
 	}
 
-	// Apply default config if needed
+	// Apply defaults to config
 	config := opts.Config
-	if config.Interval == 0 {
-		config = DefaultCollectionConfig()
-	}
+	config.ApplyDefaults()
 
-	// Adjust paths for containerized environments
+	// Override paths for containerized environments
 	if os.Getenv("HOST_PROC") != "" {
 		config.HostProcPath = os.Getenv("HOST_PROC")
 	}

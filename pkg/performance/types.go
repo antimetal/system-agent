@@ -54,7 +54,7 @@ type CollectorStat struct {
 	Status   CollectorStatus
 	Duration time.Duration
 	Error    error
-	Data     interface{} // The actual collected data
+	Data     any // The actual collected data
 }
 
 // Metrics contains all collected performance metrics
@@ -310,11 +310,6 @@ type CollectionConfig struct {
 	HostProcPath      string // Path to /proc (useful for containers)
 	HostSysPath       string // Path to /sys (useful for containers)
 	HostDevPath       string // Path to /dev (useful for containers)
-	ProcessTopN       int    // Number of top processes to track
-	KernelMsgTailN    int    // Number of recent kernel messages
-	// eBPF specific config
-	EnableEBPF bool
-	EBPFDebug  bool
 }
 
 // DefaultCollectionConfig returns a default configuration
@@ -331,12 +326,29 @@ func DefaultCollectionConfig() CollectionConfig {
 			MetricTypeTCP:     true,
 			MetricTypeKernel:  true,
 		},
-		HostProcPath:   "/proc",
-		HostSysPath:    "/sys",
-		HostDevPath:    "/dev",
-		ProcessTopN:    20,
-		KernelMsgTailN: 50,
-		EnableEBPF:     true,
-		EBPFDebug:      false,
+		HostProcPath: "/proc",
+		HostSysPath:  "/sys",
+		HostDevPath:  "/dev",
+	}
+}
+
+// ApplyDefaults fills in zero values with defaults
+func (c *CollectionConfig) ApplyDefaults() {
+	defaults := DefaultCollectionConfig()
+	
+	if c.Interval == 0 {
+		c.Interval = defaults.Interval
+	}
+	if c.EnabledCollectors == nil {
+		c.EnabledCollectors = defaults.EnabledCollectors
+	}
+	if c.HostProcPath == "" {
+		c.HostProcPath = defaults.HostProcPath
+	}
+	if c.HostSysPath == "" {
+		c.HostSysPath = defaults.HostSysPath
+	}
+	if c.HostDevPath == "" {
+		c.HostDevPath = defaults.HostDevPath
 	}
 }
