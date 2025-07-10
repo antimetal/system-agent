@@ -179,7 +179,7 @@ destroy-cluster: ktf ## Delete the KIND cluster.
 .PHONY: load.image
 load-image: kind ## Loads Docker image into KIND cluster and restarts agent for new image if it exists.
 	$(KIND) load docker-image $(IMG) --name $(KIND_CLUSTER)
-	$(KUBECTL) -n antimetal-system rollout restart deployment antimetal-agent >/dev/null 2>&1 || true
+	$(KUBECTL) -n antimetal-system rollout restart deployment agent >/dev/null 2>&1 || true
 
 .PHONY: build-and-load-image
 build-and-load-image: docker-build load-image ## Builds and loads Docker image into KIND cluster.
