@@ -105,8 +105,8 @@ func (c *LoadCollector) collectLoadStats() (*performance.LoadStats, error) {
 	// Format: uptime_seconds idle_seconds
 	uptimeData, err := os.ReadFile(c.uptimePath)
 	if err != nil {
-		// Non-fatal error - just log it
-		// Non-fatal error - just continue without uptime
+		// Log the error and continue without uptime
+		c.Logger.Error(err, fmt.Sprintf("Failed to read uptime from %s", c.uptimePath))
 	} else {
 		uptimeFields := strings.Fields(string(uptimeData))
 		if len(uptimeFields) >= 1 {
