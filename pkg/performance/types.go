@@ -248,31 +248,31 @@ type NetworkStats struct {
 // TCPStats represents TCP connection statistics
 type TCPStats struct {
 	// Connection counts from /proc/net/snmp (Tcp: line)
-	ActiveOpens  uint64 // Active connection openings
-	PassiveOpens uint64 // Passive connection openings
-	AttemptFails uint64 // Failed connection attempts
-	EstabResets  uint64 // Resets from established state
-	CurrEstab    uint64 // Current established connections
-	InSegs       uint64 // Segments received
-	OutSegs      uint64 // Segments sent
-	RetransSegs  uint64 // Segments retransmitted
-	InErrs       uint64 // Segments received with errors
-	OutRsts      uint64 // RST segments sent
-	InCsumErrors uint64 // Segments with checksum errors
+	ActiveOpens  uint64 // Active connection openings (count since boot)
+	PassiveOpens uint64 // Passive connection openings (count since boot)
+	AttemptFails uint64 // Failed connection attempts (count since boot)
+	EstabResets  uint64 // Resets from established state (count since boot)
+	CurrEstab    uint64 // Current established connections (instantaneous count)
+	InSegs       uint64 // Segments received (count since boot)
+	OutSegs      uint64 // Segments sent (count since boot)
+	RetransSegs  uint64 // Segments retransmitted (count since boot)
+	InErrs       uint64 // Segments received with errors (count since boot)
+	OutRsts      uint64 // RST segments sent (count since boot)
+	InCsumErrors uint64 // Segments with checksum errors (count since boot)
 	// Extended TCP stats from /proc/net/netstat (TcpExt: line)
-	SyncookiesSent      uint64 // SYN cookies sent
-	SyncookiesRecv      uint64 // SYN cookies received
-	SyncookiesFailed    uint64 // SYN cookies failed
-	ListenOverflows     uint64 // Listen queue overflows
-	ListenDrops         uint64 // Listen queue drops
-	TCPLostRetransmit   uint64 // Lost retransmissions
-	TCPFastRetrans      uint64 // Fast retransmissions
-	TCPSlowStartRetrans uint64 // Slow start retransmissions
-	TCPTimeouts         uint64 // TCP timeouts
+	SyncookiesSent      uint64 // SYN cookies sent (count since boot)
+	SyncookiesRecv      uint64 // SYN cookies received (count since boot)
+	SyncookiesFailed    uint64 // SYN cookies failed (count since boot)
+	ListenOverflows     uint64 // Listen queue overflows (count since boot)
+	ListenDrops         uint64 // Listen queue drops (count since boot)
+	TCPLostRetransmit   uint64 // Lost retransmissions (count since boot)
+	TCPFastRetrans      uint64 // Fast retransmissions (count since boot)
+	TCPSlowStartRetrans uint64 // Slow start retransmissions (count since boot)
+	TCPTimeouts         uint64 // TCP timeouts (count since boot)
 	// Connection states from /proc/net/tcp and /proc/net/tcp6
 	// States: ESTABLISHED, SYN_SENT, SYN_RECV, FIN_WAIT1, FIN_WAIT2,
 	// TIME_WAIT, CLOSE, CLOSE_WAIT, LAST_ACK, LISTEN, CLOSING
-	ConnectionsByState map[string]uint64
+	ConnectionsByState map[string]uint64 // Current count per state (instantaneous)
 }
 
 // KernelMessage represents a kernel log message from /dev/kmsg
