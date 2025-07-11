@@ -81,6 +81,10 @@ func (b *BaseCollector) Capabilities() CollectorCapabilities {
 	return b.capabilities
 }
 
+func (b *BaseCollector) Logger() logr.Logger {
+	return b.logger
+}
+
 type BaseContinuousCollector struct {
 	BaseCollector
 	status    CollectorStatus
