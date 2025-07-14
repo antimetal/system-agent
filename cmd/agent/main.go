@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -27,15 +28,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	"github.com/antimetal/agent/internal/instrumentor"
 	"github.com/antimetal/agent/internal/intake"
 	k8sagent "github.com/antimetal/agent/internal/kubernetes/agent"
 	"github.com/antimetal/agent/internal/kubernetes/cluster"
 	"github.com/antimetal/agent/internal/kubernetes/scheme"
+	perf "github.com/antimetal/agent/pkg/performance/manager"
 	"github.com/antimetal/agent/pkg/resource/store"
 )
 
 var (
-	setupLog logr.Logger
+	setupLog           logr.Logger
+	clusterProvider    cluster.Provider
+	instrumentorReader instrumentor.Reader = &instrumentor.Static{}
 
 	// CLI Options
 	intakeAddr           string
@@ -57,6 +62,9 @@ var (
 	eksAutodiscover      bool
 	maxStreamAge         time.Duration
 	pprofAddr            string
+	enableInstrumentor   bool
+	instrumentorAddr     string
+	enablePerfCollection bool
 )
 
 func init() {
@@ -103,6 +111,13 @@ func init() {
 		"Maximum age of the intake stream before it is reset")
 	flag.StringVar(&pprofAddr, "pprof-address", "0",
 		"The address the pprof server binds to. Set this to '0' to disable the pprof server")
+	flag.BoolVar(&enableInstrumentor, "enable-instrumentor", false,
+		"Enable the Instrumentor Agent")
+	flag.StringVar(&instrumentorAddr, "instrumentor-address", "http://localhost:8080/v1/opamp",
+		"The address of the OpAMP server for the Instrumentor Agent")
+	flag.BoolVar(&enablePerfCollection, "enable-perf-collection", true,
+		"Enable performance metrics collection",
+	)
 
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
@@ -199,6 +214,25 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Setup Instrumentor Agent
+	if enableInstrumentor {
+		instrumentorId, err := uuid.NewV7()
+		if err != nil {
+			setupLog.Error(err, "unable to generate instrumentor ID")
+			os.Exit(1)
+		}
+		instrumentorAgent := instrumentor.NewAgent(ctx,
+			instrumentorId,
+			mgr.GetLogger().WithName("instrumentor"),
+			instrumentorAddr,
+		)
+		if err := mgr.Add(instrumentorAgent); err != nil {
+			setupLog.Error(err, "unable to register instrumentor agent")
+			os.Exit(1)
+		}
+		instrumentorReader = instrumentorAgent
+	}
+
 	// Setup Intake Worker
 	intakeWorker, err := intake.NewWorker(rsrcStore,
 		intake.WithLogger(mgr.GetLogger().WithName("intake-worker")),
@@ -217,18 +251,42 @@ func main() {
 
 	// Setup Kubernetes Collector Controller
 	if enableK8sController {
+		var err error
 		providerOpts := getProviderOptions(setupLog.WithName("cluster-provider"))
-		provider, err := cluster.GetProvider(ctx, kubernetesProvider, providerOpts)
+		clusterProvider, err = cluster.GetProvider(ctx, kubernetesProvider, providerOpts)
 		if err != nil {
 			setupLog.Error(err, "unable to determine cluster provider")
 			os.Exit(1)
 		}
 		ctrl := &k8sagent.Controller{
-			Provider: provider,
+			Provider: clusterProvider,
 			Store:    rsrcStore,
 		}
 		if err := ctrl.SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "K8sCollector")
+			os.Exit(1)
+		}
+	}
+
+	if enablePerfCollection {
+		perfMgrOpts := perf.ManagerOptions{
+			Logger:       mgr.GetLogger(),
+			Instrumentor: instrumentorReader,
+		}
+		if clusterProvider != nil {
+			perfMgrOpts.ClusterName, err = clusterProvider.ClusterName(ctx)
+			if err != nil {
+				setupLog.Error(err, "unable to get cluster name")
+				os.Exit(1)
+			}
+		}
+		perfMgr, err := perf.NewManager(perfMgrOpts)
+		if err != nil {
+			setupLog.Error(err, "unable to create performance manager")
+			os.Exit(1)
+		}
+		if err := mgr.Add(perfMgr); err != nil {
+			setupLog.Error(err, "unable to register performance manager")
 			os.Exit(1)
 		}
 	}
