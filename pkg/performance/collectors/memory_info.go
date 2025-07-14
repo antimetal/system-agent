@@ -19,7 +19,25 @@ import (
 	"github.com/go-logr/logr"
 )
 
-// MemoryInfoCollector collects memory hardware configuration from the Linux proc and sysfs filesystems.
+// MemoryInfoCollector collects memory hardware configuration and NUMA topology.
+//
+// Purpose: Hardware inventory and NUMA topology discovery
+// This collector provides static memory hardware configuration for capacity
+// planning, NUMA-aware scheduling, and hardware inventory. It discovers the
+// physical memory architecture rather than runtime usage.
+//
+// Key Differences from MemoryCollector:
+// - MemoryInfoCollector: Provides hardware configuration (static NUMA topology)
+// - MemoryCollector: Provides runtime statistics (dynamic memory usage)
+// - This collector is for inventory; MemoryCollector is for monitoring
+// - Reads only MemTotal from /proc/meminfo, focuses on NUMA topology from sysfs
+//
+// Use Cases:
+// - Hardware inventory and asset tracking
+// - NUMA-aware application deployment
+// - Capacity planning and sizing
+// - Understanding system memory architecture
+// - Optimizing memory access patterns
 //
 // Data Sources and Standardization:
 //
@@ -144,8 +162,13 @@ func (c *MemoryInfoCollector) collectMemoryInfo() (*performance.MemoryInfo, erro
 //
 // Data Source: /proc/meminfo (KERNEL-GUARANTEED)
 //
-// This method reads the MemTotal field from /proc/meminfo, which represents the total
-// amount of usable RAM as detected and managed by the kernel memory management system.
+// This method reads ONLY the MemTotal field from /proc/meminfo for hardware
+// inventory purposes. This is the only field MemoryInfoCollector reads from
+// /proc/meminfo, as it focuses on hardware configuration rather than runtime
+// statistics (which are handled by MemoryCollector).
+//
+// The MemTotal value represents the total amount of usable RAM as detected
+// and managed by the kernel memory management system.
 //
 // Format Specification:
 // - File format: "MemTotal: XXXXX kB" (always in kilobytes)

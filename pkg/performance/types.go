@@ -94,7 +94,8 @@ type LoadStats struct {
 	Uptime time.Duration
 }
 
-// MemoryStats represents memory usage information from /proc/meminfo
+// MemoryStats represents runtime memory usage statistics from /proc/meminfo
+// Used by MemoryCollector for operational monitoring and performance analysis
 type MemoryStats struct {
 	// Basic memory stats (all values in kB from /proc/meminfo)
 	MemTotal     uint64 // MemTotal: Total usable RAM
@@ -132,7 +133,10 @@ type MemoryStats struct {
 	// HugePages
 	HugePages_Total uint64 // HugePages_Total: Total number of hugepages
 	HugePages_Free  uint64 // HugePages_Free: Number of free hugepages
+	HugePages_Rsvd  uint64 // HugePages_Rsvd: Number of reserved hugepages
+	HugePages_Surp  uint64 // HugePages_Surp: Number of surplus hugepages
 	HugePagesize    uint64 // Hugepagesize: Default hugepage size (in kB)
+	Hugetlb         uint64 // Hugetlb: Total memory consumed by huge pages of all sizes
 }
 
 // CPUStats represents per-CPU statistics from /proc/stat
@@ -410,7 +414,8 @@ type CPUCore struct {
 	CPUMHz     float64 // Current frequency
 }
 
-// MemoryInfo represents memory hardware configuration
+// MemoryInfo represents memory hardware configuration and NUMA topology
+// Used by MemoryInfoCollector for hardware inventory and capacity planning
 type MemoryInfo struct {
 	// Total memory from /proc/meminfo
 	TotalBytes uint64
