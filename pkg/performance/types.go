@@ -122,7 +122,10 @@ type MemoryStats struct {
 	// HugePages
 	HugePages_Total uint64 // HugePages_Total: Total number of hugepages
 	HugePages_Free  uint64 // HugePages_Free: Number of free hugepages
+	HugePages_Rsvd  uint64 // HugePages_Rsvd: Number of reserved hugepages
+	HugePages_Surp  uint64 // HugePages_Surp: Number of surplus hugepages
 	HugePagesize    uint64 // Hugepagesize: Default hugepage size (in kB)
+	Hugetlb         uint64 // Hugetlb: Total memory consumed by huge pages of all sizes
 }
 
 // CPUStats represents per-CPU statistics from /proc/stat
