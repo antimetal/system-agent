@@ -1,4 +1,4 @@
-package collectors
+package collectors_test
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/antimetal/agent/pkg/performance"
+	"github.com/antimetal/agent/pkg/performance/collectors"
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,7 +32,7 @@ const (
 	whitespaceContent    = "   \n   \t   "
 )
 
-func createTestCollector(t *testing.T, loadavgContent, uptimeContent string) *LoadCollector {
+func createTestCollector(t *testing.T, loadavgContent, uptimeContent string) *collectors.LoadCollector {
 	tmpDir := t.TempDir()
 
 	if loadavgContent != "" {
@@ -49,7 +50,9 @@ func createTestCollector(t *testing.T, loadavgContent, uptimeContent string) *Lo
 	config := performance.CollectionConfig{
 		HostProcPath: tmpDir,
 	}
-	return NewLoadCollector(logr.Discard(), config)
+	collector, err := collectors.NewLoadCollector(logr.Discard(), config)
+	require.NoError(t, err)
+	return collector
 }
 
 func validateCollectorInterface(t *testing.T, collector interface{}) {
@@ -70,37 +73,44 @@ func validateLoadStats(t *testing.T, stats *performance.LoadStats, expected *per
 }
 
 func TestLoadCollector_Constructor(t *testing.T) {
-	tests := []struct {
-		name               string
-		hostProcPath       string
-		expectedLoadPath   string
-		expectedUptimePath string
-	}{
-		{"default proc path", "/proc", "/proc/loadavg", "/proc/uptime"},
-		{"custom proc path", "/custom/proc", "/custom/proc/loadavg", "/custom/proc/uptime"},
-		{"empty proc path", "", "loadavg", "uptime"},
-	}
+	t.Run("valid paths", func(t *testing.T) {
+		// Create a temporary directory for testing
+		tmpDir := t.TempDir()
+		config := performance.CollectionConfig{HostProcPath: tmpDir}
+		collector, err := collectors.NewLoadCollector(logr.Discard(), config)
+		require.NoError(t, err)
+		validateCollectorInterface(t, collector)
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			config := performance.CollectionConfig{HostProcPath: tt.hostProcPath}
-			collector := NewLoadCollector(logr.Discard(), config)
+	t.Run("error on relative path", func(t *testing.T) {
+		config := performance.CollectionConfig{HostProcPath: "relative/path"}
+		_, err := collectors.NewLoadCollector(logr.Discard(), config)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "must be an absolute path")
+	})
 
-			validateCollectorInterface(t, collector)
-			assert.Equal(t, tt.expectedLoadPath, collector.loadavgPath)
-			assert.Equal(t, tt.expectedUptimePath, collector.uptimePath)
-		})
-	}
+	t.Run("error on empty path", func(t *testing.T) {
+		config := performance.CollectionConfig{HostProcPath: ""}
+		_, err := collectors.NewLoadCollector(logr.Discard(), config)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "must be an absolute path")
+	})
+
+	t.Run("error on non-existent path", func(t *testing.T) {
+		config := performance.CollectionConfig{HostProcPath: "/non/existent/path/that/should/not/exist"}
+		_, err := collectors.NewLoadCollector(logr.Discard(), config)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "HostProcPath validation failed")
+	})
 }
 
 func TestLoadCollector_MissingFiles(t *testing.T) {
 	tests := []struct {
-		name              string
-		createLoadavg     bool
-		createUptime      bool
-		wantErr           bool
-		expectedErr       string
-		useNonExistentDir bool
+		name          string
+		createLoadavg bool
+		createUptime  bool
+		wantErr       bool
+		expectedErr   string
 	}{
 		{
 			name:          "missing loadavg file",
@@ -122,31 +132,19 @@ func TestLoadCollector_MissingFiles(t *testing.T) {
 			wantErr:       true,
 			expectedErr:   "failed to read",
 		},
-		{
-			name:              "non-existent directory",
-			useNonExistentDir: true,
-			wantErr:           true,
-			expectedErr:       "failed to read",
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var collector *LoadCollector
-			if tt.useNonExistentDir {
-				config := performance.CollectionConfig{HostProcPath: "/non/existent/path"}
-				collector = NewLoadCollector(logr.Discard(), config)
-			} else {
-				loadavgContent := ""
-				uptimeContent := ""
-				if tt.createLoadavg {
-					loadavgContent = validLoadavgContent
-				}
-				if tt.createUptime {
-					uptimeContent = validUptimeContent
-				}
-				collector = createTestCollector(t, loadavgContent, uptimeContent)
+			loadavgContent := ""
+			uptimeContent := ""
+			if tt.createLoadavg {
+				loadavgContent = validLoadavgContent
 			}
+			if tt.createUptime {
+				uptimeContent = validUptimeContent
+			}
+			collector := createTestCollector(t, loadavgContent, uptimeContent)
 
 			result, err := collector.Collect(context.Background())
 

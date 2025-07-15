@@ -19,6 +19,9 @@ import (
 	"github.com/go-logr/logr"
 )
 
+// Compile-time interface check
+var _ performance.Collector = (*LoadCollector)(nil)
+
 // LoadCollector collects system load statistics from /proc/loadavg and /proc/uptime
 // Reference: https://www.kernel.org/doc/html/latest/filesystems/proc.html#proc-loadavg
 type LoadCollector struct {
@@ -27,13 +30,22 @@ type LoadCollector struct {
 	uptimePath  string
 }
 
-func NewLoadCollector(logger logr.Logger, config performance.CollectionConfig) *LoadCollector {
+func NewLoadCollector(logger logr.Logger, config performance.CollectionConfig) (*LoadCollector, error) {
 	capabilities := performance.CollectorCapabilities{
 		SupportsOneShot:    true,
 		SupportsContinuous: false,
 		RequiresRoot:       false,
 		RequiresEBPF:       false,
 		MinKernelVersion:   "2.6.0", // /proc/loadavg has been around forever
+	}
+
+	// Validate that HostProcPath is absolute and exists
+	if !filepath.IsAbs(config.HostProcPath) {
+		return nil, fmt.Errorf("HostProcPath must be an absolute path, got: %q", config.HostProcPath)
+	}
+
+	if _, err := os.Stat(config.HostProcPath); err != nil {
+		return nil, fmt.Errorf("HostProcPath validation failed: %w", err)
 	}
 
 	return &LoadCollector{
@@ -46,7 +58,7 @@ func NewLoadCollector(logger logr.Logger, config performance.CollectionConfig) *
 		),
 		loadavgPath: filepath.Join(config.HostProcPath, "loadavg"),
 		uptimePath:  filepath.Join(config.HostProcPath, "uptime"),
-	}
+	}, nil
 }
 
 func (c *LoadCollector) Collect(ctx context.Context) (any, error) {
@@ -130,16 +142,16 @@ func (c *LoadCollector) collectLoadStats() (*performance.LoadStats, error) {
 	// - Load averages and process counts are the essential metrics
 	uptimeData, err := os.ReadFile(c.uptimePath)
 	if err != nil {
-		c.Logger().V(2).Info("Failed to read uptime file (continuing without uptime)", "path", c.uptimePath, "error", err)
+		c.Logger().V(1).Info("Failed to read uptime file (continuing without uptime)", "path", c.uptimePath, "error", err)
 	} else {
 		uptimeFields := strings.Fields(string(uptimeData))
 		if len(uptimeFields) != 2 {
-			c.Logger().V(2).Info("Unexpected uptime format - expected 2 fields (continuing with zero uptime)", "path", c.uptimePath,
+			c.Logger().V(1).Info("Unexpected uptime format - expected 2 fields (continuing with zero uptime)", "path", c.uptimePath,
 				"fields", len(uptimeFields), "content", strings.TrimSpace(string(uptimeData)))
 		} else {
 			uptimeSeconds, err := strconv.ParseFloat(uptimeFields[0], 64)
 			if err != nil {
-				c.Logger().V(2).Info("Failed to parse uptime (continuing with zero uptime)", "value", uptimeFields[0], "error", err)
+				c.Logger().V(1).Info("Failed to parse uptime (continuing with zero uptime)", "value", uptimeFields[0], "error", err)
 			} else {
 				stats.Uptime = time.Duration(uptimeSeconds * float64(time.Second))
 			}
