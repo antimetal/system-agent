@@ -9,6 +9,7 @@ package performance
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 )
@@ -118,6 +119,58 @@ func (b *BaseContinuousCollector) ClearError() {
 	b.lastError = nil
 }
 
+// ContinuousPointCollector wraps a PointCollector into a ContinuousCollector
+// that calls Collect() on an interval.
+type ContinuousPointCollector struct {
+	BaseContinuousCollector
+	pointCollector PointCollector
+	ch             chan any
+	stopped        chan struct{}
+}
+
+func NewContinuousPointCollector(pointCollector PointCollector, config CollectionConfig, logger logr.Logger) *ContinuousPointCollector {
+	return &ContinuousPointCollector{
+		BaseContinuousCollector: NewBaseContinuousCollector(pointCollector.Type(), pointCollector.Name(), logger, config, pointCollector.Capabilities()),
+		pointCollector:          pointCollector,
+		ch:                      make(chan any),
+		stopped:                 make(chan struct{}),
+	}
+}
+
+func (c *ContinuousPointCollector) Start(ctx context.Context) (<-chan any, error) {
+	go c.start(ctx)
+	return c.ch, nil
+}
+
+func (c *ContinuousPointCollector) start(ctx context.Context) {
+	c.SetStatus(CollectorStatusActive)
+	ticker := time.NewTicker(c.config.Interval)
+	for {
+		select {
+		case <-ticker.C:
+			data, err := c.pointCollector.Collect(ctx)
+			c.SetError(err)
+			c.ch <- data
+		case <-c.stopped:
+			ticker.Stop()
+			return
+		}
+	}
+}
+
+func (c *ContinuousPointCollector) Stop() error {
+	if c.stopped != nil {
+		close(c.stopped)
+		c.stopped = nil
+	}
+	if c.ch != nil {
+		close(c.ch)
+		c.ch = nil
+	}
+	c.SetStatus(CollectorStatusDisabled)
+	return nil
+}
+
 type CollectorRegistry struct {
 	pointCollectors      map[MetricType]PointCollector
 	continuousCollectors map[MetricType]ContinuousCollector
@@ -166,6 +219,12 @@ func (r *CollectorRegistry) RegisterContinuous(collector ContinuousCollector) er
 	r.continuousCollectors[metricType] = collector
 	r.logger.Info("registered continuous collector", "type", metricType, "name", collector.Name())
 	return nil
+}
+
+func (r *CollectorRegistry) UnregisterCollector(metricType MetricType) {
+	delete(r.pointCollectors, metricType)
+	delete(r.continuousCollectors, metricType)
+	r.logger.Info("unregistered collector", "type", metricType)
 }
 
 func (r *CollectorRegistry) GetPoint(metricType MetricType) PointCollector {
