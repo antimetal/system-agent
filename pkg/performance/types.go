@@ -335,6 +335,11 @@ func DefaultCollectionConfig() CollectionConfig {
 			MetricTypeNetwork: true,
 			MetricTypeTCP:     true,
 			MetricTypeKernel:  true,
+			// Hardware configuration collectors
+			MetricTypeCPUInfo:     true,
+			MetricTypeMemoryInfo:  true,
+			MetricTypeDiskInfo:    true,
+			MetricTypeNetworkInfo: true,
 		},
 		HostProcPath: "/proc",
 		HostSysPath:  "/sys",
