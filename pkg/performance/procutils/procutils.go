@@ -76,7 +76,7 @@ func (p *ProcUtils) readBootTime() (time.Time, error) {
 		}
 	}
 
-	return time.Time{}, fmt.Errorf("btime not found in /proc/stat")
+	return time.Time{}, fmt.Errorf("btime not found in %s", statPath)
 }
 
 // GetUserHZ returns the USER_HZ value (clock ticks per second)

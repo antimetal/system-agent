@@ -6,6 +6,8 @@
 
 package ringbuffer
 
+import "fmt"
+
 // RingBuffer is a generic, thread-unsafe circular buffer implementation that
 // overwrites oldest elements when capacity is reached.
 //
@@ -25,11 +27,14 @@ type RingBuffer[T any] struct {
 }
 
 // New creates a new ring buffer with the given capacity
-func New[T any](capacity int) *RingBuffer[T] {
+func New[T any](capacity int) (*RingBuffer[T], error) {
+	if capacity <= 0 {
+		return nil, fmt.Errorf("capacity must be greater than 0, got %d", capacity)
+	}
 	return &RingBuffer[T]{
 		data:     make([]T, capacity),
 		capacity: capacity,
-	}
+	}, nil
 }
 
 // Push adds an element to the ring buffer, overwriting oldest if full

@@ -16,7 +16,8 @@ import (
 func TestRingBuffer(t *testing.T) {
 	// Test basic functionality
 	t.Run("basic push and getAll", func(t *testing.T) {
-		rb := ringbuffer.New[int](3)
+		rb, err := ringbuffer.New[int](3)
+		assert.NoError(t, err)
 
 		// Empty buffer
 		assert.Equal(t, []int{}, rb.GetAll())
@@ -37,7 +38,8 @@ func TestRingBuffer(t *testing.T) {
 
 	// Test overflow behavior
 	t.Run("overflow wraps around", func(t *testing.T) {
-		rb := ringbuffer.New[string](3)
+		rb, err := ringbuffer.New[string](3)
+		assert.NoError(t, err)
 
 		// Fill buffer
 		rb.Push("a")
@@ -58,7 +60,8 @@ func TestRingBuffer(t *testing.T) {
 
 	// Test large buffer
 	t.Run("large buffer", func(t *testing.T) {
-		rb := ringbuffer.New[int](1000)
+		rb, err := ringbuffer.New[int](1000)
+		assert.NoError(t, err)
 
 		// Add 500 elements
 		for i := 0; i < 500; i++ {
@@ -84,7 +87,8 @@ func TestRingBuffer(t *testing.T) {
 
 	// Test clear functionality
 	t.Run("clear buffer", func(t *testing.T) {
-		rb := ringbuffer.New[int](5)
+		rb, err := ringbuffer.New[int](5)
+		assert.NoError(t, err)
 
 		// Add elements
 		for i := 0; i < 10; i++ {
@@ -113,7 +117,8 @@ func TestRingBuffer(t *testing.T) {
 			name string
 		}
 
-		rb := ringbuffer.New[testStruct](2)
+		rb, err := ringbuffer.New[testStruct](2)
+		assert.NoError(t, err)
 
 		rb.Push(testStruct{1, "first"})
 		rb.Push(testStruct{2, "second"})
@@ -127,7 +132,8 @@ func TestRingBuffer(t *testing.T) {
 
 	// Test edge cases
 	t.Run("single element buffer", func(t *testing.T) {
-		rb := ringbuffer.New[int](1)
+		rb, err := ringbuffer.New[int](1)
+		assert.NoError(t, err)
 
 		rb.Push(1)
 		assert.Equal(t, []int{1}, rb.GetAll())
@@ -137,5 +143,20 @@ func TestRingBuffer(t *testing.T) {
 
 		rb.Push(3)
 		assert.Equal(t, []int{3}, rb.GetAll())
+	})
+
+	// Test error cases
+	t.Run("invalid capacity", func(t *testing.T) {
+		// Zero capacity
+		rb, err := ringbuffer.New[int](0)
+		assert.Error(t, err)
+		assert.Nil(t, rb)
+		assert.Contains(t, err.Error(), "capacity must be greater than 0, got 0")
+
+		// Negative capacity
+		rb, err = ringbuffer.New[int](-5)
+		assert.Error(t, err)
+		assert.Nil(t, rb)
+		assert.Contains(t, err.Error(), "capacity must be greater than 0, got -5")
 	})
 }
