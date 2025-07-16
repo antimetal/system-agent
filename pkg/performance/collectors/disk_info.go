@@ -116,11 +116,16 @@ func (c *DiskInfoCollector) collectDiskInfo() ([]performance.DiskInfo, error) {
 	}
 
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		// In /sys/block/, entries are typically symlinks to the actual device directories
+		// We need to check if the target is a directory, not just if the entry itself is
+		deviceName := entry.Name()
+		devicePath := filepath.Join(c.blockPath, deviceName)
+		
+		// Check if this path (following symlinks) is a directory
+		info, err := os.Stat(devicePath)
+		if err != nil || !info.IsDir() {
 			continue
 		}
-
-		deviceName := entry.Name()
 
 		// Skip virtual block devices that aren't real hardware
 		// loop devices: Virtual devices backed by files (e.g., ISO mounts)
@@ -132,6 +137,7 @@ func (c *DiskInfoCollector) collectDiskInfo() ([]performance.DiskInfo, error) {
 		// Skip partition entries (e.g., sda1, sda2, nvme0n1p1)
 		// We only want whole disk information, partitions are collected separately
 		if c.isPartition(deviceName) {
+			c.Logger().V(1).Info("Skipping partition", "device", deviceName)
 			continue
 		}
 
@@ -140,12 +146,11 @@ func (c *DiskInfoCollector) collectDiskInfo() ([]performance.DiskInfo, error) {
 			Partitions: make([]performance.PartitionInfo, 0),
 		}
 
-		devicePath := filepath.Join(c.blockPath, deviceName)
-
 		// Collect disk information
 		c.parseDiskProperties(&disk, devicePath)
 		c.parsePartitions(&disk, devicePath)
 
+		c.Logger().V(1).Info("Found disk device", "device", deviceName, "size", disk.SizeBytes)
 		disks = append(disks, disk)
 	}
 
