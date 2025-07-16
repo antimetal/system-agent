@@ -38,6 +38,10 @@ const (
 
 	// Channel buffer size for continuous collection
 	continuousChannelBuffer = 100
+
+	// maxPrefixLength is the maximum allowed length for a prefix to be considered valid
+	// when extracting subsystem from "subsystem:" format
+	maxPrefixLength = 50
 )
 
 // KernelCollector collects kernel messages from /dev/kmsg
@@ -130,7 +134,10 @@ func (c *KernelCollector) collectKernelMessages(ctx context.Context) ([]*perform
 	// 3. We limit the number of messages returned via messageLimit
 
 	// Ring buffer to store raw message strings
-	ringBuf := ringbuffer.New[string](c.messageLimit)
+	ringBuf, err := ringbuffer.New[string](c.messageLimit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create ring buffer: %w", err)
+	}
 	buf := make([]byte, kmsgBufferSize)
 
 	// Read all messages first, store raw strings
@@ -225,7 +232,7 @@ func (c *KernelCollector) parseKmsgLine(line string, bootTime time.Time) (*perfo
 	line = strings.TrimRight(line, "\n")
 	parts := strings.SplitN(line, ";", 2)
 	if len(parts) != 2 {
-		return nil, fmt.Errorf("invalid kmsg format: missing semicolon")
+		return nil, fmt.Errorf("invalid kmsg format: missing semicolon in line %q", line)
 	}
 	header := parts[0]
 	message := parts[1]
@@ -291,7 +298,7 @@ func parseMessageContent(message string) (subsystem, device string) {
 	}
 
 	// Pattern 2: Try to extract from "subsystem:" or "device subsystem:" format
-	if idx := strings.Index(message, ":"); idx > 0 && idx < 50 {
+	if idx := strings.Index(message, ":"); idx > 0 && idx < maxPrefixLength {
 		prefix := strings.TrimSpace(message[:idx])
 
 		// Pattern 3: Check if prefix contains "device subsystem" pattern
