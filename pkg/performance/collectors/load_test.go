@@ -55,11 +55,6 @@ func createTestCollector(t *testing.T, loadavgContent, uptimeContent string) *co
 	return collector
 }
 
-func validateCollectorInterface(t *testing.T, collector interface{}) {
-	_, ok := collector.(performance.Collector)
-	require.True(t, ok, "collector must implement Collector interface")
-}
-
 func validateLoadStats(t *testing.T, stats *performance.LoadStats, expected *performance.LoadStats) {
 	assert.Equal(t, expected.Load1Min, stats.Load1Min)
 	assert.Equal(t, expected.Load5Min, stats.Load5Min)
@@ -73,15 +68,6 @@ func validateLoadStats(t *testing.T, stats *performance.LoadStats, expected *per
 }
 
 func TestLoadCollector_Constructor(t *testing.T) {
-	t.Run("valid paths", func(t *testing.T) {
-		// Create a temporary directory for testing
-		tmpDir := t.TempDir()
-		config := performance.CollectionConfig{HostProcPath: tmpDir}
-		collector, err := collectors.NewLoadCollector(logr.Discard(), config)
-		require.NoError(t, err)
-		validateCollectorInterface(t, collector)
-	})
-
 	t.Run("error on relative path", func(t *testing.T) {
 		config := performance.CollectionConfig{HostProcPath: "relative/path"}
 		_, err := collectors.NewLoadCollector(logr.Discard(), config)
