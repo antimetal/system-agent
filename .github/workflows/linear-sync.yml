@@ -1,0 +1,34 @@
+name: Linear Sync
+
+on:
+  issues:
+    types: [opened, closed, reopened]
+
+jobs:
+  create-linear-issue:
+    runs-on: ubuntu-latest
+    if: github.event.action == 'opened'
+    
+    steps:
+    - name: Create Linear Issue
+      run: |
+        # Create Linear issue via GraphQL API
+        curl -X POST \
+          -H "Authorization: ${{ secrets.LINEAR_API_TOKEN }}" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "query": "mutation { issueCreate(input: { title: \"${{ github.event.issue.title }}\", description: \"GitHub Issue: ${{ github.event.issue.html_url }}\\n\\n${{ github.event.issue.body }}\", teamId: \"19663b87-b6c8-4844-a03d-f63266192ca1\" }) { issue { identifier url } } }"
+          }' \
+          https://api.linear.app/graphql
+          
+  update-linear-issue:
+    runs-on: ubuntu-latest
+    if: github.event.action == 'closed' || github.event.action == 'reopened'
+    
+    steps:
+    - name: Update Linear Issue Status
+      run: |
+        # Find Linear issue by GitHub URL and update status
+        # This requires parsing the issue body to find the Linear issue ID
+        echo "GitHub issue ${{ github.event.issue.number }} was ${{ github.event.action }}"
+        # Implementation would query Linear API to find matching issue and update status
