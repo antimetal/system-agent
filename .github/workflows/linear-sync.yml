@@ -17,7 +17,7 @@ jobs:
           -H "Authorization: ${{ secrets.LINEAR_API_TOKEN }}" \
           -H "Content-Type: application/json" \
           -d '{
-            "query": "mutation { issueCreate(input: { title: \"${{ github.event.issue.title }}\", description: \"GitHub Issue: ${{ github.event.issue.html_url }}\\n\\n${{ github.event.issue.body }}\", teamId: \"19663b87-b6c8-4844-a03d-f63266192ca1\" }) { issue { identifier url } } }"
+            "query": "mutation { issueCreate(input: { title: \"${{ github.event.issue.title }}\", description: \"GitHub Issue: ${{ github.event.issue.html_url }}\\n\\n${{ github.event.issue.body }}\", teamId: \"${{ vars.LINEAR_TEAM_ID }}\" }) { issue { identifier url } } }"
           }' \
           https://api.linear.app/graphql
           

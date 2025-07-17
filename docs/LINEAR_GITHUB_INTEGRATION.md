@@ -24,3 +24,6 @@ planning. The integration automatically syncs minimal information of public chan
 
 ### GitHub Secrets
 - `LINEAR_API_TOKEN`: Linear API token for creating issues
+
+### GitHub Variables
+- `LINEAR_TEAM_ID`: Linear team ID where GitHub issues will be created
