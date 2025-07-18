@@ -9,7 +9,7 @@ package resource
 import (
 	"errors"
 
-	resourcev1 "github.com/antimetal/apis/gengo/resource/v1"
+	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"google.golang.org/protobuf/proto"
 )
 
