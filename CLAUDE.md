@@ -81,13 +81,15 @@ The Antimetal Agent is a sophisticated Kubernetes controller written in Go that 
 
 ### Common Commands
 
+Use `make help` to see the full list of available commands.
+Below are commands for common workflows.
+
 #### Core Development
 ```bash
 make build                    # Build binary for current platform
 make test                     # Run tests with coverage
 make lint                     # Run golangci-lint
 make fmt                      # Format Go code
-make vendor                   # Update vendored dependencies
 make generate                 # Generate K8s manifests (after annotation changes)
 make gen-license-headers      # ALWAYS run before committing
 ```

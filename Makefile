@@ -113,10 +113,6 @@ lint: golangci-lint ## Run golangci-lint linter & yamllint.
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes.
 	$(GOLANGCI_LINT) run --fix
 
-.PHONY: vendor
-vendor:
-	go mod vendor
-
 ##@ eBPF
 
 # eBPF build configuration
@@ -182,7 +178,7 @@ clean-ebpf: ## Clean eBPF build artifacts
 
 ##@ Build
 
-build: goreleaser vendor manifests fmt vet build-ebpf ## Build agent binary for current GOOS and GOARCH.
+build: goreleaser manifests fmt vet build-ebpf ## Build agent binary for current GOOS and GOARCH.
 	GOOS=$(GO_OS) $(GORELEASER) build --snapshot --clean --single-target
 
 .PHONY: build-all
