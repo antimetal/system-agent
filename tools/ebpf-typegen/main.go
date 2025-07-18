@@ -35,9 +35,9 @@ type Config struct {
 type ErrorType string
 
 const (
-	ErrTypeConfig    ErrorType = "configuration"
-	ErrTypeIO        ErrorType = "io"
-	ErrTypeParsing   ErrorType = "parsing"
+	ErrTypeConfig     ErrorType = "configuration"
+	ErrTypeIO         ErrorType = "io"
+	ErrTypeParsing    ErrorType = "parsing"
 	ErrTypeGeneration ErrorType = "generation"
 	ErrTypeValidation ErrorType = "validation"
 )
@@ -173,10 +173,10 @@ var (
 
 	// Known constants for array sizes
 	knownConstants = map[string]int{
-		"TASK_COMM_LEN":      16,
-		"ARGSIZE":            128,
-		"TOTAL_MAX_ARGS":     60,
-		"FULL_MAX_ARGS_ARR":  60 * 128,
+		"TASK_COMM_LEN":     16,
+		"ARGSIZE":           128,
+		"TOTAL_MAX_ARGS":    60,
+		"FULL_MAX_ARGS_ARR": 60 * 128,
 	}
 
 	titleCase = cases.Title(language.English)
