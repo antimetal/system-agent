@@ -22,6 +22,11 @@ const (
 	MetricTypeNetwork MetricType = "network"
 	MetricTypeTCP     MetricType = "tcp"
 	MetricTypeKernel  MetricType = "kernel"
+	// Hardware configuration collectors
+	MetricTypeCPUInfo     MetricType = "cpu_info"
+	MetricTypeMemoryInfo  MetricType = "memory_info"
+	MetricTypeDiskInfo    MetricType = "disk_info"
+	MetricTypeNetworkInfo MetricType = "network_info"
 )
 
 // CollectorStatus represents the operational status of a collector
@@ -67,6 +72,11 @@ type Metrics struct {
 	Network   []NetworkStats
 	TCP       *TCPStats
 	Kernel    []KernelMessage
+	// Hardware configuration
+	CPUInfo     *CPUInfo
+	MemoryInfo  *MemoryInfo
+	DiskInfo    []DiskInfo
+	NetworkInfo []NetworkInfo
 }
 
 // LoadStats represents system load information
@@ -325,6 +335,11 @@ func DefaultCollectionConfig() CollectionConfig {
 			MetricTypeNetwork: true,
 			MetricTypeTCP:     true,
 			MetricTypeKernel:  true,
+			// Hardware configuration collectors
+			MetricTypeCPUInfo:     true,
+			MetricTypeMemoryInfo:  true,
+			MetricTypeDiskInfo:    true,
+			MetricTypeNetworkInfo: true,
 		},
 		HostProcPath: "/proc",
 		HostSysPath:  "/sys",
@@ -351,4 +366,106 @@ func (c *CollectionConfig) ApplyDefaults() {
 	if c.HostDevPath == "" {
 		c.HostDevPath = defaults.HostDevPath
 	}
+}
+
+// CPUInfo represents CPU hardware configuration
+type CPUInfo struct {
+	// CPU counts
+	// PhysicalCores represents the number of physical CPU cores. If physical topology
+	// information is unavailable (e.g., in virtualized environments), this field falls
+	// back to counting logical cores instead. This behavior ensures compatibility but
+	// may not always reflect the actual physical core count.
+	PhysicalCores int32
+	LogicalCores  int32
+	// CPU identification
+	ModelName string
+	VendorID  string
+	CPUFamily int32 // CPU family number (e.g., 6, 15, 23)
+	Model     int32 // CPU model number (e.g., 85, 94, 69)
+	Stepping  int32 // CPU stepping number (e.g., 1, 2, 7)
+	Microcode string
+	// CPU frequencies
+	CPUMHz    float64 // Current frequency from /proc/cpuinfo
+	CPUMinMHz float64 // Minimum frequency from /sys/devices/system/cpu/cpu0/cpufreq/
+	CPUMaxMHz float64 // Maximum frequency from /sys/devices/system/cpu/cpu0/cpufreq/
+	// Cache sizes (from /proc/cpuinfo)
+	CacheSize      string
+	CacheAlignment int32
+	// CPU features
+	Flags []string // CPU flags/features
+	// NUMA information
+	NUMANodes int32
+	// Additional info
+	BogoMIPS float64
+	// Per-core info if needed
+	Cores []CPUCore
+}
+
+// CPUCore represents per-core CPU information
+type CPUCore struct {
+	Processor  int32   // Processor number
+	CoreID     int32   // Physical core ID
+	PhysicalID int32   // Physical package ID
+	Siblings   int32   // Number of siblings
+	CPUMHz     float64 // Current frequency
+}
+
+// MemoryInfo represents memory hardware configuration
+type MemoryInfo struct {
+	// Total memory from /proc/meminfo
+	TotalBytes uint64
+	// NUMA configuration from /sys/devices/system/node/
+	NUMANodes []NUMANode
+}
+
+// NUMANode represents a NUMA memory node
+type NUMANode struct {
+	NodeID     int32
+	TotalBytes uint64
+	CPUs       []int32 // CPU cores in this NUMA node
+}
+
+// DiskInfo represents disk hardware configuration
+type DiskInfo struct {
+	// Device identification
+	Device string // e.g., sda, nvme0n1
+	Model  string // From /sys/block/[device]/device/model
+	Vendor string // From /sys/block/[device]/device/vendor
+	// Disk properties
+	SizeBytes uint64 // From /sys/block/[device]/size * block_size
+	BlockSize uint32 // From /sys/block/[device]/queue/logical_block_size
+	// Disk type
+	Rotational bool // From /sys/block/[device]/queue/rotational (true=HDD, false=SSD)
+	// Queue configuration
+	QueueDepth uint32 // From /sys/block/[device]/queue/nr_requests
+	Scheduler  string // From /sys/block/[device]/queue/scheduler
+	// Physical properties
+	PhysicalBlockSize uint32 // From /sys/block/[device]/queue/physical_block_size
+	// Partitions
+	Partitions []PartitionInfo
+}
+
+// PartitionInfo represents partition information
+type PartitionInfo struct {
+	Name        string
+	SizeBytes   uint64
+	StartSector uint64
+}
+
+// NetworkInfo represents network interface hardware configuration
+type NetworkInfo struct {
+	// Interface identification
+	Interface string // Interface name
+	Driver    string // From /sys/class/net/[interface]/device/driver
+	// Hardware properties
+	MACAddress string // From /sys/class/net/[interface]/address
+	Speed      uint64 // Mbps from /sys/class/net/[interface]/speed
+	Duplex     string // From /sys/class/net/[interface]/duplex
+	// Configuration
+	MTU uint32 // From /sys/class/net/[interface]/mtu
+	// Interface type
+	Type string // ethernet, wireless, loopback, etc.
+	// State
+	OperState string // From /sys/class/net/[interface]/operstate
+	Carrier   bool   // From /sys/class/net/[interface]/carrier
 }

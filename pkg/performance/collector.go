@@ -262,6 +262,22 @@ func (m *MetricsStore) UpdateKernel(messages []KernelMessage) {
 	m.snapshot.Metrics.Kernel = messages
 }
 
+func (m *MetricsStore) UpdateCPUInfo(info *CPUInfo) {
+	m.snapshot.Metrics.CPUInfo = info
+}
+
+func (m *MetricsStore) UpdateMemoryInfo(info *MemoryInfo) {
+	m.snapshot.Metrics.MemoryInfo = info
+}
+
+func (m *MetricsStore) UpdateDiskInfo(info []DiskInfo) {
+	m.snapshot.Metrics.DiskInfo = info
+}
+
+func (m *MetricsStore) UpdateNetworkInfo(info []NetworkInfo) {
+	m.snapshot.Metrics.NetworkInfo = info
+}
+
 func (m *MetricsStore) GetSnapshot() *Snapshot {
 	// In the future, we'll deep copy here for thread safety
 	return m.snapshot
