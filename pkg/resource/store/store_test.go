@@ -11,9 +11,9 @@ import (
 	"sync"
 	"testing"
 
+	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"github.com/antimetal/agent/pkg/errors"
 	"github.com/antimetal/agent/pkg/resource"
-	resourcev1 "github.com/antimetal/apis/gengo/resource/v1"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 )

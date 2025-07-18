@@ -57,7 +57,8 @@ clean: clean-ebpf ## Removes build artifacts.
 ##@ Development
 
 .PHONY: generate
-generate: manifests generate-ebpf-types generate-ebpf-bindings ## Generate all artifacts
+generate: ## Generate all artifacts
+generate: manifests generate-ebpf-types generate-ebpf-bindings proto
 
 .PHONY: ebpf-typegen
 ebpf-typegen: ## Build the ebpf-typegen tool
@@ -111,10 +112,6 @@ lint: golangci-lint ## Run golangci-lint linter & yamllint.
 .PHONY: lint-fix
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes.
 	$(GOLANGCI_LINT) run --fix
-
-.PHONY: vendor
-vendor:
-	go mod vendor
 
 ##@ eBPF
 
@@ -181,7 +178,7 @@ clean-ebpf: ## Clean eBPF build artifacts
 
 ##@ Build
 
-build: goreleaser vendor manifests fmt vet build-ebpf ## Build agent binary for current GOOS and GOARCH.
+build: goreleaser manifests fmt vet build-ebpf ## Build agent binary for current GOOS and GOARCH.
 	GOOS=$(GO_OS) $(GORELEASER) build --snapshot --clean --single-target
 
 .PHONY: build-all
@@ -217,6 +214,12 @@ docker-push: ## Push docker image.
 
 .PHONY: docker-build-and-push
 docker-build-and-push: docker-build-all docker-push ## Build and push docker image.
+
+##@ Protobuf
+
+.PHONY: proto
+proto: buf ## Generate protobuf files.
+	$(BUF) generate
 
 ##@ Deployment
 
@@ -276,22 +279,24 @@ release: goreleaser lint ## Create a new release.
 ##@ Dependencies
 
 ## Tool Binaries
+BUF ?= $(LOCALBIN)/buf
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
+GORELEASER ?= $(LOCALBIN)/goreleaser
 KIND ?= $(LOCALBIN)/kind
 KTF ?= $(LOCALBIN)/ktf
 KUBECTL ?= kubectl
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
-GORELEASER ?= $(LOCALBIN)/goreleaser
 LICENSE_CHECK ?= tools/license_check/license_check.py
 
 ## Tool Versions
+BUF_VERSION ?= v1.55.1
 CONTROLLER_TOOLS_VERSION ?= v0.17.0
 GOLANGCI_LINT_VERSION ?= v1.63.4
+GORELEASER_VERSION ?= v2.10.2
 KIND_VERSION ?= v0.26.0
 KTF_VERSION ?= v0.47.2
 KUSTOMIZE_VERSION ?= v5.6.0
-GORELEASER_VERSION ?= v2.10.2
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of installed binary
@@ -311,7 +316,7 @@ endef
 
 .PHONY: tools
 tools: ## Download all tool dependencies if neccessary.
-tools: controller-gen golangci-lint kind ktf kustomize goreleaser
+tools: controller-gen golangci-lint kind ktf kustomize goreleaser buf
 
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
@@ -354,3 +359,10 @@ $(GORELEASER): $(GORELEASER)@$(GORELEASER_VERSION) FORCE
 	@ln -sf $< $@
 $(GORELEASER)@$(GORELEASER_VERSION):
 	$(call go-install-tool,$(GORELEASER),github.com/goreleaser/goreleaser/v2,$(GORELEASER_VERSION))
+
+.PHONY: buf
+buf: $(BUF) ## Download buf locally if necessary.
+$(BUF): $(BUF)@$(BUF_VERSION) FORCE
+	@ln -sf $< $@
+$(BUF)@$(BUF_VERSION):
+	$(call go-install-tool,$(BUF),github.com/bufbuild/buf/cmd/buf,$(BUF_VERSION))

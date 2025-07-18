@@ -10,7 +10,7 @@ import (
 	"reflect"
 	"testing"
 
-	resourcev1 "github.com/antimetal/apis/gengo/resource/v1"
+	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 )
 
 type testCase struct {

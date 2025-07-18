@@ -17,7 +17,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	resourcev1 "github.com/antimetal/apis/gengo/resource/v1"
+	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	badger "github.com/dgraph-io/badger/v4"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"

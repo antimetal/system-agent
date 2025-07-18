@@ -1,0 +1,20 @@
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/antimetal/agent/pkg/api
+    - file_option: optimize_for
+      value: SPEED
+  disable:
+    - file_option: go_package_prefix
+      module: buf.build/googleapis/googleapis
+inputs:
+  - module: buf.build/antimetal/apis:dbffaf570ef04659be63a1e994b5624a
+plugins:
+  - remote: buf.build/protocolbuffers/go:v1.36.6
+    out: pkg/api
+    opt: paths=source_relative
+  - remote: buf.build/grpc/go:v1.5.1
+    out: pkg/api
+    opt: paths=source_relative

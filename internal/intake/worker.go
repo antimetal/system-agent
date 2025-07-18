@@ -18,9 +18,9 @@ import (
 	"github.com/cenkalti/backoff/v5"
 	"k8s.io/client-go/util/workqueue"
 
+	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
+	intakev1 "github.com/antimetal/agent/pkg/api/service/resource/v1"
 	"github.com/antimetal/agent/pkg/resource"
-	resourcev1 "github.com/antimetal/apis/gengo/resource/v1"
-	intakev1 "github.com/antimetal/apis/gengo/service/resource/v1"
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"

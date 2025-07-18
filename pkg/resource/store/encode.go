@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"strings"
 
-	resourcev1 "github.com/antimetal/apis/gengo/resource/v1"
+	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 )
 
 const (
