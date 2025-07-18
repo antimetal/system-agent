@@ -28,49 +28,72 @@ RUN git clone https://github.com/libbpf/bpftool.git /tmp/bpftool && \
     cd / && \
     rm -rf /tmp/bpftool
 
-# Download pre-generated vmlinux.h from btfhub
-# This provides a vmlinux.h that works for CO-RE across many kernel versions
-# Add integrity verification for security
-#
-# To update BTF checksums for new versions:
-# 1. Update the BTF_URL below to point to the new BTF archive
-# 2. Temporarily comment out the checksum verification section below
-# 3. Run: make build-ebpf-builder
-# 4. Copy the displayed BTF SHA256 checksum from the build output
-# 5. Update the EXPECTED_BTF_SHA256 variable below
-# 6. Uncomment the verification section
-# 7. Test with: make build-ebpf-builder
-RUN echo "=== Downloading pre-generated vmlinux.h ===" && \
-    BTF_URL="https://github.com/aquasecurity/btfhub-archive/raw/main/ubuntu/20.04/arm64/5.8.0-63-generic.btf.tar.xz" && \
-    EXPECTED_BTF_SHA256="cdd9e65811a4de0e98012dd1c59ea3a90aa57a27b6b1896d2abf83f0713d0138" && \
-    curl -sL "$BTF_URL" -o /tmp/btf.tar.xz && \
-    echo "Downloaded BTF archive, verifying integrity..." && \
-    ACTUAL_SHA256=$(sha256sum /tmp/btf.tar.xz | cut -d' ' -f1) && \
-    echo "BTF archive SHA256: $ACTUAL_SHA256" && \
-    echo "Expected SHA256: $EXPECTED_BTF_SHA256" && \
-    if [ "$ACTUAL_SHA256" != "$EXPECTED_BTF_SHA256" ]; then \
-        echo "ERROR: BTF archive checksum mismatch!" && \
-        echo "Expected: $EXPECTED_BTF_SHA256" && \
-        echo "Actual:   $ACTUAL_SHA256" && \
-        exit 1; \
-    fi && \
-    echo "✓ BTF archive integrity verified" && \
-    tar -xJf /tmp/btf.tar.xz -C /tmp && \
-    bpftool btf dump file /tmp/5.8.0-63-generic.btf format c > /usr/include/vmlinux.h && \
-    rm -f /tmp/btf.tar.xz /tmp/5.8.0-63-generic.btf && \
-    echo "Downloaded vmlinux.h with $(wc -l < /usr/include/vmlinux.h 2>/dev/null || echo 0) lines"
-
-# Verify vmlinux.h was downloaded successfully
-RUN if [ -f /usr/include/vmlinux.h ] && [ -s /usr/include/vmlinux.h ]; then \
-        echo "=== vmlinux.h successfully installed ===" && \
-        echo "Location: /usr/include/vmlinux.h" && \
-        echo "Size: $(wc -l < /usr/include/vmlinux.h) lines" && \
-        echo "First few type definitions:" && \
-        grep -m 5 "struct\|enum\|typedef" /usr/include/vmlinux.h || true; \
-    else \
-        echo "ERROR: vmlinux.h was not created or is empty!" && \
-        exit 1; \
-    fi
+# Create script to generate vmlinux.h at build time
+# This allows the container to either use a local vmlinux.h or download from btfhub
+RUN printf '#!/bin/bash\n\
+set -euo pipefail\n\
+\n\
+VMLINUX_PATH="/workspace/ebpf/include/vmlinux.h"\n\
+\n\
+# Check if local vmlinux.h exists and is non-empty\n\
+if [ -f "$VMLINUX_PATH" ] && [ -s "$VMLINUX_PATH" ]; then\n\
+    echo "Using existing vmlinux.h from $VMLINUX_PATH"\n\
+    exit 0\n\
+fi\n\
+\n\
+echo "Local vmlinux.h not found or empty, downloading from btfhub..."\n\
+\n\
+# Create include directory if it doesnt exist\n\
+mkdir -p "$(dirname "$VMLINUX_PATH")"\n\
+\n\
+# Detect architecture\n\
+ARCH=$(uname -m)\n\
+case "$ARCH" in\n\
+    x86_64)\n\
+        BTF_ARCH="x86"\n\
+        BTF_URL="https://raw.githubusercontent.com/aquasecurity/btfhub-archive/main/ubuntu/20.04/x86/5.4.0-91-generic.btf.tar.xz"\n\
+        BTF_FILENAME="5.4.0-91-generic.btf"\n\
+        ;;\n\
+    aarch64)\n\
+        BTF_ARCH="arm64"\n\
+        BTF_URL="https://raw.githubusercontent.com/aquasecurity/btfhub-archive/main/ubuntu/20.04/arm64/5.8.0-63-generic.btf.tar.xz"\n\
+        BTF_FILENAME="5.8.0-63-generic.btf"\n\
+        ;;\n\
+    *)\n\
+        echo "Error: Unsupported architecture $ARCH"\n\
+        exit 1\n\
+        ;;\n\
+esac\n\
+\n\
+# Download BTF archive\n\
+echo "Downloading BTF for $BTF_ARCH from btfhub..."\n\
+if ! curl -sL "$BTF_URL" -o /tmp/btf.tar.xz; then\n\
+    echo "Error: Failed to download BTF archive from $BTF_URL"\n\
+    exit 1\n\
+fi\n\
+\n\
+# Extract BTF file\n\
+echo "Extracting BTF archive..."\n\
+if ! tar -xJf /tmp/btf.tar.xz -C /tmp; then\n\
+    echo "Error: Failed to extract BTF archive"\n\
+    rm -f /tmp/btf.tar.xz\n\
+    exit 1\n\
+fi\n\
+\n\
+# Generate vmlinux.h\n\
+echo "Generating vmlinux.h..."\n\
+if ! bpftool btf dump file "/tmp/$BTF_FILENAME" format c > "$VMLINUX_PATH"; then\n\
+    echo "Error: Failed to generate vmlinux.h"\n\
+    rm -f /tmp/btf.tar.xz "/tmp/$BTF_FILENAME"\n\
+    exit 1\n\
+fi\n\
+\n\
+# Cleanup\n\
+rm -f /tmp/btf.tar.xz "/tmp/$BTF_FILENAME"\n\
+\n\
+echo "Successfully generated vmlinux.h at $VMLINUX_PATH"\n\
+echo "Size: $(wc -l < "$VMLINUX_PATH") lines"\n' > /usr/local/bin/ensure-vmlinux.sh && \
+    chmod +x /usr/local/bin/ensure-vmlinux.sh
 
 # Install Go 1.24.1 from official tarball based on architecture
 # Add checksum verification for security
