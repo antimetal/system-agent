@@ -1,4 +1,5 @@
 name: Linear Sync
+description: Synchronizes GitHub issues with Linear tasks - creates Linear issues when GitHub issues are opened
 
 on:
   issues:
@@ -12,6 +13,19 @@ jobs:
     steps:
     - name: Create Linear Issue
       run: |
+        # Validate required variables
+        if [ -z "${{ vars.LINEAR_TEAM_ID }}" ]; then
+          echo "ERROR: LINEAR_TEAM_ID variable is not set"
+          echo "Please configure LINEAR_TEAM_ID in your repository variables"
+          exit 1
+        fi
+        
+        if [ -z "${{ secrets.LINEAR_API_TOKEN }}" ]; then
+          echo "ERROR: LINEAR_API_TOKEN secret is not set"
+          echo "Please configure LINEAR_API_TOKEN in your repository secrets"
+          exit 1
+        fi
+        
         # Build description
         DESCRIPTION="GitHub Issue: ${{ github.event.issue.html_url }}
         

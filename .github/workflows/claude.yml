@@ -1,4 +1,5 @@
 name: Claude Code
+description: Responds to mentions of Claude in issue and PR comments to provide assistance
 
 on:
   issue_comment:
