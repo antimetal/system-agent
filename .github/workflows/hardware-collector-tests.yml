@@ -2,6 +2,8 @@ name: Hardware Collector Real Hardware Tests
 
 on:
   push:
+    branches:
+      - main
     paths: 
       - 'pkg/performance/collectors/**'
       - 'pkg/performance/types.go'
