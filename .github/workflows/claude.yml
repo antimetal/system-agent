@@ -40,6 +40,13 @@ jobs:
           additional_permissions: |
             actions: read
           
+          # Custom instructions to handle review requests in comments
+          custom_instructions: |
+            If someone asks you to review a PR with commands like "@claude review", "@claude please review", or "@claude code review":
+            1. Provide a comprehensive code review following the guidelines in CLAUDE.md
+            2. Focus on the same aspects as automated reviews: code quality, bugs, performance, security, and test coverage
+            3. Use collapsible sections for non-actionable feedback as specified in CLAUDE.md
+          
           # Optional: Specify model (defaults to Claude Sonnet 4, uncomment for Claude Opus 4)
           # model: "claude-opus-4-20250514"
           

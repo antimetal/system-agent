@@ -2,6 +2,55 @@
 
 This file provides comprehensive guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Code Review Guidelines
+
+When performing code reviews on pull requests:
+
+### Feedback Structure
+- **IMPORTANT**: Use collapsible sections (`<details>` tags) for non-actionable feedback, explanations, or background information
+- Keep actionable items (bugs, required changes) visible by default
+- Use this format for non-critical suggestions:
+
+```markdown
+<details>
+<summary>💡 Suggestion: [Brief description]</summary>
+
+[Detailed explanation or rationale]
+
+</details>
+```
+
+### Example Review Format
+```markdown
+## Review Summary
+✅ **Required Changes** (visible by default)
+- Fix memory leak in line 42
+- Add error handling for null case
+
+<details>
+<summary>📚 Code Quality Observations</summary>
+
+- Consider using early returns to reduce nesting
+- The function could be split into smaller units
+- Variable naming could be more descriptive
+
+</details>
+
+<details>
+<summary>🔍 Performance Considerations</summary>
+
+While not critical, you might consider:
+- Using a map instead of repeated array lookups
+- Caching the compiled regex pattern
+
+</details>
+```
+
+### Review Priorities
+1. **Always visible**: Security issues, bugs, breaking changes
+2. **Collapsible**: Style suggestions, minor optimizations, educational content
+3. **Focus on**: Constructive, actionable feedback over nitpicking
+
 ## Project Overview
 
 The Antimetal Agent is a sophisticated Kubernetes controller written in Go that connects infrastructure to the Antimetal platform for cloud resource management. It's designed as a cloud-native agent that:
