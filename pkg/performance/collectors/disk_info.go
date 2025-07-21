@@ -120,7 +120,7 @@ func (c *DiskInfoCollector) collectDiskInfo() ([]performance.DiskInfo, error) {
 		// We need to check if the target is a directory, not just if the entry itself is
 		deviceName := entry.Name()
 		devicePath := filepath.Join(c.blockPath, deviceName)
-		
+
 		// Check if this path (following symlinks) is a directory
 		info, err := os.Stat(devicePath)
 		if err != nil || !info.IsDir() {

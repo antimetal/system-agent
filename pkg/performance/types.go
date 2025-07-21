@@ -150,10 +150,6 @@ type CPUStats struct {
 	Steal     uint64 // Time stolen by other operating systems in virtualized environment
 	Guest     uint64 // Time spent running a virtual CPU for guest OS
 	GuestNice uint64 // Time spent running a niced guest
-	// Calculated fields
-	Utilization float64 // Percentage 0-100
-	// Delta values for rate calculation
-	DeltaTotal uint64
 }
 
 // ProcessStats represents per-process statistics
