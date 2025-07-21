@@ -28,6 +28,7 @@ header = """// Copyright Antimetal, Inc. All rights reserved.
 exclude_dirs = (
   './.git',
   './vendor',
+  './pkg/api',
 )
 
 def check_file(file_path: str) -> None:
