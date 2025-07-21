@@ -1,0 +1,9 @@
+{
+  "action": "opened",
+  "issue": {
+    "number": 1001,
+    "title": "Fix \"quote\" handling in 'strings' & <tags>",
+    "body": "Test special characters:\n\n```javascript\nconst obj = {\"key\": \"value\"};\n```\n\n* Bullet with `code`\n* Another with **bold** and _italic_\n* Unicode: 🚀 ✨ 🔧\n\n> Quoted text with \"quotes\"\n\n<!-- HTML comment -->",
+    "html_url": "https://github.com/antimetal/system-agent/issues/1001"
+  }
+}

@@ -26,7 +26,6 @@ go.work.sum
 .secrets
 .vars
 .actrc.local
-test-events/
 
 # Added by goreleaser init:
 dist/

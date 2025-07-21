@@ -1,0 +1,9 @@
+{
+  "action": "opened",
+  "issue": {
+    "number": 999,
+    "title": "",
+    "body": null,
+    "html_url": "https://github.com/antimetal/system-agent/issues/999"
+  }
+}
