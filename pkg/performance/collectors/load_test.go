@@ -32,7 +32,7 @@ const (
 	whitespaceContent    = "   \n   \t   "
 )
 
-func createTestCollector(t *testing.T, loadavgContent, uptimeContent string) *collectors.LoadCollector {
+func createTestLoadCollector(t *testing.T, loadavgContent, uptimeContent string) *collectors.LoadCollector {
 	tmpDir := t.TempDir()
 
 	if loadavgContent != "" {
@@ -130,7 +130,7 @@ func TestLoadCollector_MissingFiles(t *testing.T) {
 			if tt.createUptime {
 				uptimeContent = validUptimeContent
 			}
-			collector := createTestCollector(t, loadavgContent, uptimeContent)
+			collector := createTestLoadCollector(t, loadavgContent, uptimeContent)
 
 			result, err := collector.Collect(context.Background())
 
@@ -310,7 +310,7 @@ func TestLoadCollector_DataParsing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			collector := createTestCollector(t, tt.loadavgContent, tt.uptimeContent)
+			collector := createTestLoadCollector(t, tt.loadavgContent, tt.uptimeContent)
 			result, err := collector.Collect(context.Background())
 
 			if tt.wantErr {
