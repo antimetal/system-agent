@@ -20,10 +20,9 @@ import "fmt"
 // Note: This implementation is NOT thread-safe. If concurrent access is needed,
 // synchronization must be handled externally.
 type RingBuffer[T any] struct {
-	data     []T
-	head     int // next write position
-	size     int // current number of elements
-	capacity int // maximum capacity
+	data []T
+	head int // next write position
+	size int // current number of elements
 }
 
 // New creates a new ring buffer with the given capacity
@@ -32,16 +31,15 @@ func New[T any](capacity int) (*RingBuffer[T], error) {
 		return nil, fmt.Errorf("capacity must be greater than 0, got %d", capacity)
 	}
 	return &RingBuffer[T]{
-		data:     make([]T, capacity),
-		capacity: capacity,
+		data: make([]T, capacity),
 	}, nil
 }
 
 // Push adds an element to the ring buffer, overwriting oldest if full
 func (r *RingBuffer[T]) Push(item T) {
 	r.data[r.head] = item
-	r.head = (r.head + 1) % r.capacity
-	if r.size < r.capacity {
+	r.head = (r.head + 1) % cap(r.data)
+	if r.size < cap(r.data) {
 		r.size++
 	}
 }
@@ -55,7 +53,7 @@ func (r *RingBuffer[T]) GetAll() []T {
 	result := make([]T, r.size)
 
 	// If buffer is not full, elements are from 0 to head-1
-	if r.size < r.capacity {
+	if r.size < cap(r.data) {
 		copy(result, r.data[:r.size])
 		return result
 	}
@@ -76,7 +74,7 @@ func (r *RingBuffer[T]) Len() int {
 
 // Cap returns the capacity of the buffer
 func (r *RingBuffer[T]) Cap() int {
-	return r.capacity
+	return cap(r.data)
 }
 
 // Clear removes all elements from the buffer
@@ -84,8 +82,5 @@ func (r *RingBuffer[T]) Clear() {
 	r.size = 0
 	r.head = 0
 	// Clear the underlying data to help GC
-	var zero T
-	for i := range r.data {
-		r.data[i] = zero
-	}
+	clear(r.data)
 }
