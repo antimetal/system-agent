@@ -9,6 +9,8 @@ package performance
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/go-logr/logr"
 )
@@ -122,98 +124,168 @@ func (b *BaseContinuousCollector) ClearError() {
 	b.lastError = nil
 }
 
-type CollectorRegistry struct {
-	pointCollectors      map[MetricType]PointCollector
-	continuousCollectors map[MetricType]ContinuousCollector
-	logger               logr.Logger
+// ContinuousPointCollector wraps a PointCollector into a ContinuousCollector
+// that calls Collect() on an interval
+//
+// Note: This is NOT goroutine-safe
+type ContinuousPointCollector struct {
+	BaseContinuousCollector
+	pointCollector PointCollector
+	ch             chan any
+	stopped        chan struct{}
 }
 
-func NewCollectorRegistry(logger logr.Logger) *CollectorRegistry {
-	return &CollectorRegistry{
-		pointCollectors:      make(map[MetricType]PointCollector),
-		continuousCollectors: make(map[MetricType]ContinuousCollector),
-		logger:               logger.WithName("registry"),
+// NewContinuousPointCollector creates a new ContinuousPointCollector
+func NewContinuousPointCollector(
+	pointCollector PointCollector, config CollectionConfig, logger logr.Logger,
+) *ContinuousPointCollector {
+	pointCaps := pointCollector.Capabilities()
+	caps := CollectorCapabilities{
+		SupportsOneShot:    false,
+		SupportsContinuous: true,
+		RequiresRoot:       pointCaps.RequiresRoot,
+		RequiresEBPF:       pointCaps.RequiresEBPF,
+		MinKernelVersion:   pointCaps.MinKernelVersion,
+	}
+	return &ContinuousPointCollector{
+		BaseContinuousCollector: NewBaseContinuousCollector(
+			pointCollector.Type(),
+			pointCollector.Name(),
+			logger,
+			config,
+			caps,
+		),
+		pointCollector: pointCollector,
+		stopped:        make(chan struct{}),
 	}
 }
 
-func (r *CollectorRegistry) RegisterPoint(collector PointCollector) error {
-	if collector == nil {
-		return fmt.Errorf("cannot register nil collector")
+// Start begins the continuous point collection
+func (c *ContinuousPointCollector) Start(ctx context.Context) (<-chan any, error) {
+	if c.Status() != CollectorStatusDisabled {
+		return nil, fmt.Errorf("collector already running, possibly in another goroutine")
 	}
 
-	metricType := collector.Type()
-	if _, exists := r.pointCollectors[metricType]; exists {
-		return fmt.Errorf("point collector for metric type %s already registered", metricType)
+	c.ch = make(chan any, 10000)
+	go c.start(ctx)
+	c.SetStatus(CollectorStatusActive)
+	return c.ch, nil
+}
+
+func (c *ContinuousPointCollector) start(ctx context.Context) {
+	ticker := time.NewTicker(c.config.Interval)
+	for {
+		select {
+		case <-ticker.C:
+			data, err := c.pointCollector.Collect(ctx)
+			c.SetError(err)
+			if err != nil {
+				c.SetStatus(CollectorStatusDegraded)
+				continue
+			}
+			c.ch <- data
+		case <-ctx.Done():
+			c.Stop()
+		case <-c.stopped:
+			ticker.Stop()
+			return
+		}
 	}
-	if _, exists := r.continuousCollectors[metricType]; exists {
-		return fmt.Errorf("continuous collector for metric type %s already registered", metricType)
+}
+
+// Stop halts the continuous point collection
+func (c *ContinuousPointCollector) Stop() error {
+	if c.Status() == CollectorStatusDisabled {
+		return nil
 	}
 
-	r.pointCollectors[metricType] = collector
-	r.logger.Info("registered point collector", "type", metricType, "name", collector.Name())
+	if c.stopped != nil {
+		close(c.stopped)
+		c.stopped = nil
+	}
+	if c.ch != nil {
+		close(c.ch)
+		c.ch = nil
+	}
+	c.SetStatus(CollectorStatusDisabled)
 	return nil
 }
 
-func (r *CollectorRegistry) RegisterContinuous(collector ContinuousCollector) error {
-	if collector == nil {
-		return fmt.Errorf("cannot register nil collector")
-	}
+// OnceContinuousCollector is a ContinuousCollector that wraps a PointCollector and
+// performs a one-shot collection.
+//
+// Start() will call Collect() once and return the result in a channel with a buffer size of 1
+// and then close it. This is useful for collectors that only need to run once because the
+// information collected doesn't change (e.g. hardware info).
+//
+// Note: This is NOT goroutine-safe
+type OnceContinuousCollector struct {
+	BaseContinuousCollector
+	pointCollector PointCollector
+	result         any
+	once           sync.Once
+}
 
-	metricType := collector.Type()
-	if _, exists := r.continuousCollectors[metricType]; exists {
-		return fmt.Errorf("continuous collector for metric type %s already registered", metricType)
+// NewOnceContinuousCollector creates a new OnceContinuousCollector
+func NewOnceContinuousCollector(
+	pointCollector PointCollector, config CollectionConfig, logger logr.Logger,
+) *OnceContinuousCollector {
+	pointCaps := pointCollector.Capabilities()
+	return &OnceContinuousCollector{
+		pointCollector: pointCollector,
+		BaseContinuousCollector: NewBaseContinuousCollector(
+			pointCollector.Type(),
+			pointCollector.Name(),
+			logger,
+			config,
+			CollectorCapabilities{
+				SupportsOneShot:    true,
+				SupportsContinuous: false,
+				RequiresRoot:       pointCaps.RequiresRoot,
+				RequiresEBPF:       pointCaps.RequiresEBPF,
+				MinKernelVersion:   pointCaps.MinKernelVersion,
+			},
+		),
 	}
-	if _, exists := r.pointCollectors[metricType]; exists {
-		return fmt.Errorf("point collector for metric type %s already registered", metricType)
-	}
+}
 
-	r.continuousCollectors[metricType] = collector
-	r.logger.Info("registered continuous collector", "type", metricType, "name", collector.Name())
+// Start performs an exactly once collection and returns the result in a channel
+// The channel will be closed after the data is sent. This means the returned channel
+// will always be closed with at most 1 item in the channel.
+//
+// Calling Start() subsequently after the first call will return a closed channel
+// containing the previous result and the last recorded error status
+//
+// WARNING: Call Start() multiple times will return separate channel instances.
+func (c *OnceContinuousCollector) Start(ctx context.Context) (<-chan any, error) {
+	if c.Status() != CollectorStatusDisabled {
+		return nil, fmt.Errorf("collector already running, possibly in another goroutine")
+	}
+	c.SetStatus(CollectorStatusActive)
+
+	var data any
+	var err error
+	c.once.Do(func() {
+		data, err = c.pointCollector.Collect(ctx)
+		c.result = data
+		c.SetError(err)
+		if err != nil {
+			c.SetStatus(CollectorStatusFailed)
+			return
+		}
+	})
+	ch := make(chan any, 1)
+	if c.result != nil {
+		ch <- c.result
+	}
+	close(ch)
+	return ch, c.LastError()
+}
+
+// Stop sets the colllector status back to disabled but DOES NOT clear the result
+func (c *OnceContinuousCollector) Stop() error {
+	c.SetStatus(CollectorStatusDisabled)
 	return nil
-}
-
-func (r *CollectorRegistry) GetPoint(metricType MetricType) PointCollector {
-	return r.pointCollectors[metricType]
-}
-
-func (r *CollectorRegistry) GetContinuous(metricType MetricType) ContinuousCollector {
-	return r.continuousCollectors[metricType]
-}
-
-func (r *CollectorRegistry) GetAllPoint() []PointCollector {
-	collectors := make([]PointCollector, 0, len(r.pointCollectors))
-	for _, collector := range r.pointCollectors {
-		collectors = append(collectors, collector)
-	}
-	return collectors
-}
-
-func (r *CollectorRegistry) GetAllContinuous() []ContinuousCollector {
-	collectors := make([]ContinuousCollector, 0, len(r.continuousCollectors))
-	for _, collector := range r.continuousCollectors {
-		collectors = append(collectors, collector)
-	}
-	return collectors
-}
-
-func (r *CollectorRegistry) GetEnabledPoint(config CollectionConfig) []PointCollector {
-	var enabled []PointCollector
-	for metricType, collector := range r.pointCollectors {
-		if config.EnabledCollectors[metricType] {
-			enabled = append(enabled, collector)
-		}
-	}
-	return enabled
-}
-
-func (r *CollectorRegistry) GetEnabledContinuous(config CollectionConfig) []ContinuousCollector {
-	var enabled []ContinuousCollector
-	for metricType, collector := range r.continuousCollectors {
-		if config.EnabledCollectors[metricType] {
-			enabled = append(enabled, collector)
-		}
-	}
-	return enabled
 }
 
 // MetricsStore provides thread-safe storage for collected metrics
