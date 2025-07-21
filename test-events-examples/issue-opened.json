@@ -1,0 +1,23 @@
+{
+  "action": "opened",
+  "issue": {
+    "number": 123,
+    "title": "Test Issue: Performance monitoring not working",
+    "body": "When I try to run the agent, the performance monitoring collectors are not starting properly.\n\n## Steps to reproduce\n1. Deploy the agent\n2. Check logs\n3. See error\n\n## Expected behavior\nCollectors should start without errors",
+    "html_url": "https://github.com/antimetal/system-agent/issues/123",
+    "user": {
+      "login": "testuser"
+    },
+    "labels": [
+      {
+        "name": "bug"
+      }
+    ]
+  },
+  "repository": {
+    "name": "system-agent",
+    "owner": {
+      "login": "antimetal"
+    }
+  }
+}

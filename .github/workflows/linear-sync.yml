@@ -12,14 +12,41 @@ jobs:
     steps:
     - name: Create Linear Issue
       run: |
+        # Build description
+        DESCRIPTION="GitHub Issue: ${{ github.event.issue.html_url }}
+        
+        ${{ github.event.issue.body }}"
+        
+        # Use jq to build the GraphQL query with proper JSON escaping
+        QUERY=$(jq -n \
+          --arg title "${{ github.event.issue.title }}" \
+          --arg desc "$DESCRIPTION" \
+          --arg teamId "${{ vars.LINEAR_TEAM_ID }}" \
+          '{ query: ("mutation { issueCreate(input: { title: " + ($title | @json) + ", description: " + ($desc | @json) + ", teamId: " + ($teamId | @json) + " }) { issue { identifier url } } }") }')
+        
         # Create Linear issue via GraphQL API
-        curl -X POST \
+        RESPONSE=$(curl -s -X POST \
           -H "Authorization: ${{ secrets.LINEAR_API_TOKEN }}" \
           -H "Content-Type: application/json" \
-          -d '{
-            "query": "mutation { issueCreate(input: { title: \"${{ github.event.issue.title }}\", description: \"GitHub Issue: ${{ github.event.issue.html_url }}\\n\\n${{ github.event.issue.body }}\", teamId: \"${{ vars.LINEAR_TEAM_ID }}\" }) { issue { identifier url } } }"
-          }' \
-          https://api.linear.app/graphql
+          -d "$QUERY" \
+          https://api.linear.app/graphql)
+        
+        # Check for errors
+        if echo "$RESPONSE" | jq -e '.errors' > /dev/null; then
+          echo "Error creating Linear issue:"
+          echo "$RESPONSE" | jq '.errors'
+          exit 1
+        fi
+        
+        # Output success info
+        if echo "$RESPONSE" | jq -e '.data.issueCreate.issue' > /dev/null; then
+          echo "Linear issue created successfully:"
+          echo "$RESPONSE" | jq '.data.issueCreate.issue'
+        else
+          echo "Unexpected response format. Full response:"
+          echo "$RESPONSE"
+          exit 1
+        fi
           
   update-linear-issue:
     runs-on: ubuntu-latest

@@ -1,0 +1,27 @@
+{
+  "action": "created",
+  "issue": {
+    "number": 123,
+    "title": "Test Issue: Performance monitoring not working",
+    "body": "Original issue body here...",
+    "html_url": "https://github.com/antimetal/system-agent/issues/123",
+    "user": {
+      "login": "testuser"
+    }
+  },
+  "comment": {
+    "id": 1234567890,
+    "body": "@claude Can you help me understand why the performance collectors are failing to start? I'm seeing errors in the logs about /proc filesystem access.",
+    "user": {
+      "login": "developer"
+    },
+    "created_at": "2025-01-21T10:00:00Z",
+    "html_url": "https://github.com/antimetal/system-agent/issues/123#issuecomment-1234567890"
+  },
+  "repository": {
+    "name": "system-agent",
+    "owner": {
+      "login": "antimetal"
+    }
+  }
+}
