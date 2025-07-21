@@ -1,3 +1,9 @@
+// Copyright Antimetal, Inc. All rights reserved.
+//
+// Use of this source code is governed by a source available license that can be found in the
+// LICENSE file or at:
+// https://polyformproject.org/wp-content/uploads/2020/06/PolyForm-Shield-1.0.0.txt
+
 package collectors_test
 
 import (
@@ -32,7 +38,7 @@ const (
 	whitespaceContent    = "   \n   \t   "
 )
 
-func createTestCollector(t *testing.T, loadavgContent, uptimeContent string) *collectors.LoadCollector {
+func createTestLoadCollector(t *testing.T, loadavgContent, uptimeContent string) *collectors.LoadCollector {
 	tmpDir := t.TempDir()
 
 	if loadavgContent != "" {
@@ -130,7 +136,7 @@ func TestLoadCollector_MissingFiles(t *testing.T) {
 			if tt.createUptime {
 				uptimeContent = validUptimeContent
 			}
-			collector := createTestCollector(t, loadavgContent, uptimeContent)
+			collector := createTestLoadCollector(t, loadavgContent, uptimeContent)
 
 			result, err := collector.Collect(context.Background())
 
@@ -310,7 +316,7 @@ func TestLoadCollector_DataParsing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			collector := createTestCollector(t, tt.loadavgContent, tt.uptimeContent)
+			collector := createTestLoadCollector(t, tt.loadavgContent, tt.uptimeContent)
 			result, err := collector.Collect(context.Background())
 
 			if tt.wantErr {
