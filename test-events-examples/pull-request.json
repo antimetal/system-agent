@@ -1,0 +1,30 @@
+{
+  "action": "opened",
+  "number": 456,
+  "pull_request": {
+    "number": 456,
+    "title": "feat: Add disk I/O collector",
+    "body": "## Summary\n\nThis PR adds a new DiskCollector for monitoring disk I/O statistics.\n\n## Changes\n- Added DiskCollector implementation\n- Added unit tests\n- Updated documentation\n\n## Testing\n- [x] Unit tests pass\n- [x] Integration tests pass\n- [x] Manual testing completed",
+    "html_url": "https://github.com/antimetal/system-agent/pull/456",
+    "state": "open",
+    "user": {
+      "login": "developer"
+    },
+    "base": {
+      "ref": "main",
+      "sha": "abc123"
+    },
+    "head": {
+      "ref": "feature/disk-collector",
+      "sha": "def456"
+    },
+    "diff_url": "https://github.com/antimetal/system-agent/pull/456.diff",
+    "patch_url": "https://github.com/antimetal/system-agent/pull/456.patch"
+  },
+  "repository": {
+    "name": "system-agent",
+    "owner": {
+      "login": "antimetal"
+    }
+  }
+}

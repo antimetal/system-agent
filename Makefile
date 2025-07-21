@@ -266,6 +266,51 @@ load-image: kind ## Loads Docker image into KIND cluster and restarts agent for 
 .PHONY: build-and-load-image
 build-and-load-image: docker-build load-image ## Builds and loads Docker image into KIND cluster.
 
+##@ GitHub Actions Testing
+
+.PHONY: test-actions
+test-actions: ## Test GitHub Actions locally with act (requires act to be installed)
+	@command -v act >/dev/null 2>&1 || { echo "act is not installed. Run: brew install act"; exit 1; }
+	@echo "Available workflows and jobs:"
+	@act -l
+
+.PHONY: test-claude-review
+test-claude-review: ## Test Claude code review workflow locally
+	@command -v act >/dev/null 2>&1 || { echo "act is not installed. Run: brew install act"; exit 1; }
+	@if [ ! -f .secrets ]; then \
+		echo "Creating .secrets file template..."; \
+		echo "ANTHROPIC_API_KEY=your-api-key-here" > .secrets; \
+		echo "Please update .secrets with your actual API key"; \
+		exit 1; \
+	fi
+	act pull_request -j claude-review --secret-file .secrets
+
+.PHONY: test-linear-sync
+test-linear-sync: ## Test Linear sync workflow locally
+	@command -v act >/dev/null 2>&1 || { echo "act is not installed. Run: brew install act"; exit 1; }
+	@if [ ! -f .secrets ]; then \
+		echo "Creating .secrets file template..."; \
+		echo "LINEAR_API_TOKEN=your-token-here" > .secrets; \
+		echo "Please update .secrets with your actual API token"; \
+		exit 1; \
+	fi
+	@if [ ! -d test-events ]; then \
+		echo "Creating test-events directory with examples..."; \
+		mkdir -p test-events; \
+		echo '{"action":"opened","issue":{"number":1,"title":"Test Issue","body":"Test body","html_url":"https://github.com/antimetal/system-agent/issues/1"}}' > test-events/issue-opened.json; \
+	fi
+	@if [ ! -f .vars ]; then \
+		echo "LINEAR_TEAM_ID=your-team-id-here" > .vars; \
+		echo "Please update .vars with your actual Linear team ID"; \
+		exit 1; \
+	fi
+	act issues -j create-linear-issue --secret-file .secrets --var-file .vars --eventpath test-events/issue-opened.json
+
+.PHONY: test-actions-dry
+test-actions-dry: ## Dry run of GitHub Actions (show what would be executed)
+	@command -v act >/dev/null 2>&1 || { echo "act is not installed. Run: brew install act"; exit 1; }
+	act -n -l
+
 ##@ Release
 
 .PHONY: preview-release

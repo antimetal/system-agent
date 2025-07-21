@@ -22,6 +22,12 @@ go.work.sum
 # env file
 .env
 
+# Act (GitHub Actions local testing)
+.secrets
+.vars
+.actrc.local
+test-events/
+
 # Added by goreleaser init:
 dist/
 

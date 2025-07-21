@@ -1,0 +1,6 @@
+# GitHub Actions Variables Template
+# Copy this file to .vars and update with your actual values
+# NEVER commit the .vars file to version control
+
+# Linear Team ID for Engineering
+LINEAR_TEAM_ID=19663b87-b6c8-4844-a03d-f63266192ca1
