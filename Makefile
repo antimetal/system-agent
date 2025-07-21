@@ -270,13 +270,13 @@ build-and-load-image: docker-build load-image ## Builds and loads Docker image i
 
 .PHONY: test-actions
 test-actions: ## Test GitHub Actions locally with act (requires act to be installed)
-	@command -v act >/dev/null 2>&1 || { echo "act is not installed. Run: brew install act"; exit 1; }
+	@command -v act >/dev/null 2>&1 || { echo "act is not installed. See installation instructions at: https://github.com/nektos/act#installation"; exit 1; }
 	@echo "Available workflows and jobs:"
 	@act -l
 
 .PHONY: test-claude-review
 test-claude-review: ## Test Claude code review workflow locally
-	@command -v act >/dev/null 2>&1 || { echo "act is not installed. Run: brew install act"; exit 1; }
+	@command -v act >/dev/null 2>&1 || { echo "act is not installed. See installation instructions at: https://github.com/nektos/act#installation"; exit 1; }
 	@if [ ! -f .secrets ]; then \
 		echo "Creating .secrets file template..."; \
 		echo "ANTHROPIC_API_KEY=your-api-key-here" > .secrets; \
@@ -287,7 +287,7 @@ test-claude-review: ## Test Claude code review workflow locally
 
 .PHONY: test-linear-sync
 test-linear-sync: ## Test Linear sync workflow locally
-	@command -v act >/dev/null 2>&1 || { echo "act is not installed. Run: brew install act"; exit 1; }
+	@command -v act >/dev/null 2>&1 || { echo "act is not installed. See installation instructions at: https://github.com/nektos/act#installation"; exit 1; }
 	@if [ ! -f .secrets ]; then \
 		echo "Creating .secrets file template..."; \
 		echo "LINEAR_API_TOKEN=your-token-here" > .secrets; \
@@ -308,7 +308,7 @@ test-linear-sync: ## Test Linear sync workflow locally
 
 .PHONY: test-actions-dry
 test-actions-dry: ## Dry run of GitHub Actions (show what would be executed)
-	@command -v act >/dev/null 2>&1 || { echo "act is not installed. Run: brew install act"; exit 1; }
+	@command -v act >/dev/null 2>&1 || { echo "act is not installed. See installation instructions at: https://github.com/nektos/act#installation"; exit 1; }
 	act -n -l
 
 ##@ Release

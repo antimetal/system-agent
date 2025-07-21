@@ -1,4 +1,5 @@
 name: Claude Code Review
+description: Provides AI-powered code review using Claude on pull requests
 
 on:
   pull_request:
