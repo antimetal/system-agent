@@ -284,13 +284,13 @@ func TestMemoryCollector_Constructor(t *testing.T) {
 				HostSysPath:  "/sys",
 			}
 			collector, err := NewMemoryCollector(logr.Discard(), config)
-			
+
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.Nil(t, collector)
 				return
 			}
-			
+
 			require.NoError(t, err)
 			require.NotNil(t, collector)
 			validateMemoryCollectorInterface(t, collector)

@@ -61,11 +61,32 @@ func main() {
 	logger := logr.Discard()
 
 	// Create all collectors
+	cpuInfo, err := collectors.NewCPUInfoCollector(logger, config)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create CPU info collector: %v\n", err)
+		os.Exit(1)
+	}
+	memInfo, err := collectors.NewMemoryInfoCollector(logger, config)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create memory info collector: %v\n", err)
+		os.Exit(1)
+	}
+	diskInfo, err := collectors.NewDiskInfoCollector(logger, config)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create disk info collector: %v\n", err)
+		os.Exit(1)
+	}
+	netInfo, err := collectors.NewNetworkInfoCollector(logger, config)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create network info collector: %v\n", err)
+		os.Exit(1)
+	}
+
 	collectors := []performance.PointCollector{
-		collectors.NewCPUInfoCollector(logger, config),
-		collectors.NewMemoryInfoCollector(logger, config),
-		collectors.NewDiskInfoCollector(logger, config),
-		collectors.NewNetworkInfoCollector(logger, config),
+		cpuInfo,
+		memInfo,
+		diskInfo,
+		netInfo,
 	}
 
 	// Filter collectors if requested

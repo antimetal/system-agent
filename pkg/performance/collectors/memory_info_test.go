@@ -50,7 +50,68 @@ func createTestMemoryInfoCollector(t *testing.T) (*collectors.MemoryInfoCollecto
 		HostSysPath:  sysPath,
 	}
 
-	return collectors.NewMemoryInfoCollector(logr.Discard(), config), tmpDir
+	collector, err := collectors.NewMemoryInfoCollector(logr.Discard(), config)
+	require.NoError(t, err)
+	return collector, tmpDir
+}
+
+func TestMemoryInfoCollector_Constructor(t *testing.T) {
+	tests := []struct {
+		name    string
+		config  performance.CollectionConfig
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "valid absolute paths",
+			config: performance.CollectionConfig{
+				HostProcPath: "/proc",
+				HostSysPath:  "/sys",
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid relative proc path",
+			config: performance.CollectionConfig{
+				HostProcPath: "proc",
+				HostSysPath:  "/sys",
+			},
+			wantErr: true,
+			errMsg:  "HostProcPath must be an absolute path",
+		},
+		{
+			name: "invalid relative sys path",
+			config: performance.CollectionConfig{
+				HostProcPath: "/proc",
+				HostSysPath:  "sys",
+			},
+			wantErr: true,
+			errMsg:  "HostSysPath must be an absolute path",
+		},
+		{
+			name: "empty paths",
+			config: performance.CollectionConfig{
+				HostProcPath: "",
+				HostSysPath:  "",
+			},
+			wantErr: true,
+			errMsg:  "HostProcPath must be an absolute path",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			collector, err := collectors.NewMemoryInfoCollector(logr.Discard(), tt.config)
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+				assert.Nil(t, collector)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, collector)
+			}
+		})
+	}
 }
 
 func TestMemoryInfoCollector_Collect(t *testing.T) {

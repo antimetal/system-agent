@@ -20,7 +20,7 @@ import (
 )
 
 // Compile-time interface check
-var _ performance.Collector = (*DiskCollector)(nil)
+var _ performance.PointCollector = (*DiskCollector)(nil)
 
 const (
 	// diskstatsFieldCount is the expected number of fields in /proc/diskstats
@@ -42,7 +42,12 @@ type DiskCollector struct {
 	diskstatsPath string
 }
 
-func NewDiskCollector(logger logr.Logger, config performance.CollectionConfig) *DiskCollector {
+func NewDiskCollector(logger logr.Logger, config performance.CollectionConfig) (*DiskCollector, error) {
+	// Validate paths are absolute
+	if !filepath.IsAbs(config.HostProcPath) {
+		return nil, fmt.Errorf("HostProcPath must be an absolute path, got: %q", config.HostProcPath)
+	}
+
 	capabilities := performance.CollectorCapabilities{
 		SupportsOneShot:    true,
 		SupportsContinuous: false,
@@ -60,7 +65,7 @@ func NewDiskCollector(logger logr.Logger, config performance.CollectionConfig) *
 			capabilities,
 		),
 		diskstatsPath: filepath.Join(config.HostProcPath, "diskstats"),
-	}
+	}, nil
 }
 
 // Collect performs a one-shot collection of disk statistics

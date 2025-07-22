@@ -20,7 +20,7 @@ import (
 )
 
 // Compile-time interface check
-var _ performance.Collector = (*LoadCollector)(nil)
+var _ performance.PointCollector = (*LoadCollector)(nil)
 
 // LoadCollector collects system load statistics from /proc/loadavg and /proc/uptime
 // Reference: https://www.kernel.org/doc/html/latest/filesystems/proc.html#proc-loadavg

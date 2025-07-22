@@ -19,12 +19,72 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestKernelCollector_Constructor(t *testing.T) {
+	tests := []struct {
+		name    string
+		config  performance.CollectionConfig
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "valid absolute paths",
+			config: performance.CollectionConfig{
+				HostProcPath: "/proc",
+				HostDevPath:  "/dev",
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid relative proc path",
+			config: performance.CollectionConfig{
+				HostProcPath: "proc",
+				HostDevPath:  "/dev",
+			},
+			wantErr: true,
+			errMsg:  "HostProcPath must be an absolute path",
+		},
+		{
+			name: "invalid relative dev path",
+			config: performance.CollectionConfig{
+				HostProcPath: "/proc",
+				HostDevPath:  "dev",
+			},
+			wantErr: true,
+			errMsg:  "HostDevPath must be an absolute path",
+		},
+		{
+			name: "empty paths",
+			config: performance.CollectionConfig{
+				HostProcPath: "",
+				HostDevPath:  "",
+			},
+			wantErr: true,
+			errMsg:  "HostDevPath must be an absolute path",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			collector, err := NewKernelCollector(logr.Discard(), tt.config)
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+				assert.Nil(t, collector)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, collector)
+			}
+		})
+	}
+}
+
 func TestKernelCollector_parseKmsgLine(t *testing.T) {
 	config := performance.CollectionConfig{
 		HostProcPath: t.TempDir(),
 		HostDevPath:  "/dev",
 	}
-	collector := NewKernelCollector(logr.Discard(), config)
+	collector, err := NewKernelCollector(logr.Discard(), config)
+	require.NoError(t, err)
 
 	statContent := "cpu  10 20 30 40 50 60 70 80 90 100\n" +
 		"cpu0 1 2 3 4 5 6 7 8 9 10\n" +
@@ -34,7 +94,7 @@ func TestKernelCollector_parseKmsgLine(t *testing.T) {
 		"processes 12345\n" +
 		"procs_running 1\n" +
 		"procs_blocked 0\n"
-	err := os.WriteFile(filepath.Join(config.HostProcPath, "stat"), []byte(statContent), 0644)
+	err = os.WriteFile(filepath.Join(config.HostProcPath, "stat"), []byte(statContent), 0644)
 	require.NoError(t, err)
 
 	bootTime, err := collector.procUtils.GetBootTime()
@@ -125,15 +185,18 @@ func TestKernelCollector_MessageLimit(t *testing.T) {
 	}
 
 	// Test with custom message limit
-	collector := NewKernelCollector(logr.Discard(), config, WithMessageLimit(10))
+	collector, err := NewKernelCollector(logr.Discard(), config, WithMessageLimit(10))
+	require.NoError(t, err)
 	assert.Equal(t, 10, collector.messageLimit)
 
 	// Test with default
-	collector2 := NewKernelCollector(logr.Discard(), config)
+	collector2, err := NewKernelCollector(logr.Discard(), config)
+	require.NoError(t, err)
 	assert.Equal(t, defaultMessageLimit, collector2.messageLimit)
 
 	// Test with invalid limit (should keep default)
-	collector3 := NewKernelCollector(logr.Discard(), config, WithMessageLimit(0))
+	collector3, err := NewKernelCollector(logr.Discard(), config, WithMessageLimit(0))
+	require.NoError(t, err)
 	assert.Equal(t, defaultMessageLimit, collector3.messageLimit)
 }
 
@@ -150,7 +213,8 @@ func TestKernelCollector_ContinuousCollection(t *testing.T) {
 	err := os.WriteFile(filepath.Join(config.HostProcPath, "stat"), []byte(statContent), 0644)
 	require.NoError(t, err)
 
-	collector := NewKernelCollector(logr.Discard(), config)
+	collector, err := NewKernelCollector(logr.Discard(), config)
+	require.NoError(t, err)
 
 	// Test Status before starting
 	assert.Equal(t, performance.CollectorStatusDisabled, collector.Status())
