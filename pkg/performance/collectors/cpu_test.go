@@ -19,6 +19,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestCPUCollector_Constructor(t *testing.T) {
+	t.Run("valid absolute path", func(t *testing.T) {
+		config := performance.CollectionConfig{
+			HostProcPath: "/proc",
+		}
+		logger := logr.Discard()
+		collector, err := collectors.NewCPUCollector(logger, config)
+		assert.NoError(t, err)
+		assert.NotNil(t, collector)
+	})
+
+	t.Run("invalid relative path", func(t *testing.T) {
+		config := performance.CollectionConfig{
+			HostProcPath: "proc",
+		}
+		logger := logr.Discard()
+		collector, err := collectors.NewCPUCollector(logger, config)
+		assert.Error(t, err)
+		assert.Nil(t, collector)
+		assert.Contains(t, err.Error(), "HostProcPath must be an absolute path")
+	})
+}
+
 func TestCPUCollector_Collect(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -174,7 +197,8 @@ cpu7 250 0 250 2000 0 0 0 0 0 0
 				HostProcPath: tmpDir,
 			}
 			logger := logr.Discard()
-			collector := collectors.NewCPUCollector(logger, config)
+			collector, err := collectors.NewCPUCollector(logger, config)
+			assert.NoError(t, err)
 
 			// Collect CPU stats
 			result, err := collector.Collect(context.Background())
@@ -217,7 +241,8 @@ procs_blocked 0
 		HostProcPath: tmpDir,
 	}
 	logger := logr.Discard()
-	collector := collectors.NewCPUCollector(logger, config)
+	collector, err := collectors.NewCPUCollector(logger, config)
+	assert.NoError(t, err)
 
 	// Collect CPU stats
 	result, err := collector.Collect(context.Background())

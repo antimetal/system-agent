@@ -35,7 +35,11 @@ type CPUCollector struct {
 	statPath string
 }
 
-func NewCPUCollector(logger logr.Logger, config performance.CollectionConfig) *CPUCollector {
+func NewCPUCollector(logger logr.Logger, config performance.CollectionConfig) (*CPUCollector, error) {
+	// Validate that HostProcPath is absolute
+	if !filepath.IsAbs(config.HostProcPath) {
+		return nil, fmt.Errorf("HostProcPath must be an absolute path, got: %q", config.HostProcPath)
+	}
 
 	capabilities := performance.CollectorCapabilities{
 		SupportsOneShot:    true,
@@ -54,7 +58,7 @@ func NewCPUCollector(logger logr.Logger, config performance.CollectionConfig) *C
 			capabilities,
 		),
 		statPath: filepath.Join(config.HostProcPath, "stat"),
-	}
+	}, nil
 }
 
 // Collect performs a one-shot collection of CPU statistics
@@ -96,10 +100,14 @@ func (c *CPUCollector) collectCPUStats() ([]*performance.CPUStats, error) {
 			continue
 		}
 
-		// Skip if this isn't a CPU line (e.g., could be "cpufreq")
 		cpuName := fields[0]
-		if cpuName != "cpu" && !strings.HasPrefix(cpuName, "cpu") {
-			continue
+		
+		// Ensure this is either "cpu" or "cpu<number>" (not "cpufreq" etc)
+		if cpuName != "cpu" {
+			// Must be "cpu" followed by a number
+			if len(cpuName) <= 3 || cpuName[3] < '0' || cpuName[3] > '9' {
+				continue
+			}
 		}
 
 		// Parse CPU index
