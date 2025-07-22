@@ -322,6 +322,7 @@ type CollectionConfig struct {
 	HostProcPath      string // Path to /proc (useful for containers)
 	HostSysPath       string // Path to /sys (useful for containers)
 	HostDevPath       string // Path to /dev (useful for containers)
+	TopProcessCount   int    // Number of top processes to collect (by CPU usage)
 }
 
 // DefaultCollectionConfig returns a default configuration
