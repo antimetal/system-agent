@@ -103,12 +103,11 @@ func TestDiskCollector_Constructor(t *testing.T) {
 			errMsg:  "HostProcPath must be an absolute path",
 		},
 		{
-			name: "empty path",
+			name: "empty path (allowed for defaults)",
 			config: performance.CollectionConfig{
 				HostProcPath: "",
 			},
-			wantErr: true,
-			errMsg:  "HostProcPath must be an absolute path",
+			wantErr: false,
 		},
 	}
 

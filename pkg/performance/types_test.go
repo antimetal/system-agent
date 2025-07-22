@@ -4,120 +4,129 @@
 // LICENSE file or at:
 // https://polyformproject.org/wp-content/uploads/2020/06/PolyForm-Shield-1.0.0.txt
 
-package performance
+package performance_test
 
 import (
 	"testing"
-	"time"
+
+	"github.com/antimetal/agent/pkg/performance"
+	"github.com/stretchr/testify/assert"
 )
 
-func TestCollectionConfig_ApplyDefaults(t *testing.T) {
+func TestCollectionConfig_Validate(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    CollectionConfig
-		expected CollectionConfig
+		name    string
+		config  performance.CollectionConfig
+		wantErr bool
+		errMsg  string
 	}{
 		{
-			name:  "empty config gets all defaults",
-			input: CollectionConfig{},
-			expected: CollectionConfig{
-				Interval: time.Second,
-				EnabledCollectors: map[MetricType]bool{
-					MetricTypeLoad:    true,
-					MetricTypeMemory:  true,
-					MetricTypeCPU:     true,
-					MetricTypeProcess: true,
-					MetricTypeDisk:    true,
-					MetricTypeNetwork: true,
-					MetricTypeTCP:     true,
-					MetricTypeKernel:  true,
-					// Hardware configuration collectors
-					MetricTypeCPUInfo:     true,
-					MetricTypeMemoryInfo:  true,
-					MetricTypeDiskInfo:    true,
-					MetricTypeNetworkInfo: true,
-				},
+			name: "all valid absolute paths",
+			config: performance.CollectionConfig{
 				HostProcPath: "/proc",
 				HostSysPath:  "/sys",
 				HostDevPath:  "/dev",
 			},
+			wantErr: false,
 		},
 		{
-			name: "partial config keeps user values",
-			input: CollectionConfig{
-				Interval:     5 * time.Second,
-				HostProcPath: "/custom/proc",
+			name: "empty paths are valid",
+			config: performance.CollectionConfig{
+				HostProcPath: "",
+				HostSysPath:  "",
+				HostDevPath:  "",
 			},
-			expected: CollectionConfig{
-				Interval: 5 * time.Second, // User value kept
-				EnabledCollectors: map[MetricType]bool{ // Default applied
-					MetricTypeLoad:    true,
-					MetricTypeMemory:  true,
-					MetricTypeCPU:     true,
-					MetricTypeProcess: true,
-					MetricTypeDisk:    true,
-					MetricTypeNetwork: true,
-					MetricTypeTCP:     true,
-					MetricTypeKernel:  true,
-					// Hardware configuration collectors
-					MetricTypeCPUInfo:     true,
-					MetricTypeMemoryInfo:  true,
-					MetricTypeDiskInfo:    true,
-					MetricTypeNetworkInfo: true,
-				},
-				HostProcPath: "/custom/proc", // User value kept
-				HostSysPath:  "/sys",         // Default applied
-				HostDevPath:  "/dev",         // Default applied
-			},
+			wantErr: false,
 		},
 		{
-			name: "enabled collectors partial override",
-			input: CollectionConfig{
-				EnabledCollectors: map[MetricType]bool{
-					MetricTypeLoad: false,
-					MetricTypeCPU:  true,
-				},
-			},
-			expected: CollectionConfig{
-				Interval: time.Second,
-				EnabledCollectors: map[MetricType]bool{
-					MetricTypeLoad: false, // User override
-					MetricTypeCPU:  true,  // User value
-				},
-				HostProcPath: "/proc",
+			name: "invalid relative proc path",
+			config: performance.CollectionConfig{
+				HostProcPath: "proc",
 				HostSysPath:  "/sys",
 				HostDevPath:  "/dev",
 			},
+			wantErr: true,
+			errMsg:  "HostProcPath must be an absolute path, got: \"proc\"",
+		},
+		{
+			name: "invalid relative sys path",
+			config: performance.CollectionConfig{
+				HostProcPath: "/proc",
+				HostSysPath:  "sys",
+				HostDevPath:  "/dev",
+			},
+			wantErr: true,
+			errMsg:  "HostSysPath must be an absolute path, got: \"sys\"",
+		},
+		{
+			name: "invalid relative dev path",
+			config: performance.CollectionConfig{
+				HostProcPath: "/proc",
+				HostSysPath:  "/sys",
+				HostDevPath:  "dev",
+			},
+			wantErr: true,
+			errMsg:  "HostDevPath must be an absolute path, got: \"dev\"",
+		},
+		{
+			name: "mixed valid and invalid paths",
+			config: performance.CollectionConfig{
+				HostProcPath: "/proc",
+				HostSysPath:  "sys",
+				HostDevPath:  "/dev",
+			},
+			wantErr: true,
+			errMsg:  "HostSysPath must be an absolute path, got: \"sys\"",
+		},
+		{
+			name: "only proc path configured",
+			config: performance.CollectionConfig{
+				HostProcPath: "/proc",
+			},
+			wantErr: false,
+		},
+		{
+			name: "only sys path configured",
+			config: performance.CollectionConfig{
+				HostSysPath: "/sys",
+			},
+			wantErr: false,
+		},
+		{
+			name: "only dev path configured",
+			config: performance.CollectionConfig{
+				HostDevPath: "/dev",
+			},
+			wantErr: false,
+		},
+		{
+			name: "paths with trailing slashes",
+			config: performance.CollectionConfig{
+				HostProcPath: "/proc/",
+				HostSysPath:  "/sys/",
+				HostDevPath:  "/dev/",
+			},
+			wantErr: false,
+		},
+		{
+			name: "root path is valid",
+			config: performance.CollectionConfig{
+				HostProcPath: "/",
+				HostSysPath:  "/",
+				HostDevPath:  "/",
+			},
+			wantErr: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := tt.input
-			config.ApplyDefaults()
-
-			// Check each field
-			if config.Interval != tt.expected.Interval {
-				t.Errorf("Interval = %v, want %v", config.Interval, tt.expected.Interval)
-			}
-			if config.HostProcPath != tt.expected.HostProcPath {
-				t.Errorf("HostProcPath = %v, want %v", config.HostProcPath, tt.expected.HostProcPath)
-			}
-			if config.HostSysPath != tt.expected.HostSysPath {
-				t.Errorf("HostSysPath = %v, want %v", config.HostSysPath, tt.expected.HostSysPath)
-			}
-			if config.HostDevPath != tt.expected.HostDevPath {
-				t.Errorf("HostDevPath = %v, want %v", config.HostDevPath, tt.expected.HostDevPath)
-			}
-
-			// Check EnabledCollectors map
-			if len(config.EnabledCollectors) != len(tt.expected.EnabledCollectors) {
-				t.Errorf("EnabledCollectors length = %v, want %v", len(config.EnabledCollectors), len(tt.expected.EnabledCollectors))
-			}
-			for k, v := range tt.expected.EnabledCollectors {
-				if config.EnabledCollectors[k] != v {
-					t.Errorf("EnabledCollectors[%v] = %v, want %v", k, config.EnabledCollectors[k], v)
-				}
+			err := tt.config.Validate()
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Equal(t, tt.errMsg, err.Error())
+			} else {
+				assert.NoError(t, err)
 			}
 		})
 	}

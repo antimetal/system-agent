@@ -271,13 +271,12 @@ func TestCPUInfoCollector_Constructor(t *testing.T) {
 			errMsg:  "HostSysPath must be an absolute path",
 		},
 		{
-			name: "empty paths",
+			name: "empty paths (allowed for defaults)",
 			config: performance.CollectionConfig{
 				HostProcPath: "",
 				HostSysPath:  "",
 			},
-			wantErr: true,
-			errMsg:  "HostProcPath must be an absolute path",
+			wantErr: false,
 		},
 	}
 

@@ -84,12 +84,11 @@ func TestDiskInfoCollector_Constructor(t *testing.T) {
 			errMsg:  "HostSysPath must be an absolute path",
 		},
 		{
-			name: "empty path",
+			name: "empty path (allowed for defaults)",
 			config: performance.CollectionConfig{
 				HostSysPath: "",
 			},
-			wantErr: true,
-			errMsg:  "HostSysPath must be an absolute path",
+			wantErr: false,
 		},
 	}
 

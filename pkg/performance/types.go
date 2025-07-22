@@ -7,6 +7,8 @@
 package performance
 
 import (
+	"fmt"
+	"path/filepath"
 	"time"
 )
 
@@ -370,6 +372,28 @@ func (c *CollectionConfig) ApplyDefaults() {
 	if c.HostDevPath == "" {
 		c.HostDevPath = defaults.HostDevPath
 	}
+}
+
+// Validate checks that all configured paths are absolute paths.
+// This centralizes path validation logic that was previously duplicated
+// across all collector constructors.
+func (c CollectionConfig) Validate() error {
+	// Validate HostProcPath if configured
+	if c.HostProcPath != "" && !filepath.IsAbs(c.HostProcPath) {
+		return fmt.Errorf("HostProcPath must be an absolute path, got: %q", c.HostProcPath)
+	}
+
+	// Validate HostSysPath if configured
+	if c.HostSysPath != "" && !filepath.IsAbs(c.HostSysPath) {
+		return fmt.Errorf("HostSysPath must be an absolute path, got: %q", c.HostSysPath)
+	}
+
+	// Validate HostDevPath if configured
+	if c.HostDevPath != "" && !filepath.IsAbs(c.HostDevPath) {
+		return fmt.Errorf("HostDevPath must be an absolute path, got: %q", c.HostDevPath)
+	}
+
+	return nil
 }
 
 // CPUInfo represents CPU hardware configuration

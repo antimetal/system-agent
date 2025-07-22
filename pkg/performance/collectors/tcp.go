@@ -62,9 +62,9 @@ var tcpStates = map[string]string{
 }
 
 func NewTCPCollector(logger logr.Logger, config performance.CollectionConfig) (*TCPCollector, error) {
-	// Validate paths are absolute
-	if !filepath.IsAbs(config.HostProcPath) {
-		return nil, fmt.Errorf("HostProcPath must be an absolute path, got: %q", config.HostProcPath)
+	// Validate configuration
+	if err := config.Validate(); err != nil {
+		return nil, err
 	}
 
 	capabilities := performance.CollectorCapabilities{

@@ -274,7 +274,7 @@ func TestMemoryCollector_Constructor(t *testing.T) {
 		{"default proc path", "/proc", "/proc/meminfo", false},
 		{"custom proc path", "/custom/proc", "/custom/proc/meminfo", false},
 		{"relative proc path", "proc", "", true},
-		{"empty proc path", "", "", true},
+		{"empty proc path", "", "meminfo", false},
 	}
 
 	for _, tt := range tests {

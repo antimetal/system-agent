@@ -1,3 +1,9 @@
+// Copyright Antimetal, Inc. All rights reserved.
+//
+// Use of this source code is governed by a source available license that can be found in the
+// LICENSE file or at:
+// https://polyformproject.org/wp-content/uploads/2020/06/PolyForm-Shield-1.0.0.txt
+
 package collectors_test
 
 import (
@@ -79,7 +85,8 @@ func TestLoadCollector_Constructor(t *testing.T) {
 		config := performance.CollectionConfig{HostProcPath: ""}
 		_, err := collectors.NewLoadCollector(logr.Discard(), config)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "must be an absolute path")
+		// LoadCollector does additional existence check after validation
+		assert.Contains(t, err.Error(), "HostProcPath validation failed")
 	})
 
 	t.Run("error on non-existent path", func(t *testing.T) {

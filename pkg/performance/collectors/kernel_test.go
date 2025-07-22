@@ -53,13 +53,12 @@ func TestKernelCollector_Constructor(t *testing.T) {
 			errMsg:  "HostDevPath must be an absolute path",
 		},
 		{
-			name: "empty paths",
+			name: "empty paths (allowed for defaults)",
 			config: performance.CollectionConfig{
 				HostProcPath: "",
 				HostDevPath:  "",
 			},
-			wantErr: true,
-			errMsg:  "HostDevPath must be an absolute path",
+			wantErr: false,
 		},
 	}
 

@@ -39,11 +39,12 @@ func NewLoadCollector(logger logr.Logger, config performance.CollectionConfig) (
 		MinKernelVersion:   "2.6.0", // /proc/loadavg has been around forever
 	}
 
-	// Validate that HostProcPath is absolute and exists
-	if !filepath.IsAbs(config.HostProcPath) {
-		return nil, fmt.Errorf("HostProcPath must be an absolute path, got: %q", config.HostProcPath)
+	// Validate configuration
+	if err := config.Validate(); err != nil {
+		return nil, err
 	}
 
+	// LoadCollector additionally checks for path existence
 	if _, err := os.Stat(config.HostProcPath); err != nil {
 		return nil, fmt.Errorf("HostProcPath validation failed: %w", err)
 	}
