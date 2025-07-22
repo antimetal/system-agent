@@ -19,6 +19,14 @@ import (
 	"github.com/go-logr/logr"
 )
 
+func init() {
+	performance.Register(performance.MetricTypeMemory, performance.PartialNewContinuousPointCollector(
+		func(logger logr.Logger, config performance.CollectionConfig) (performance.PointCollector, error) {
+			return NewMemoryCollector(logger, config)
+		},
+	))
+}
+
 // Compile-time interface check
 var _ performance.PointCollector = (*MemoryCollector)(nil)
 

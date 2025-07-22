@@ -19,6 +19,14 @@ import (
 	"github.com/go-logr/logr"
 )
 
+func init() {
+	performance.Register(performance.MetricTypeTCP, performance.PartialNewContinuousPointCollector(
+		func(logger logr.Logger, config performance.CollectionConfig) (performance.PointCollector, error) {
+			return NewTCPCollector(logger, config)
+		},
+	))
+}
+
 // Compile-time interface check
 var _ performance.PointCollector = (*TCPCollector)(nil)
 

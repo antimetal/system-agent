@@ -17,7 +17,6 @@ import (
 type Manager struct {
 	config      CollectionConfig
 	logger      logr.Logger
-	registry    *CollectorRegistry
 	nodeName    string
 	clusterName string
 }
@@ -65,25 +64,11 @@ func NewManager(opts ManagerOptions) (*Manager, error) {
 	m := &Manager{
 		config:      config,
 		logger:      opts.Logger.WithName("performance-manager"),
-		registry:    NewCollectorRegistry(opts.Logger),
 		nodeName:    nodeName,
 		clusterName: opts.ClusterName,
 	}
 
 	return m, nil
-}
-
-func (m *Manager) RegisterPointCollector(collector PointCollector) error {
-	return m.registry.RegisterPoint(collector)
-}
-
-func (m *Manager) RegisterContinuousCollector(collector ContinuousCollector) error {
-	return m.registry.RegisterContinuous(collector)
-}
-
-// GetRegistry returns the collector registry for inspection
-func (m *Manager) GetRegistry() *CollectorRegistry {
-	return m.registry
 }
 
 // GetConfig returns the current configuration

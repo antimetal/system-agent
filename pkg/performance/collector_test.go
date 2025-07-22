@@ -208,7 +208,7 @@ func TestOnceContinuousCollector(t *testing.T) {
 
 		// Verify channel is closed after one-shot collection
 		select {
-		case data, chOpen = <-ch:
+		case _, chOpen = <-ch:
 			break
 		case <-time.After(500 * time.Millisecond):
 			t.Fatal("Timeout waiting for data point")

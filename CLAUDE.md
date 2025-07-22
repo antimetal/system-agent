@@ -286,6 +286,39 @@ Document the error handling strategy in method comments:
 // - Never panics - all errors are returned to caller
 ```
 
+#### Adding Collector to Registry
+In order to use a collector, it has to be added to the registry so that the manager knows about it.
+This is typically done in the init() function in the source file where the collector is implemented: 
+
+For PointCollectors, you need to transform them into ContinuousCollectors in order to add them to the registry.
+There are two wrappers to do that depending on use case:
+1. `ContinuousPointCollector`: wraps a PointCollector to call `Collect()` on an interval
+2. `OnceContinuousCollector`: wraps a PointCollector where it calls `Collect()` once and caches the result
+
+Use `PartialNewContinuousPointCollector` if the collector is collecting runtime statistics.
+
+```go
+func init() {
+	performance.Register(performance.MetricTypeXXX, performance.PartialNewContinuousPointCollector(
+		func(logger logr.Logger, config performance.CollectionConfig) (performance.PointCollector, error) {
+			return NewXCollector(logger, config)
+		},
+	))
+}
+```
+
+Use `PartialOnceContinuousCollector` when collecting hardware information or if the collector needs to run just once.
+
+```go
+func init() {
+	performance.Register(performance.MetricTypeXXX, performance.PartialNewOnceContinuousCollector(
+		func(logger logr.Logger, config performance.CollectionConfig) (performance.PointCollector, error) {
+			return NewXCollector(logger, config)
+		},
+	))
+}
+```
+
 ### Performance Collector Testing Methodology
 
 #### Standardized Testing Approach
@@ -387,10 +420,12 @@ When adding a new performance collector:
    - Include constructor tests
    - Add helper functions following naming patterns
    - Test edge cases and error scenarios
-4. **Update collector registry** if applicable
+4. **Update collector registry**
+   - Write an init() function in `your_collector.go` to add the collector to the registry
 5. **Run validation**:
    ```bash
    make test                    # Run tests
+   make fmt                     # Run go fmt
    make lint                    # Check code style
    make gen-license-headers     # Ensure license headers
    ```
