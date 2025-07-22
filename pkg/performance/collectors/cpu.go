@@ -101,7 +101,7 @@ func (c *CPUCollector) collectCPUStats() ([]*performance.CPUStats, error) {
 		}
 
 		cpuName := fields[0]
-		
+
 		// Ensure this is either "cpu" or "cpu<number>" (not "cpufreq" etc)
 		if cpuName != "cpu" {
 			// Must be "cpu" followed by a number

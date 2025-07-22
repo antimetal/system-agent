@@ -47,7 +47,7 @@ const (
 )
 
 // Helper functions following TCP collector patterns
-func createDiskCollector(procPath string) *collectors.DiskCollector {
+func createDiskCollector(t *testing.T, procPath string) *collectors.DiskCollector {
 	config := performance.CollectionConfig{
 		HostProcPath: procPath,
 	}
@@ -129,7 +129,7 @@ func TestDiskCollector_Constructor(t *testing.T) {
 
 func TestDiskCollector_BasicFunctionality(t *testing.T) {
 	procPath := setupDiskstatsFile(t, validDiskstats)
-	collector := createDiskCollector(procPath)
+	collector := createDiskCollector(t, procPath)
 
 	stats := collectDiskStats(t, collector)
 
@@ -204,7 +204,7 @@ func TestDiskCollector_ErrorHandling(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			procPath := tt.setupFunc()
-			collector := createDiskCollector(procPath)
+			collector := createDiskCollector(t, procPath)
 			err := collectDiskStatsWithError(collector)
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), tt.errorMsg)
@@ -276,7 +276,7 @@ func TestDiskCollector_GracefulDegradation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			procPath := setupDiskstatsFile(t, tt.content)
-			collector := createDiskCollector(procPath)
+			collector := createDiskCollector(t, procPath)
 			stats := collectDiskStats(t, collector)
 			tt.validateResult(t, stats)
 		})
@@ -318,7 +318,7 @@ func TestDiskCollector_EdgeCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			procPath := setupDiskstatsFile(t, tt.content)
-			collector := createDiskCollector(procPath)
+			collector := createDiskCollector(t, procPath)
 			stats := collectDiskStats(t, collector)
 			tt.check(t, stats)
 		})
@@ -373,7 +373,7 @@ func TestDiskCollector_DeviceTypes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			procPath := setupDiskstatsFile(t, tt.content)
-			collector := createDiskCollector(procPath)
+			collector := createDiskCollector(t, procPath)
 			stats := collectDiskStats(t, collector)
 
 			// Verify expected devices are present
