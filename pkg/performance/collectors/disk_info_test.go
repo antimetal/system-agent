@@ -201,9 +201,10 @@ func TestDiskInfoCollector_Collect(t *testing.T) {
 				// Find disks by device name
 				var sda, sdb *performance.DiskInfo
 				for i := range disks {
-					if disks[i].Device == "sda" {
+					switch disks[i].Device {
+					case "sda":
 						sda = &disks[i]
-					} else if disks[i].Device == "sdb" {
+					case "sdb":
 						sdb = &disks[i]
 					}
 				}
