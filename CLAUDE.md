@@ -203,6 +203,42 @@ type ContinuousCollector interface {
 
 ### Collector Implementation Patterns
 
+#### Constructor Pattern
+All collectors must follow a consistent constructor pattern:
+```go
+func NewXCollector(logger logr.Logger, config performance.CollectionConfig) (*XCollector, error) {
+    // 1. Validate paths are absolute
+    if !filepath.IsAbs(config.HostProcPath) {
+        return nil, fmt.Errorf("HostProcPath must be an absolute path, got: %q", config.HostProcPath)
+    }
+    if !filepath.IsAbs(config.HostSysPath) {  // If collector uses sysfs
+        return nil, fmt.Errorf("HostSysPath must be an absolute path, got: %q", config.HostSysPath)
+    }
+    
+    // 2. Define capabilities
+    capabilities := performance.CollectorCapabilities{
+        SupportsOneShot:    true,
+        SupportsContinuous: false,
+        RequiresRoot:       false,
+        RequiresEBPF:       false,
+        MinKernelVersion:   "2.6.0",
+    }
+    
+    // 3. Return collector with pre-computed paths
+    return &XCollector{
+        BaseCollector: performance.NewBaseCollector(...),
+        specificPath: filepath.Join(config.HostProcPath, "specific/file"),
+    }, nil
+}
+```
+
+#### Compile-Time Interface Checks
+Every collector must include a compile-time interface check:
+```go
+// Compile-time interface check
+var _ performance.Collector = (*NetworkCollector)(nil)
+```
+
 #### Base Collector Pattern
 ```go
 type BaseCollector struct {
@@ -225,6 +261,22 @@ type CollectorCapabilities struct {
 }
 ```
 
+#### Error Handling Strategy
+Collectors must clearly distinguish between critical and optional data:
+- **Critical files**: Return error immediately if unavailable (e.g., /proc/loadavg for LoadCollector)
+- **Optional files**: Log warning and continue with graceful degradation (e.g., /sys/class/net/* metadata)
+- **Parse errors**: Handle based on field importance - critical fields cause errors, optional fields are logged
+
+Document the error handling strategy in method comments:
+```go
+// collectNetworkStats reads network statistics
+//
+// Error handling strategy:
+// - /proc/net/dev is critical - returns error if unavailable
+// - /sys/class/net/* files are optional - logs warnings but continues
+// - Malformed lines in /proc/net/dev are skipped with logging
+```
+
 ### Performance Collector Testing Methodology
 
 #### Standardized Testing Approach
@@ -245,30 +297,126 @@ Performance collectors follow a comprehensive testing pattern:
 
 3. **Key Testing Patterns**
    ```go
-   // Helper function pattern
-   func createTestCollector(t *testing.T, content string) *Collector {
+   // Helper function pattern - consistent naming and structure
+   func createTestXCollector(t *testing.T, procContent string, sysFiles map[string]string) (*XCollector, string, string) {
        tmpDir := t.TempDir()
-       // Create mock files
-       return collector
+       procPath := filepath.Join(tmpDir, "proc")
+       sysPath := filepath.Join(tmpDir, "sys")
+       
+       // Setup mock files...
+       
+       config := performance.CollectionConfig{
+           HostProcPath: procPath,
+           HostSysPath:  sysPath,
+       }
+       collector, err := collectors.NewXCollector(logr.Discard(), config)
+       require.NoError(t, err)
+       
+       return collector, procPath, sysPath
    }
    
-   // Validation helper pattern
-   func validateResults(t *testing.T, actual, expected *Stats) {
-       assert.Equal(t, expected.Field, actual.Field)
+   // Collection and validation helper
+   func collectAndValidateX(t *testing.T, collector *XCollector, expectError bool, validate func(t *testing.T, result TypedResult)) {
+       result, err := collector.Collect(context.Background())
+       
+       if expectError {
+           assert.Error(t, err)
+           return
+       }
+       
+       require.NoError(t, err)
+       typedResult, ok := result.(TypedResult)
+       require.True(t, ok, "result should be TypedResult")
+       
+       if validate != nil {
+           validate(t, typedResult)
+       }
    }
+   
+   // Test data as constants
+   const validProcFile = `actual /proc file content here`
+   const malformedProcFile = `malformed content`
    ```
 
 4. **Testing Requirements**
-   - **Path validation**: Test absolute vs relative paths
+   - **Constructor tests**: Separate test function for constructor validation
+   - **Path validation**: Test absolute vs relative paths, empty paths
    - **File interdependency**: Test behavior when related files unavailable
-   - **Return type validation**: Explicit type assertions
-   - **Graceful degradation**: Document critical vs optional files
+   - **Return type validation**: Explicit type assertions with proper error messages
+   - **Graceful degradation**: Document and test critical vs optional files
+   - **Boundary conditions**: Test zero values, maximum values (e.g., max uint64)
+   - **Malformed input**: Test partial data, missing fields, corrupt formats
+   - **Special cases**: Test virtual interfaces, disabled devices, etc.
 
 5. **Testing Principles**
    - Don't test static properties (Name, RequiresRoot)
    - Focus on parsing logic and error handling
    - Use realistic test data from actual /proc files
-   - Test collectors in `collectors_test` package
+   - Test collectors in `collectors_test` package (external testing)
+   - Name test functions consistently: `TestXCollector_Constructor`, `TestXCollector_Collect`
+   - Use descriptive test names that explain the scenario
+   - Group related test scenarios in the same test function
+
+6. **Documentation Standards**
+   - **Type-level documentation**: Explain purpose, data sources, references
+   - **Method documentation**: Include format examples and error handling strategy
+   - **Inline documentation**: Explain complex parsing logic or non-obvious decisions
+   - **Reference links**: Include kernel documentation links where applicable
+
+### Collector Development Workflow
+
+When adding a new performance collector:
+
+1. **Define the data structure** in `pkg/performance/types.go`
+2. **Create the collector** in `pkg/performance/collectors/your_collector.go`
+   - Include compile-time interface check
+   - Follow constructor pattern with path validation
+   - Document error handling strategy
+3. **Create comprehensive tests** in `pkg/performance/collectors/your_collector_test.go`
+   - Use `collectors_test` package
+   - Include constructor tests
+   - Add helper functions following naming patterns
+   - Test edge cases and error scenarios
+4. **Update collector registry** if applicable
+5. **Run validation**:
+   ```bash
+   make test                    # Run tests
+   make lint                    # Check code style
+   make gen-license-headers     # Ensure license headers
+   ```
+
+### Common Collector Patterns
+
+#### Reading Single Value Files
+```go
+data, err := os.ReadFile(c.somePath)
+if err != nil {
+    return nil, fmt.Errorf("failed to read %s: %w", c.somePath, err)
+}
+value := strings.TrimSpace(string(data))
+```
+
+#### Parsing Multi-Line Files
+```go
+scanner := bufio.NewScanner(file)
+for scanner.Scan() {
+    line := scanner.Text()
+    // Parse line
+}
+if err := scanner.Err(); err != nil {
+    return nil, fmt.Errorf("error reading %s: %w", c.somePath, err)
+}
+```
+
+#### Handling Optional Metadata
+```go
+// Try to read optional file, but don't fail if missing
+if data, err := os.ReadFile(optionalPath); err == nil {
+    // Process optional data
+} else {
+    c.Logger().V(2).Info("Optional file not available", "path", optionalPath, "error", err)
+}
+```
 
 ## Resource Store Architecture
 
