@@ -4,7 +4,7 @@
 // LICENSE file or at:
 // https://polyformproject.org/wp-content/uploads/2020/06/PolyForm-Shield-1.0.0.txt
 
-package collectors
+package collectors_test
 
 import (
 	"context"
@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/antimetal/agent/pkg/performance"
+	"github.com/antimetal/agent/pkg/performance/collectors"
 	"github.com/go-logr/logr/testr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,7 +31,7 @@ func TestProcessCollector(t *testing.T) {
 		t.Skip("Skipping process collector test: /proc not available")
 	}
 
-	collector, err := NewProcessCollector(logger, config)
+	collector, err := collectors.NewProcessCollector(logger, config)
 	require.NoError(t, err)
 	require.NotNil(t, collector)
 
@@ -114,50 +115,62 @@ func TestProcessCollector_Constructor(t *testing.T) {
 		config := performance.DefaultCollectionConfig()
 		config.HostProcPath = tmpDir
 
-		collector, err := NewProcessCollector(logger, config)
+		collector, err := collectors.NewProcessCollector(logger, config)
 		assert.NoError(t, err)
 		assert.NotNil(t, collector)
 	})
 
-	t.Run("relative path rejected", func(t *testing.T) {
+	t.Run("relative proc path rejected", func(t *testing.T) {
 		config := performance.DefaultCollectionConfig()
 		config.HostProcPath = "proc"
 
-		collector, err := NewProcessCollector(logger, config)
+		collector, err := collectors.NewProcessCollector(logger, config)
 		assert.Error(t, err)
 		assert.Nil(t, collector)
-		assert.Contains(t, err.Error(), "must be an absolute path")
+		assert.Contains(t, err.Error(), "HostProcPath must be an absolute path")
+	})
+
+	t.Run("relative sys path rejected", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		config := performance.DefaultCollectionConfig()
+		config.HostProcPath = tmpDir
+		config.HostSysPath = "sys"
+
+		collector, err := collectors.NewProcessCollector(logger, config)
+		assert.Error(t, err)
+		assert.Nil(t, collector)
+		assert.Contains(t, err.Error(), "HostSysPath must be an absolute path")
 	})
 
 	t.Run("empty path rejected", func(t *testing.T) {
 		config := performance.DefaultCollectionConfig()
 		config.HostProcPath = ""
 
-		collector, err := NewProcessCollector(logger, config)
+		collector, err := collectors.NewProcessCollector(logger, config)
 		assert.Error(t, err)
 		assert.Nil(t, collector)
 	})
-	
+
 	t.Run("non-existent path rejected", func(t *testing.T) {
 		config := performance.DefaultCollectionConfig()
 		config.HostProcPath = "/this/path/does/not/exist"
 
-		collector, err := NewProcessCollector(logger, config)
+		collector, err := collectors.NewProcessCollector(logger, config)
 		assert.Error(t, err)
 		assert.Nil(t, collector)
 		assert.Contains(t, err.Error(), "not accessible")
 	})
-	
+
 	t.Run("file path rejected", func(t *testing.T) {
 		// Create a temp file
 		tmpFile, err := os.CreateTemp(t.TempDir(), "test")
 		require.NoError(t, err)
 		tmpFile.Close()
-		
+
 		config := performance.DefaultCollectionConfig()
 		config.HostProcPath = tmpFile.Name()
 
-		collector, err := NewProcessCollector(logger, config)
+		collector, err := collectors.NewProcessCollector(logger, config)
 		assert.Error(t, err)
 		assert.Nil(t, collector)
 		assert.Contains(t, err.Error(), "not a directory")
@@ -168,7 +181,7 @@ func TestProcessCollectorParseStatFull(t *testing.T) {
 	logger := testr.New(t)
 	config := performance.DefaultCollectionConfig()
 	config.HostProcPath = t.TempDir()
-	collector, err := NewProcessCollector(logger, config)
+	collector, err := collectors.NewProcessCollector(logger, config)
 	require.NoError(t, err)
 
 	// Sample stat line (simplified for testing)
@@ -180,7 +193,7 @@ func TestProcessCollectorParseStatFull(t *testing.T) {
 		CPUTime:    800,  // Pre-calculated from minimal
 		CPUPercent: 10.0, // Pre-calculated from minimal
 	}
-	err = collector.parseStatFull(stats, statData)
+	err = collector.ParseStatFull(stats, statData)
 	require.NoError(t, err)
 
 	assert.Equal(t, "test process", stats.Command)
@@ -205,7 +218,7 @@ func TestProcessCollectorReadMinimalStats(t *testing.T) {
 	logger := testr.New(t)
 	config := performance.DefaultCollectionConfig()
 	config.HostProcPath = t.TempDir()
-	collector, err := NewProcessCollector(logger, config)
+	collector, err := collectors.NewProcessCollector(logger, config)
 	require.NoError(t, err)
 
 	// Create a temp directory for mock /proc
@@ -222,33 +235,33 @@ func TestProcessCollectorReadMinimalStats(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(pid1Dir, "stat"), []byte(statData), 0644))
 
 	// Update collector to use mock proc path
-	collector.procPath = mockProcDir
+	collector.ProcPath = mockProcDir
 
 	// Test without previous CPU times
-	lastCPUTimes := make(map[int32]*processCPUTime)
-	minimal, err := collector.readMinimalStats(1234, 1.0, lastCPUTimes)
+	lastCPUTimes := make(map[int32]*collectors.ProcessCPUTime)
+	minimal, err := collector.ReadMinimalStats(1234, 1.0, lastCPUTimes)
 	require.NoError(t, err)
 
-	assert.Equal(t, int32(1234), minimal.pid)
-	assert.Equal(t, uint64(800), minimal.cpuTime) // 500 + 300
-	assert.Equal(t, 0.0, minimal.cpuPercent)      // No previous data
+	assert.Equal(t, int32(1234), minimal.PID)
+	assert.Equal(t, uint64(800), minimal.CPUTime) // 500 + 300
+	assert.Equal(t, 0.0, minimal.CPUPercent)      // No previous data
 
 	// Test with previous CPU times
-	lastCPUTimes[1234] = &processCPUTime{
-		totalTime: 700, // Previous CPU time
-		timestamp: time.Now().Add(-1 * time.Second),
+	lastCPUTimes[1234] = &collectors.ProcessCPUTime{
+		TotalTime: 700, // Previous CPU time
+		Timestamp: time.Now().Add(-1 * time.Second),
 	}
-	minimal, err = collector.readMinimalStats(1234, 1.0, lastCPUTimes)
+	minimal, err = collector.ReadMinimalStats(1234, 1.0, lastCPUTimes)
 	require.NoError(t, err)
 	// CPU percent should be (800-700)/100/1.0 * 100 = 100%
-	assert.Equal(t, 100.0, minimal.cpuPercent)
+	assert.Equal(t, 100.0, minimal.CPUPercent)
 }
 
 func TestProcessCollectorParseStatus(t *testing.T) {
 	logger := testr.New(t)
 	config := performance.DefaultCollectionConfig()
 	config.HostProcPath = t.TempDir()
-	collector, err := NewProcessCollector(logger, config)
+	collector, err := collectors.NewProcessCollector(logger, config)
 	require.NoError(t, err)
 
 	statusData := `Name:	test
@@ -268,7 +281,7 @@ voluntary_ctxt_switches: 100
 nonvoluntary_ctxt_switches: 50`
 
 	stats := &performance.ProcessStats{PID: 1234}
-	collector.parseStatus(stats, statusData)
+	collector.ParseStatus(stats, statusData)
 
 	assert.Equal(t, int32(4), stats.NumThreads)
 	assert.Equal(t, uint64(100), stats.VoluntaryCtxt)
@@ -284,23 +297,23 @@ func TestProcessCollectorTopProcessCount(t *testing.T) {
 	config.HostProcPath = tmpDir
 	config.TopProcessCount = 5
 
-	collector, err := NewProcessCollector(logger, config)
+	collector, err := collectors.NewProcessCollector(logger, config)
 	require.NoError(t, err)
-	assert.Equal(t, 5, collector.topProcesses)
+	assert.Equal(t, 5, collector.TopProcesses)
 
 	// Test with zero (should use default)
 	config.TopProcessCount = 0
 	config.HostProcPath = tmpDir
-	collector, err = NewProcessCollector(logger, config)
+	collector, err = collectors.NewProcessCollector(logger, config)
 	require.NoError(t, err)
-	assert.Equal(t, 20, collector.topProcesses)
+	assert.Equal(t, 20, collector.TopProcesses)
 
 	// Test with negative (should use default)
 	config.TopProcessCount = -1
 	config.HostProcPath = tmpDir
-	collector, err = NewProcessCollector(logger, config)
+	collector, err = collectors.NewProcessCollector(logger, config)
 	require.NoError(t, err)
-	assert.Equal(t, 20, collector.topProcesses)
+	assert.Equal(t, 20, collector.TopProcesses)
 }
 
 func TestProcessCollectorWithMockProc(t *testing.T) {
@@ -344,7 +357,7 @@ nonvoluntary_ctxt_switches: 5`
 	config := performance.DefaultCollectionConfig()
 	config.HostProcPath = mockProcDir
 	config.Interval = 100 * time.Millisecond // Fast interval for testing
-	collector, err := NewProcessCollector(logger, config)
+	collector, err := collectors.NewProcessCollector(logger, config)
 	require.NoError(t, err)
 
 	// Test continuous collection

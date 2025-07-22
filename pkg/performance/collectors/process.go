@@ -36,7 +36,7 @@ var _ performance.ContinuousCollector = (*ProcessCollector)(nil)
 
 const (
 	defaultTopProcessCount = 20
-	
+
 	// /proc/[pid]/stat field indices (after comm field)
 	// Reference: https://www.kernel.org/doc/html/latest/filesystems/proc.html#id10
 	statFieldState      = 0  // Process state
@@ -60,20 +60,21 @@ const (
 // Reference: https://www.kernel.org/doc/html/latest/filesystems/proc.html#process-specific-subdirectories
 type ProcessCollector struct {
 	performance.BaseContinuousCollector
-	procPath     string
-	topProcesses int
+	ProcPath     string // Made public for testing
+	TopProcesses int    // Made public for testing
 	interval     time.Duration
 	procUtils    *procutils.ProcUtils
 
 	// State tracking for CPU percentage calculations
 	mu             sync.RWMutex
-	lastCPUTimes   map[int32]*processCPUTime
+	lastCPUTimes   map[int32]*ProcessCPUTime
 	lastUpdateTime time.Time
 }
 
-type processCPUTime struct {
-	totalTime uint64
-	timestamp time.Time
+// ProcessCPUTime tracks CPU usage for a process over time
+type ProcessCPUTime struct {
+	TotalTime uint64
+	Timestamp time.Time
 }
 
 func NewProcessCollector(logger logr.Logger, config performance.CollectionConfig) (*ProcessCollector, error) {
@@ -81,7 +82,10 @@ func NewProcessCollector(logger logr.Logger, config performance.CollectionConfig
 	if !filepath.IsAbs(config.HostProcPath) {
 		return nil, fmt.Errorf("HostProcPath must be an absolute path, got: %q", config.HostProcPath)
 	}
-	
+	if !filepath.IsAbs(config.HostSysPath) {
+		return nil, fmt.Errorf("HostSysPath must be an absolute path, got: %q", config.HostSysPath)
+	}
+
 	// Verify the proc path exists and is accessible
 	if info, err := os.Stat(config.HostProcPath); err != nil {
 		return nil, fmt.Errorf("HostProcPath not accessible: %w", err)
@@ -116,10 +120,10 @@ func NewProcessCollector(logger logr.Logger, config performance.CollectionConfig
 			config,
 			capabilities,
 		),
-		procPath:     config.HostProcPath,
-		topProcesses: topProcesses,
+		ProcPath:     config.HostProcPath,
+		TopProcesses: topProcesses,
 		interval:     interval,
-		lastCPUTimes: make(map[int32]*processCPUTime),
+		lastCPUTimes: make(map[int32]*ProcessCPUTime),
 		procUtils:    procutils.New(config.HostProcPath),
 	}, nil
 }
@@ -177,11 +181,11 @@ func (c *ProcessCollector) runCollection(ctx context.Context, dataChan chan<- an
 	}
 }
 
-// minimalProcessStats holds just enough data to calculate CPU% and sort
-type minimalProcessStats struct {
-	pid        int32
-	cpuTime    uint64
-	cpuPercent float64
+// MinimalProcessStats holds just enough data to calculate CPU% and sort
+type MinimalProcessStats struct {
+	PID        int32
+	CPUTime    uint64
+	CPUPercent float64
 }
 
 func (c *ProcessCollector) collectWithDeltas(ctx context.Context) ([]*performance.ProcessStats, error) {
@@ -198,22 +202,22 @@ func (c *ProcessCollector) collectWithDeltas(ctx context.Context) ([]*performanc
 
 	// Sort by CPU usage
 	sort.Slice(minimalStats, func(i, j int) bool {
-		return minimalStats[i].cpuPercent > minimalStats[j].cpuPercent
+		return minimalStats[i].CPUPercent > minimalStats[j].CPUPercent
 	})
 
 	// Take top N
 	topN := minimalStats
-	if len(topN) > c.topProcesses {
-		topN = topN[:c.topProcesses]
+	if len(topN) > c.TopProcesses {
+		topN = topN[:c.TopProcesses]
 	}
 
 	// Phase 2: Collect full details only for top N processes
 	processes := make([]*performance.ProcessStats, 0, len(topN))
 	for _, minimal := range topN {
-		full, err := c.collectFullProcessData(minimal.pid, minimal)
+		full, err := c.collectFullProcessData(minimal.PID, minimal)
 		if err != nil {
 			// Process might have disappeared between phases
-			c.Logger().V(2).Info("Failed to collect full data for top process", "pid", minimal.pid, "error", err)
+			c.Logger().V(2).Info("Failed to collect full data for top process", "pid", minimal.PID, "error", err)
 			continue
 		}
 		processes = append(processes, full)
@@ -222,7 +226,7 @@ func (c *ProcessCollector) collectWithDeltas(ctx context.Context) ([]*performanc
 	c.Logger().V(1).Info("Collected process statistics",
 		"total_processes", len(minimalStats),
 		"returned_processes", len(processes),
-		"top_count", c.topProcesses)
+		"top_count", c.TopProcesses)
 	return processes, nil
 }
 
@@ -233,19 +237,19 @@ func (c *ProcessCollector) collectWithDeltas(ctx context.Context) ([]*performanc
 // - Individual /proc/[pid]/stat files are optional - skips processes that disappear
 // - Malformed stat lines are skipped with logging
 // - Never panics - all errors are returned to caller
-func (c *ProcessCollector) collectMinimalStats(ctx context.Context) ([]*minimalProcessStats, error) {
-	entries, err := os.ReadDir(c.procPath)
+func (c *ProcessCollector) collectMinimalStats(ctx context.Context) ([]*MinimalProcessStats, error) {
+	entries, err := os.ReadDir(c.ProcPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read %s: %w", c.procPath, err)
+		return nil, fmt.Errorf("failed to read %s: %w", c.ProcPath, err)
 	}
 
-	var minimalStats []*minimalProcessStats
+	var minimalStats []*MinimalProcessStats
 	currentTime := time.Now()
 
 	// Get time delta and lastCPUTimes with read lock
 	c.mu.RLock()
 	timeDelta := currentTime.Sub(c.lastUpdateTime).Seconds()
-	lastCPUTimesCopy := make(map[int32]*processCPUTime, len(c.lastCPUTimes))
+	lastCPUTimesCopy := make(map[int32]*ProcessCPUTime, len(c.lastCPUTimes))
 	for k, v := range c.lastCPUTimes {
 		lastCPUTimesCopy[k] = v
 	}
@@ -256,7 +260,7 @@ func (c *ProcessCollector) collectMinimalStats(ctx context.Context) ([]*minimalP
 	}
 
 	// Pre-allocate with reasonable capacity
-	minimalStats = make([]*minimalProcessStats, 0, 256)
+	minimalStats = make([]*MinimalProcessStats, 0, 256)
 
 	for _, entry := range entries {
 		// Check context cancellation
@@ -277,7 +281,7 @@ func (c *ProcessCollector) collectMinimalStats(ctx context.Context) ([]*minimalP
 		}
 
 		// Read only /proc/[pid]/stat - the minimal data we need
-		minimal, err := c.readMinimalStats(int32(pid), timeDelta, lastCPUTimesCopy)
+		minimal, err := c.ReadMinimalStats(int32(pid), timeDelta, lastCPUTimesCopy)
 		if err != nil {
 			// Process might have disappeared, continue with others
 			c.Logger().V(3).Info("Failed to read minimal stats", "pid", pid, "error", err)
@@ -291,15 +295,15 @@ func (c *ProcessCollector) collectMinimalStats(ctx context.Context) ([]*minimalP
 	return minimalStats, nil
 }
 
-// readMinimalStats reads only /proc/[pid]/stat for CPU calculation
-func (c *ProcessCollector) readMinimalStats(pid int32, timeDelta float64, lastCPUTimes map[int32]*processCPUTime) (*minimalProcessStats, error) {
-	statPath := filepath.Join(c.procPath, strconv.Itoa(int(pid)), "stat")
+// ReadMinimalStats reads only /proc/[pid]/stat for CPU calculation
+func (c *ProcessCollector) ReadMinimalStats(pid int32, timeDelta float64, lastCPUTimes map[int32]*ProcessCPUTime) (*MinimalProcessStats, error) {
+	statPath := filepath.Join(c.ProcPath, strconv.Itoa(int(pid)), "stat")
 	statData, err := os.ReadFile(statPath)
 	if err != nil {
 		return nil, err
 	}
 
-	minimal := &minimalProcessStats{pid: pid}
+	minimal := &MinimalProcessStats{PID: pid}
 
 	// Parse only what we need from stat
 	statStr := string(statData)
@@ -325,16 +329,16 @@ func (c *ProcessCollector) readMinimalStats(pid int32, timeDelta float64, lastCP
 	if s, err := strconv.ParseUint(fields[statFieldSTime], 10, 64); err == nil {
 		stime = s
 	}
-	minimal.cpuTime = utime + stime
+	minimal.CPUTime = utime + stime
 
 	// Calculate CPU percentage
 	if lastCPU, exists := lastCPUTimes[pid]; exists && timeDelta > 0 {
-		cpuDelta := float64(minimal.cpuTime - lastCPU.totalTime)
+		cpuDelta := float64(minimal.CPUTime - lastCPU.TotalTime)
 		userHZ, err := c.procUtils.GetUserHZ()
 		if err != nil {
 			userHZ = 100
 		}
-		minimal.cpuPercent = (cpuDelta / float64(userHZ)) / timeDelta * 100.0
+		minimal.CPUPercent = (cpuDelta / float64(userHZ)) / timeDelta * 100.0
 	}
 
 	return minimal, nil
@@ -348,39 +352,39 @@ func (c *ProcessCollector) readMinimalStats(pid int32, timeDelta float64, lastCP
 // - /proc/[pid]/cmdline is optional - logs warning but continues if unavailable
 // - /proc/[pid]/exe is optional - logs warning but continues if unavailable
 // - Never panics - all errors are returned to caller
-func (c *ProcessCollector) collectFullProcessData(pid int32, minimal *minimalProcessStats) (*performance.ProcessStats, error) {
+func (c *ProcessCollector) collectFullProcessData(pid int32, minimal *MinimalProcessStats) (*performance.ProcessStats, error) {
 	stats := &performance.ProcessStats{
 		PID:        pid,
-		CPUTime:    minimal.cpuTime,
-		CPUPercent: minimal.cpuPercent,
+		CPUTime:    minimal.CPUTime,
+		CPUPercent: minimal.CPUPercent,
 	}
 
 	// Re-read /proc/[pid]/stat for full parsing (process might have changed slightly)
-	statPath := filepath.Join(c.procPath, strconv.Itoa(int(pid)), "stat")
+	statPath := filepath.Join(c.ProcPath, strconv.Itoa(int(pid)), "stat")
 	statData, err := os.ReadFile(statPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read stat: %w", err)
 	}
 
 	// Parse the full stat data (we already have CPU data from minimal)
-	if err := c.parseStatFull(stats, string(statData)); err != nil {
+	if err := c.ParseStatFull(stats, string(statData)); err != nil {
 		return nil, fmt.Errorf("failed to parse stat: %w", err)
 	}
 
 	// Read /proc/[pid]/status for additional details
-	statusPath := filepath.Join(c.procPath, strconv.Itoa(int(pid)), "status")
+	statusPath := filepath.Join(c.ProcPath, strconv.Itoa(int(pid)), "status")
 	if statusData, err := os.ReadFile(statusPath); err == nil {
-		c.parseStatus(stats, string(statusData))
+		c.ParseStatus(stats, string(statusData))
 	}
 
 	// Count file descriptors
-	fdPath := filepath.Join(c.procPath, strconv.Itoa(int(pid)), "fd")
+	fdPath := filepath.Join(c.ProcPath, strconv.Itoa(int(pid)), "fd")
 	if entries, err := os.ReadDir(fdPath); err == nil {
 		stats.NumFds = int32(len(entries))
 	}
 
 	// Read memory stats from smaps_rollup if available
-	smapsPath := filepath.Join(c.procPath, strconv.Itoa(int(pid)), "smaps_rollup")
+	smapsPath := filepath.Join(c.ProcPath, strconv.Itoa(int(pid)), "smaps_rollup")
 	if smapsData, err := os.ReadFile(smapsPath); err == nil {
 		c.parseSmapsRollup(stats, string(smapsData))
 	}
@@ -388,7 +392,7 @@ func (c *ProcessCollector) collectFullProcessData(pid int32, minimal *minimalPro
 	return stats, nil
 }
 
-// parseStatFull parses /proc/[pid]/stat for everything except CPU time (already calculated)
+// ParseStatFull parses /proc/[pid]/stat for everything except CPU time (already calculated)
 // Reference: https://www.kernel.org/doc/html/latest/filesystems/proc.html#id10
 //
 // Error handling strategy:
@@ -396,7 +400,7 @@ func (c *ProcessCollector) collectFullProcessData(pid int32, minimal *minimalPro
 // - Validates field count to ensure correct format
 // - Handles division by zero for RSS percentage calculation
 // - Never panics - all errors are returned to caller
-func (c *ProcessCollector) parseStatFull(stats *performance.ProcessStats, statData string) error {
+func (c *ProcessCollector) ParseStatFull(stats *performance.ProcessStats, statData string) error {
 	// The command field might contain spaces and is enclosed in parentheses
 	// Find the last ')' to properly split the fields
 	lastParen := strings.LastIndex(statData, ")")
@@ -499,7 +503,9 @@ func (c *ProcessCollector) parseStatFull(stats *performance.ProcessStats, statDa
 				}
 				// Convert ticks to seconds first to avoid overflow
 				seconds := float64(starttime) / float64(userHZ)
-				stats.StartTime = bootTime.Add(time.Duration(seconds * float64(time.Second)))
+				// Convert to nanoseconds directly to avoid overflow
+				duration := time.Duration(seconds * 1e9)
+				stats.StartTime = bootTime.Add(duration)
 			}
 		}
 	}
@@ -518,7 +524,7 @@ func (c *ProcessCollector) parseStatFull(stats *performance.ProcessStats, statDa
 // - nonvoluntary_ctxt_switches: Number of involuntary context switches
 //
 // Reference: https://www.kernel.org/doc/html/latest/filesystems/proc.html#proc-pid-status
-func (c *ProcessCollector) parseStatus(stats *performance.ProcessStats, statusData string) {
+func (c *ProcessCollector) ParseStatus(stats *performance.ProcessStats, statusData string) {
 	scanner := bufio.NewScanner(strings.NewReader(statusData))
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -582,22 +588,22 @@ func (c *ProcessCollector) parseSmapsRollup(stats *performance.ProcessStats, sma
 
 // updateLastCPUTimesFromMinimal updates the lastCPUTimes map from minimal stats. Must be called with c.mu held.
 // This tracks CPU times for ALL processes to ensure accurate CPU percentage calculations.
-func (c *ProcessCollector) updateLastCPUTimesFromMinimal(minimalStats []*minimalProcessStats) {
+func (c *ProcessCollector) updateLastCPUTimesFromMinimal(minimalStats []*MinimalProcessStats) {
 	now := time.Now()
 	seen := make(map[int32]bool, len(minimalStats))
 
 	// Update existing entries or add new ones
 	for _, minimal := range minimalStats {
-		seen[minimal.pid] = true
-		if existing, ok := c.lastCPUTimes[minimal.pid]; ok {
+		seen[minimal.PID] = true
+		if existing, ok := c.lastCPUTimes[minimal.PID]; ok {
 			// Reuse existing entry
-			existing.totalTime = minimal.cpuTime
-			existing.timestamp = now
+			existing.TotalTime = minimal.CPUTime
+			existing.Timestamp = now
 		} else {
 			// Add new entry
-			c.lastCPUTimes[minimal.pid] = &processCPUTime{
-				totalTime: minimal.cpuTime,
-				timestamp: now,
+			c.lastCPUTimes[minimal.PID] = &ProcessCPUTime{
+				TotalTime: minimal.CPUTime,
+				Timestamp: now,
 			}
 		}
 	}
