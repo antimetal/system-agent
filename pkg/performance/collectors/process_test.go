@@ -98,7 +98,7 @@ func TestProcessCollector(t *testing.T) {
 	}
 
 	// Test that we respect the top N limit
-	assert.LessOrEqual(t, len(secondCollection), defaultTopProcessCount)
+	assert.LessOrEqual(t, len(secondCollection), 20)
 
 	// Test Stop
 	err = collector.Stop()
@@ -110,8 +110,9 @@ func TestProcessCollector_Constructor(t *testing.T) {
 	logger := testr.New(t)
 
 	t.Run("valid absolute path", func(t *testing.T) {
+		tmpDir := t.TempDir()
 		config := performance.DefaultCollectionConfig()
-		config.HostProcPath = "/proc"
+		config.HostProcPath = tmpDir
 
 		collector, err := NewProcessCollector(logger, config)
 		assert.NoError(t, err)
@@ -136,11 +137,37 @@ func TestProcessCollector_Constructor(t *testing.T) {
 		assert.Error(t, err)
 		assert.Nil(t, collector)
 	})
+	
+	t.Run("non-existent path rejected", func(t *testing.T) {
+		config := performance.DefaultCollectionConfig()
+		config.HostProcPath = "/this/path/does/not/exist"
+
+		collector, err := NewProcessCollector(logger, config)
+		assert.Error(t, err)
+		assert.Nil(t, collector)
+		assert.Contains(t, err.Error(), "not accessible")
+	})
+	
+	t.Run("file path rejected", func(t *testing.T) {
+		// Create a temp file
+		tmpFile, err := os.CreateTemp(t.TempDir(), "test")
+		require.NoError(t, err)
+		tmpFile.Close()
+		
+		config := performance.DefaultCollectionConfig()
+		config.HostProcPath = tmpFile.Name()
+
+		collector, err := NewProcessCollector(logger, config)
+		assert.Error(t, err)
+		assert.Nil(t, collector)
+		assert.Contains(t, err.Error(), "not a directory")
+	})
 }
 
 func TestProcessCollectorParseStatFull(t *testing.T) {
 	logger := testr.New(t)
 	config := performance.DefaultCollectionConfig()
+	config.HostProcPath = t.TempDir()
 	collector, err := NewProcessCollector(logger, config)
 	require.NoError(t, err)
 
@@ -177,6 +204,7 @@ func TestProcessCollectorParseStatFull(t *testing.T) {
 func TestProcessCollectorReadMinimalStats(t *testing.T) {
 	logger := testr.New(t)
 	config := performance.DefaultCollectionConfig()
+	config.HostProcPath = t.TempDir()
 	collector, err := NewProcessCollector(logger, config)
 	require.NoError(t, err)
 
@@ -219,6 +247,7 @@ func TestProcessCollectorReadMinimalStats(t *testing.T) {
 func TestProcessCollectorParseStatus(t *testing.T) {
 	logger := testr.New(t)
 	config := performance.DefaultCollectionConfig()
+	config.HostProcPath = t.TempDir()
 	collector, err := NewProcessCollector(logger, config)
 	require.NoError(t, err)
 
@@ -248,9 +277,11 @@ nonvoluntary_ctxt_switches: 50`
 
 func TestProcessCollectorTopProcessCount(t *testing.T) {
 	logger := testr.New(t)
+	tmpDir := t.TempDir()
 
 	// Test with custom top process count
 	config := performance.DefaultCollectionConfig()
+	config.HostProcPath = tmpDir
 	config.TopProcessCount = 5
 
 	collector, err := NewProcessCollector(logger, config)
@@ -259,15 +290,17 @@ func TestProcessCollectorTopProcessCount(t *testing.T) {
 
 	// Test with zero (should use default)
 	config.TopProcessCount = 0
+	config.HostProcPath = tmpDir
 	collector, err = NewProcessCollector(logger, config)
 	require.NoError(t, err)
-	assert.Equal(t, defaultTopProcessCount, collector.topProcesses)
+	assert.Equal(t, 20, collector.topProcesses)
 
 	// Test with negative (should use default)
 	config.TopProcessCount = -1
+	config.HostProcPath = tmpDir
 	collector, err = NewProcessCollector(logger, config)
 	require.NoError(t, err)
-	assert.Equal(t, defaultTopProcessCount, collector.topProcesses)
+	assert.Equal(t, 20, collector.topProcesses)
 }
 
 func TestProcessCollectorWithMockProc(t *testing.T) {

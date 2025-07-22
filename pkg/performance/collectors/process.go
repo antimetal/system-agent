@@ -36,6 +36,23 @@ var _ performance.ContinuousCollector = (*ProcessCollector)(nil)
 
 const (
 	defaultTopProcessCount = 20
+	
+	// /proc/[pid]/stat field indices (after comm field)
+	// Reference: https://www.kernel.org/doc/html/latest/filesystems/proc.html#id10
+	statFieldState      = 0  // Process state
+	statFieldPPID       = 1  // Parent PID
+	statFieldPGRP       = 2  // Process group ID
+	statFieldSession    = 3  // Session ID
+	statFieldMinFlt     = 7  // Minor faults
+	statFieldMajFlt     = 9  // Major faults
+	statFieldUTime      = 11 // User mode time
+	statFieldSTime      = 12 // System mode time
+	statFieldPriority   = 15 // Priority
+	statFieldNice       = 16 // Nice value
+	statFieldNumThreads = 17 // Number of threads
+	statFieldStartTime  = 19 // Start time since boot
+	statFieldVSize      = 20 // Virtual memory size
+	statFieldRSS        = 21 // Resident set size (pages)
 )
 
 // ProcessCollector collects per-process statistics from /proc/[pid]/*
@@ -63,6 +80,13 @@ func NewProcessCollector(logger logr.Logger, config performance.CollectionConfig
 	// Validate paths are absolute
 	if !filepath.IsAbs(config.HostProcPath) {
 		return nil, fmt.Errorf("HostProcPath must be an absolute path, got: %q", config.HostProcPath)
+	}
+	
+	// Verify the proc path exists and is accessible
+	if info, err := os.Stat(config.HostProcPath); err != nil {
+		return nil, fmt.Errorf("HostProcPath not accessible: %w", err)
+	} else if !info.IsDir() {
+		return nil, fmt.Errorf("HostProcPath is not a directory: %q", config.HostProcPath)
 	}
 
 	capabilities := performance.CollectorCapabilities{
@@ -295,10 +319,10 @@ func (c *ProcessCollector) readMinimalStats(pid int32, timeDelta float64, lastCP
 
 	// Get utime (field 11) and stime (field 12)
 	var utime, stime uint64
-	if u, err := strconv.ParseUint(fields[11], 10, 64); err == nil {
+	if u, err := strconv.ParseUint(fields[statFieldUTime], 10, 64); err == nil {
 		utime = u
 	}
-	if s, err := strconv.ParseUint(fields[12], 10, 64); err == nil {
+	if s, err := strconv.ParseUint(fields[statFieldSTime], 10, 64); err == nil {
 		stime = s
 	}
 	minimal.cpuTime = utime + stime
@@ -396,39 +420,39 @@ func (c *ProcessCollector) parseStatFull(stats *performance.ProcessStats, statDa
 
 	// Parse fields (0-indexed after command)
 	// Field 0: state
-	stats.State = fields[0]
+	stats.State = fields[statFieldState]
 
 	// Field 1: ppid
-	if ppid, err := strconv.ParseInt(fields[1], 10, 32); err == nil {
+	if ppid, err := strconv.ParseInt(fields[statFieldPPID], 10, 32); err == nil {
 		stats.PPID = int32(ppid)
 	}
 
 	// Field 2: pgrp
-	if pgid, err := strconv.ParseInt(fields[2], 10, 32); err == nil {
+	if pgid, err := strconv.ParseInt(fields[statFieldPGRP], 10, 32); err == nil {
 		stats.PGID = int32(pgid)
 	}
 
 	// Field 3: session
-	if sid, err := strconv.ParseInt(fields[3], 10, 32); err == nil {
+	if sid, err := strconv.ParseInt(fields[statFieldSession], 10, 32); err == nil {
 		stats.SID = int32(sid)
 	}
 
 	// Field 7: minflt
-	if minflt, err := strconv.ParseUint(fields[7], 10, 64); err == nil {
+	if minflt, err := strconv.ParseUint(fields[statFieldMinFlt], 10, 64); err == nil {
 		stats.MinorFaults = minflt
 	}
 
 	// Field 9: majflt
-	if majflt, err := strconv.ParseUint(fields[9], 10, 64); err == nil {
+	if majflt, err := strconv.ParseUint(fields[statFieldMajFlt], 10, 64); err == nil {
 		stats.MajorFaults = majflt
 	}
 
 	// Fields 11,12: utime, stime (in clock ticks)
 	var utime, stime uint64
-	if u, err := strconv.ParseUint(fields[11], 10, 64); err == nil {
+	if u, err := strconv.ParseUint(fields[statFieldUTime], 10, 64); err == nil {
 		utime = u
 	}
-	if s, err := strconv.ParseUint(fields[12], 10, 64); err == nil {
+	if s, err := strconv.ParseUint(fields[statFieldSTime], 10, 64); err == nil {
 		stime = s
 	}
 	stats.CPUTime = utime + stime
@@ -436,27 +460,27 @@ func (c *ProcessCollector) parseStatFull(stats *performance.ProcessStats, statDa
 	// Skip CPU calculation - we already have it from minimal stats
 
 	// Field 15: priority
-	if prio, err := strconv.ParseInt(fields[15], 10, 32); err == nil {
+	if prio, err := strconv.ParseInt(fields[statFieldPriority], 10, 32); err == nil {
 		stats.Priority = int32(prio)
 	}
 
 	// Field 16: nice
-	if nice, err := strconv.ParseInt(fields[16], 10, 32); err == nil {
+	if nice, err := strconv.ParseInt(fields[statFieldNice], 10, 32); err == nil {
 		stats.Nice = int32(nice)
 	}
 
 	// Field 17: num_threads
-	if threads, err := strconv.ParseInt(fields[17], 10, 32); err == nil {
+	if threads, err := strconv.ParseInt(fields[statFieldNumThreads], 10, 32); err == nil {
 		stats.Threads = int32(threads)
 	}
 
 	// Field 20: vsize (virtual memory size in bytes)
-	if vsize, err := strconv.ParseUint(fields[20], 10, 64); err == nil {
+	if vsize, err := strconv.ParseUint(fields[statFieldVSize], 10, 64); err == nil {
 		stats.MemoryVSZ = vsize
 	}
 
 	// Field 21: rss (resident set size in pages)
-	if rss, err := strconv.ParseUint(fields[21], 10, 64); err == nil {
+	if rss, err := strconv.ParseUint(fields[statFieldRSS], 10, 64); err == nil {
 		pageSize, err := c.procUtils.GetPageSize()
 		if err != nil {
 			pageSize = 4096 // Safe assumption if we can't determine it
@@ -465,15 +489,17 @@ func (c *ProcessCollector) parseStatFull(stats *performance.ProcessStats, statDa
 	}
 
 	// Field 19: starttime (in clock ticks since boot)
-	if len(fields) > 19 {
-		if starttime, err := strconv.ParseUint(fields[19], 10, 64); err == nil {
+	if len(fields) > statFieldStartTime {
+		if starttime, err := strconv.ParseUint(fields[statFieldStartTime], 10, 64); err == nil {
 			bootTime, err := c.procUtils.GetBootTime()
 			if err == nil {
 				userHZ, err := c.procUtils.GetUserHZ()
 				if err != nil {
 					userHZ = 100 // Safe assumption if we can't determine it
 				}
-				stats.StartTime = bootTime.Add(time.Duration(starttime) * time.Second / time.Duration(userHZ))
+				// Convert ticks to seconds first to avoid overflow
+				seconds := float64(starttime) / float64(userHZ)
+				stats.StartTime = bootTime.Add(time.Duration(seconds * float64(time.Second)))
 			}
 		}
 	}
