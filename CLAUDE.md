@@ -262,10 +262,18 @@ type CollectorCapabilities struct {
 ```
 
 #### Error Handling Strategy
-Collectors must clearly distinguish between critical and optional data:
+Collectors must clearly distinguish between critical and optional data and should never panic:
+
 - **Critical files**: Return error immediately if unavailable (e.g., /proc/loadavg for LoadCollector)
 - **Optional files**: Log warning and continue with graceful degradation (e.g., /sys/class/net/* metadata)
 - **Parse errors**: Handle based on field importance - critical fields cause errors, optional fields are logged
+- **Panic prevention**: Collectors must use proper error handling instead of panicking. All errors should be returned to the caller
+
+**Graceful Degradation**: When optional data is unavailable, collectors should:
+1. Log the issue at appropriate verbosity level (V(2) for debug info)
+2. Continue processing with available data
+3. Return partial results rather than failing entirely
+4. Document which fields may be missing in degraded mode
 
 Document the error handling strategy in method comments:
 ```go
@@ -275,6 +283,7 @@ Document the error handling strategy in method comments:
 // - /proc/net/dev is critical - returns error if unavailable
 // - /sys/class/net/* files are optional - logs warnings but continues
 // - Malformed lines in /proc/net/dev are skipped with logging
+// - Never panics - all errors are returned to caller
 ```
 
 ### Performance Collector Testing Methodology
@@ -350,6 +359,7 @@ Performance collectors follow a comprehensive testing pattern:
 
 5. **Testing Principles**
    - Don't test static properties (Name, RequiresRoot)
+   - Don't test compile-time interface checks (e.g., `var _ performance.Collector = (*XCollector)(nil)`)
    - Focus on parsing logic and error handling
    - Use realistic test data from actual /proc files
    - Test collectors in `collectors_test` package (external testing)
