@@ -23,6 +23,14 @@ import (
 	"github.com/go-logr/logr"
 )
 
+func init() {
+	performance.Register(performance.MetricTypeProcess,
+		func(logger logr.Logger, config performance.CollectionConfig) (performance.ContinuousCollector, error) {
+			return NewProcessCollector(logger, config)
+		},
+	)
+}
+
 // Compile-time interface check
 var _ performance.ContinuousCollector = (*ProcessCollector)(nil)
 
@@ -550,19 +558,39 @@ func (c *ProcessCollector) parseSmapsRollup(stats *performance.ProcessStats, sma
 // This tracks CPU times for ALL processes to ensure accurate CPU percentage calculations.
 func (c *ProcessCollector) updateLastCPUTimesFromMinimal(minimalStats []*minimalProcessStats) {
 	now := time.Now()
-	newTimes := make(map[int32]*processCPUTime, len(minimalStats))
+	seen := make(map[int32]bool, len(minimalStats))
 
+	// Update existing entries or add new ones
 	for _, minimal := range minimalStats {
-		newTimes[minimal.pid] = &processCPUTime{
-			totalTime: minimal.cpuTime,
-			timestamp: now,
+		seen[minimal.pid] = true
+		if existing, ok := c.lastCPUTimes[minimal.pid]; ok {
+			// Reuse existing entry
+			existing.totalTime = minimal.cpuTime
+			existing.timestamp = now
+		} else {
+			// Add new entry
+			c.lastCPUTimes[minimal.pid] = &processCPUTime{
+				totalTime: minimal.cpuTime,
+				timestamp: now,
+			}
 		}
 	}
 
-	if len(newTimes) > 20000 {
-		c.Logger().V(1).Info("Large number of processes being tracked",
-			"count", len(newTimes))
+	// Clean up entries for processes that no longer exist
+	// Only do cleanup if we have significantly more tracked processes than current
+	if len(c.lastCPUTimes) > len(seen)*2 && len(c.lastCPUTimes) > 100 {
+		for pid := range c.lastCPUTimes {
+			if !seen[pid] {
+				delete(c.lastCPUTimes, pid)
+			}
+		}
+		c.Logger().V(2).Info("Cleaned up stale process entries",
+			"before", len(c.lastCPUTimes)+len(seen),
+			"after", len(c.lastCPUTimes))
 	}
 
-	c.lastCPUTimes = newTimes
+	if len(c.lastCPUTimes) > 20000 {
+		c.Logger().V(1).Info("Large number of processes being tracked",
+			"count", len(c.lastCPUTimes))
+	}
 }
