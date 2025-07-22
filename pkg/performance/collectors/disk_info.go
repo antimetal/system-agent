@@ -67,7 +67,12 @@ type DiskInfoCollector struct {
 // Compile-time interface check
 var _ performance.PointCollector = (*DiskInfoCollector)(nil)
 
-func NewDiskInfoCollector(logger logr.Logger, config performance.CollectionConfig) *DiskInfoCollector {
+func NewDiskInfoCollector(logger logr.Logger, config performance.CollectionConfig) (*DiskInfoCollector, error) {
+	// Validate paths are absolute
+	if !filepath.IsAbs(config.HostSysPath) {
+		return nil, fmt.Errorf("HostSysPath must be an absolute path, got: %q", config.HostSysPath)
+	}
+
 	capabilities := performance.CollectorCapabilities{
 		SupportsOneShot:    true,
 		SupportsContinuous: false,
@@ -85,7 +90,7 @@ func NewDiskInfoCollector(logger logr.Logger, config performance.CollectionConfi
 			capabilities,
 		),
 		blockPath: filepath.Join(config.HostSysPath, "block"),
-	}
+	}, nil
 }
 
 func (c *DiskInfoCollector) Collect(ctx context.Context) (any, error) {

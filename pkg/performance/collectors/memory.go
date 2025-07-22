@@ -20,7 +20,7 @@ import (
 )
 
 // Compile-time interface check
-var _ performance.Collector = (*MemoryCollector)(nil)
+var _ performance.PointCollector = (*MemoryCollector)(nil)
 
 // MemoryCollector collects runtime memory statistics from /proc/meminfo
 //
@@ -103,7 +103,8 @@ func (c *MemoryCollector) Collect(ctx context.Context) (any, error) {
 // inventory, this reads all available memory statistics for operational monitoring.
 //
 // /proc/meminfo format:
-//   FieldName:       value kB
+//
+//	FieldName:       value kB
 //
 // Most fields are in kilobytes, except HugePages_* which are page counts.
 // The collector converts all values to bytes for consistency.

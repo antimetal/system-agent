@@ -29,7 +29,9 @@ func createTestNetworkInfoCollector(t *testing.T) (*collectors.NetworkInfoCollec
 		HostSysPath: sysPath,
 	}
 
-	return collectors.NewNetworkInfoCollector(logr.Discard(), config), tmpDir
+	collector, err := collectors.NewNetworkInfoCollector(logr.Discard(), config)
+	require.NoError(t, err)
+	return collector, tmpDir
 }
 
 func setupNetworkInterface(t *testing.T, netPath, iface string, props map[string]string) {
@@ -54,6 +56,53 @@ func setupNetworkInterface(t *testing.T, netPath, iface string, props map[string
 		driverPath := filepath.Join(devicePath, "driver")
 		driverTarget := filepath.Join("/sys/bus/pci/drivers", driver)
 		_ = os.Symlink(driverTarget, driverPath)
+	}
+}
+
+func TestNetworkInfoCollector_Constructor(t *testing.T) {
+	tests := []struct {
+		name    string
+		config  performance.CollectionConfig
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "valid absolute path",
+			config: performance.CollectionConfig{
+				HostSysPath: "/sys",
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid relative path",
+			config: performance.CollectionConfig{
+				HostSysPath: "sys",
+			},
+			wantErr: true,
+			errMsg:  "HostSysPath must be an absolute path",
+		},
+		{
+			name: "empty path",
+			config: performance.CollectionConfig{
+				HostSysPath: "",
+			},
+			wantErr: true,
+			errMsg:  "HostSysPath must be an absolute path",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			collector, err := collectors.NewNetworkInfoCollector(logr.Discard(), tt.config)
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+				assert.Nil(t, collector)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, collector)
+			}
+		})
 	}
 }
 

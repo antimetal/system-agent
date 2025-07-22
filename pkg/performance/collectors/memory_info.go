@@ -96,7 +96,15 @@ type MemoryInfoCollector struct {
 // Compile-time interface check
 var _ performance.PointCollector = (*MemoryInfoCollector)(nil)
 
-func NewMemoryInfoCollector(logger logr.Logger, config performance.CollectionConfig) *MemoryInfoCollector {
+func NewMemoryInfoCollector(logger logr.Logger, config performance.CollectionConfig) (*MemoryInfoCollector, error) {
+	// Validate paths are absolute
+	if !filepath.IsAbs(config.HostProcPath) {
+		return nil, fmt.Errorf("HostProcPath must be an absolute path, got: %q", config.HostProcPath)
+	}
+	if !filepath.IsAbs(config.HostSysPath) {
+		return nil, fmt.Errorf("HostSysPath must be an absolute path, got: %q", config.HostSysPath)
+	}
+
 	capabilities := performance.CollectorCapabilities{
 		SupportsOneShot:    true,
 		SupportsContinuous: false,
@@ -115,7 +123,7 @@ func NewMemoryInfoCollector(logger logr.Logger, config performance.CollectionCon
 		),
 		meminfoPath:    filepath.Join(config.HostProcPath, "meminfo"),
 		nodeSystemPath: filepath.Join(config.HostSysPath, "devices", "system", "node"),
-	}
+	}, nil
 }
 
 func (c *MemoryInfoCollector) Collect(ctx context.Context) (any, error) {

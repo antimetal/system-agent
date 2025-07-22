@@ -20,7 +20,7 @@ import (
 )
 
 // Compile-time interface check
-var _ performance.Collector = (*TCPCollector)(nil)
+var _ performance.PointCollector = (*TCPCollector)(nil)
 
 // TCPCollector collects TCP connection statistics from /proc/net/snmp, /proc/net/netstat, /proc/net/tcp*
 //
@@ -61,7 +61,12 @@ var tcpStates = map[string]string{
 	"0B": "CLOSING",     // Simultaneous close, waiting for ACK
 }
 
-func NewTCPCollector(logger logr.Logger, config performance.CollectionConfig) *TCPCollector {
+func NewTCPCollector(logger logr.Logger, config performance.CollectionConfig) (*TCPCollector, error) {
+	// Validate paths are absolute
+	if !filepath.IsAbs(config.HostProcPath) {
+		return nil, fmt.Errorf("HostProcPath must be an absolute path, got: %q", config.HostProcPath)
+	}
+
 	capabilities := performance.CollectorCapabilities{
 		SupportsOneShot:    true,
 		SupportsContinuous: false,
@@ -82,7 +87,7 @@ func NewTCPCollector(logger logr.Logger, config performance.CollectionConfig) *T
 		netstatPath: filepath.Join(config.HostProcPath, "net", "netstat"),
 		tcpPath:     filepath.Join(config.HostProcPath, "net", "tcp"),
 		tcp6Path:    filepath.Join(config.HostProcPath, "net", "tcp6"),
-	}
+	}, nil
 }
 
 func (c *TCPCollector) Collect(ctx context.Context) (any, error) {

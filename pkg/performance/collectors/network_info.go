@@ -66,7 +66,12 @@ type NetworkInfoCollector struct {
 // Compile-time interface check
 var _ performance.PointCollector = (*NetworkInfoCollector)(nil)
 
-func NewNetworkInfoCollector(logger logr.Logger, config performance.CollectionConfig) *NetworkInfoCollector {
+func NewNetworkInfoCollector(logger logr.Logger, config performance.CollectionConfig) (*NetworkInfoCollector, error) {
+	// Validate paths are absolute
+	if !filepath.IsAbs(config.HostSysPath) {
+		return nil, fmt.Errorf("HostSysPath must be an absolute path, got: %q", config.HostSysPath)
+	}
+
 	capabilities := performance.CollectorCapabilities{
 		SupportsOneShot:    true,
 		SupportsContinuous: false,
@@ -84,7 +89,7 @@ func NewNetworkInfoCollector(logger logr.Logger, config performance.CollectionCo
 			capabilities,
 		),
 		netClassPath: filepath.Join(config.HostSysPath, "class", "net"),
-	}
+	}, nil
 }
 
 func (c *NetworkInfoCollector) Collect(ctx context.Context) (any, error) {

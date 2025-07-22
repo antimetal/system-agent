@@ -62,6 +62,9 @@ type KernelCollector struct {
 	lastError        error
 }
 
+// Compile-time interface check
+var _ performance.PointCollector = (*KernelCollector)(nil)
+
 type KernelCollectorOption func(*KernelCollector)
 
 func WithMessageLimit(limit int) KernelCollectorOption {
@@ -72,7 +75,15 @@ func WithMessageLimit(limit int) KernelCollectorOption {
 	}
 }
 
-func NewKernelCollector(logger logr.Logger, config performance.CollectionConfig, opts ...KernelCollectorOption) *KernelCollector {
+func NewKernelCollector(logger logr.Logger, config performance.CollectionConfig, opts ...KernelCollectorOption) (*KernelCollector, error) {
+	// Validate paths are absolute
+	if !filepath.IsAbs(config.HostDevPath) {
+		return nil, fmt.Errorf("HostDevPath must be an absolute path, got: %q", config.HostDevPath)
+	}
+	if !filepath.IsAbs(config.HostProcPath) {
+		return nil, fmt.Errorf("HostProcPath must be an absolute path, got: %q", config.HostProcPath)
+	}
+
 	capabilities := performance.CollectorCapabilities{
 		SupportsOneShot:    true,
 		SupportsContinuous: true,
@@ -99,7 +110,7 @@ func NewKernelCollector(logger logr.Logger, config performance.CollectionConfig,
 		opt(collector)
 	}
 
-	return collector
+	return collector, nil
 }
 
 func (c *KernelCollector) Collect(ctx context.Context) (any, error) {

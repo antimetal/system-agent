@@ -44,7 +44,15 @@ type CPUInfoCollector struct {
 // Compile-time interface check
 var _ performance.PointCollector = (*CPUInfoCollector)(nil)
 
-func NewCPUInfoCollector(logger logr.Logger, config performance.CollectionConfig) *CPUInfoCollector {
+func NewCPUInfoCollector(logger logr.Logger, config performance.CollectionConfig) (*CPUInfoCollector, error) {
+	// Validate paths are absolute
+	if !filepath.IsAbs(config.HostProcPath) {
+		return nil, fmt.Errorf("HostProcPath must be an absolute path, got: %q", config.HostProcPath)
+	}
+	if !filepath.IsAbs(config.HostSysPath) {
+		return nil, fmt.Errorf("HostSysPath must be an absolute path, got: %q", config.HostSysPath)
+	}
+
 	capabilities := performance.CollectorCapabilities{
 		SupportsOneShot:    true,
 		SupportsContinuous: false,
@@ -64,7 +72,7 @@ func NewCPUInfoCollector(logger logr.Logger, config performance.CollectionConfig
 		cpuinfoPath:    filepath.Join(config.HostProcPath, "cpuinfo"),
 		cpufreqPath:    filepath.Join(config.HostSysPath, "devices", "system", "cpu"),
 		nodeSystemPath: filepath.Join(config.HostSysPath, "devices", "system", "node"),
-	}
+	}, nil
 }
 
 func (c *CPUInfoCollector) Collect(ctx context.Context) (any, error) {

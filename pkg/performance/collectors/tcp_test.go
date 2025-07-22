@@ -43,7 +43,9 @@ func createTestTCPCollector(procPath string) *collectors.TCPCollector {
 			performance.MetricTypeTCP: true,
 		},
 	}
-	return collectors.NewTCPCollector(logr.Discard(), config)
+	collector, err := collectors.NewTCPCollector(logr.Discard(), config)
+	require.NoError(t, err)
+	return collector
 }
 
 func setupTestFiles(t *testing.T, files map[string]string) string {
@@ -69,6 +71,53 @@ func collectAndValidate(t *testing.T, collector *collectors.TCPCollector) *perfo
 	require.NotNil(t, stats.ConnectionsByState)
 
 	return stats
+}
+
+func TestTCPCollector_Constructor(t *testing.T) {
+	tests := []struct {
+		name    string
+		config  performance.CollectionConfig
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "valid absolute path",
+			config: performance.CollectionConfig{
+				HostProcPath: "/proc",
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid relative path",
+			config: performance.CollectionConfig{
+				HostProcPath: "proc",
+			},
+			wantErr: true,
+			errMsg:  "HostProcPath must be an absolute path",
+		},
+		{
+			name: "empty path",
+			config: performance.CollectionConfig{
+				HostProcPath: "",
+			},
+			wantErr: true,
+			errMsg:  "HostProcPath must be an absolute path",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			collector, err := collectors.NewTCPCollector(logr.Discard(), tt.config)
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+				assert.Nil(t, collector)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, collector)
+			}
+		})
+	}
 }
 
 func TestTCPCollector_BasicFunctionality(t *testing.T) {
