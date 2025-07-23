@@ -44,9 +44,8 @@ type CPUCollector struct {
 }
 
 func NewCPUCollector(logger logr.Logger, config performance.CollectionConfig) (*CPUCollector, error) {
-	// Validate that HostProcPath is absolute
-	if !filepath.IsAbs(config.HostProcPath) {
-		return nil, fmt.Errorf("HostProcPath must be an absolute path, got: %q", config.HostProcPath)
+	if err := config.Validate(performance.ValidateOptions{RequireHostProcPath: true}); err != nil {
+		return nil, err
 	}
 
 	capabilities := performance.CollectorCapabilities{

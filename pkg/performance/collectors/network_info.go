@@ -75,9 +75,8 @@ type NetworkInfoCollector struct {
 var _ performance.PointCollector = (*NetworkInfoCollector)(nil)
 
 func NewNetworkInfoCollector(logger logr.Logger, config performance.CollectionConfig) (*NetworkInfoCollector, error) {
-	// Validate paths are absolute
-	if !filepath.IsAbs(config.HostSysPath) {
-		return nil, fmt.Errorf("HostSysPath must be an absolute path, got: %q", config.HostSysPath)
+	if err := config.Validate(performance.ValidateOptions{RequireHostSysPath: true}); err != nil {
+		return nil, err
 	}
 
 	capabilities := performance.CollectorCapabilities{

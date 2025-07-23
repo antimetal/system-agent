@@ -39,21 +39,16 @@ type LoadCollector struct {
 }
 
 func NewLoadCollector(logger logr.Logger, config performance.CollectionConfig) (*LoadCollector, error) {
+	if err := config.Validate(performance.ValidateOptions{RequireHostProcPath: true}); err != nil {
+		return nil, err
+	}
+
 	capabilities := performance.CollectorCapabilities{
 		SupportsOneShot:    true,
 		SupportsContinuous: false,
 		RequiresRoot:       false,
 		RequiresEBPF:       false,
 		MinKernelVersion:   "2.6.0", // /proc/loadavg has been around forever
-	}
-
-	// Validate that HostProcPath is absolute and exists
-	if !filepath.IsAbs(config.HostProcPath) {
-		return nil, fmt.Errorf("HostProcPath must be an absolute path, got: %q", config.HostProcPath)
-	}
-
-	if _, err := os.Stat(config.HostProcPath); err != nil {
-		return nil, fmt.Errorf("HostProcPath validation failed: %w", err)
 	}
 
 	return &LoadCollector{
