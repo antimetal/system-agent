@@ -79,7 +79,7 @@ type ProcessCPUTime struct {
 
 func NewProcessCollector(logger logr.Logger, config performance.CollectionConfig) (*ProcessCollector, error) {
 	// Use centralized path validation
-	if err := config.Validate(performance.ValidateOption{
+	if err := config.Validate(performance.ValidateOptions{
 		RequireHostProcPath: true,
 	}); err != nil {
 		return nil, err
