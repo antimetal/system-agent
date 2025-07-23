@@ -7,6 +7,7 @@
 package collectors
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -36,6 +37,7 @@ type LoadCollector struct {
 	performance.BaseCollector
 	loadavgPath string
 	uptimePath  string
+	statPath    string
 }
 
 func NewLoadCollector(logger logr.Logger, config performance.CollectionConfig) (*LoadCollector, error) {
@@ -61,6 +63,7 @@ func NewLoadCollector(logger logr.Logger, config performance.CollectionConfig) (
 		),
 		loadavgPath: filepath.Join(config.HostProcPath, "loadavg"),
 		uptimePath:  filepath.Join(config.HostProcPath, "uptime"),
+		statPath:    filepath.Join(config.HostProcPath, "stat"),
 	}, nil
 }
 
@@ -161,5 +164,57 @@ func (c *LoadCollector) collectLoadStats() (*performance.LoadStats, error) {
 		}
 	}
 
+	// Read blocked processes from /proc/stat - optional data, errors are logged but don't fail collection
+	c.collectBlockedProcs(stats)
+
 	return stats, nil
+}
+
+// collectBlockedProcs reads blocked process count from /proc/stat
+//
+// This method reads the procs_blocked field from /proc/stat to provide
+// the blocked process count needed for vmstat-compatible metrics.
+//
+// /proc/stat format (partial):
+//
+//	procs_blocked value
+//
+// Error handling strategy:
+// - /proc/stat is optional - logs warnings but continues if unavailable
+// - Parse errors are logged but don't fail collection
+// - Missing field is left as zero (graceful degradation)
+func (c *LoadCollector) collectBlockedProcs(stats *performance.LoadStats) {
+	file, err := os.Open(c.statPath)
+	if err != nil {
+		c.Logger().V(2).Info("Optional file not available", "path", c.statPath, "error", err)
+		return
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "procs_blocked ") {
+			parts := strings.Fields(line)
+			if len(parts) != 2 {
+				c.Logger().V(2).Info("Unexpected procs_blocked format",
+					"line", line, "fields", len(parts))
+				return
+			}
+
+			blocked, err := strconv.ParseInt(parts[1], 10, 32)
+			if err != nil {
+				c.Logger().V(2).Info("Failed to parse procs_blocked",
+					"value", parts[1], "error", err)
+				return
+			}
+
+			stats.BlockedProcs = int32(blocked)
+			return
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		c.Logger().V(2).Info("Error reading stat file", "path", c.statPath, "error", err)
+	}
 }
