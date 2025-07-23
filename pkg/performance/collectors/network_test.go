@@ -113,7 +113,6 @@ func createTestNetworkCollector(t *testing.T, procNetDev string, sysFiles map[st
 	return collector, procPath, sysPath
 }
 
-
 func collectAndValidateNetwork(t *testing.T, collector *collectors.NetworkCollector, expectError bool, validate func(t *testing.T, stats []performance.NetworkStats)) {
 	result, err := collector.Collect(context.Background())
 
@@ -125,7 +124,7 @@ func collectAndValidateNetwork(t *testing.T, collector *collectors.NetworkCollec
 	require.NoError(t, err)
 	stats, ok := result.([]performance.NetworkStats)
 	require.True(t, ok, "result should be []performance.NetworkStats")
-	
+
 	if validate != nil {
 		validate(t, stats)
 	}
@@ -240,19 +239,19 @@ func TestNetworkCollector_Collect(t *testing.T) {
 			},
 		},
 		{
-			name:       "missing sysfs files - graceful degradation",
-			procNetDev: validProcNetDev,
-			sysFiles:   nil, // No sysfs files
+			name:        "missing sysfs files - graceful degradation",
+			procNetDev:  validProcNetDev,
+			sysFiles:    nil, // No sysfs files
 			expectError: false,
 			validateResult: func(t *testing.T, stats []performance.NetworkStats) {
 				require.Len(t, stats, 3)
-				
+
 				// Check that basic stats are still collected
 				eth0 := findInterface(stats, "eth0")
 				require.NotNil(t, eth0)
 				assert.Equal(t, uint64(9876543210), eth0.RxBytes)
 				assert.Equal(t, uint64(654321), eth0.RxPackets)
-				
+
 				// Sysfs fields should be empty/zero
 				assert.Equal(t, uint64(0), eth0.Speed)
 				assert.Equal(t, "", eth0.Duplex)
@@ -299,7 +298,7 @@ func TestNetworkCollector_Collect(t *testing.T) {
 				}
 				collector, err := collectors.NewNetworkCollector(logr.Discard(), config)
 				require.NoError(t, err)
-				
+
 				_, err = collector.Collect(context.Background())
 				assert.Error(t, err)
 				return
