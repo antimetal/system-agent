@@ -50,7 +50,7 @@ func init() {
 }
 
 func NewNetworkCollector(logger logr.Logger, config performance.CollectionConfig) (*NetworkCollector, error) {
-	if err := config.Validate(performance.ValidateOption{RequireHostProcPath: true, RequireHostSysPath: true}); err != nil {
+	if err := config.Validate(performance.ValidateOptions{RequireHostProcPath: true, RequireHostSysPath: true}); err != nil {
 		return nil, err
 	}
 
