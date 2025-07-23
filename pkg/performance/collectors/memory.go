@@ -292,6 +292,40 @@ func (c *MemoryCollector) convertToBytes(stats *performance.MemoryStats, hugePag
 //	pswpin value
 //	pswpout value
 //
+// Performance Investigation Context:
+//
+// Swap In (si in vmstat):
+// - Pages swapped from disk back into RAM since boot
+// - Rate indicates memory pressure requiring disk access for reclaimed pages
+// - High swap-in rates (>1000 pages/sec) indicate:
+//   * Insufficient RAM for current workload
+//   * Memory-intensive applications competing for physical memory
+//   * System accessing previously swapped-out data
+// - Causes severe performance degradation (disk is ~1000x slower than RAM)
+//
+// Swap Out (so in vmstat):
+// - Pages moved from RAM to swap space on disk since boot
+// - Rate indicates kernel reclaiming memory under pressure
+// - High swap-out rates (>1000 pages/sec) indicate:
+//   * Memory pressure forcing kernel to free RAM
+//   * Applications allocating more memory than physically available
+//   * Kernel choosing to swap out inactive pages
+// - Often precedes swap-in activity as applications later access swapped data
+//
+// Diagnostic Patterns:
+// - si=0, so=0: No swap activity (healthy system with adequate RAM)
+// - si=0, so>0: Memory pressure causing swapping but no page faults yet
+// - si>0, so>0: Active swapping (severe memory pressure, major performance impact)
+// - si>0, so=0: Accessing previously swapped data (recovery from memory pressure)
+//
+// Investigation Actions:
+// - Any sustained swap activity indicates need for more RAM or workload optimization
+// - Identify memory-intensive processes with high RSS/PSS values
+// - Consider increasing swap space as temporary mitigation
+// - Monitor with memory stats to correlate with available/free memory levels
+//
+// Note: Values are in pages (typically 4KB), multiply by page size for bytes.
+//
 // Error handling strategy:
 // - /proc/vmstat is optional - logs warnings but continues if unavailable
 // - Parse errors for specific fields are logged but don't fail collection
