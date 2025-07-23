@@ -62,12 +62,11 @@ type KernelCollector struct {
 	procUtils    *procutils.ProcUtils
 
 	// Continuous collection state
-	continuousMu     sync.Mutex
-	continuousCtx    context.Context
-	continuousCancel context.CancelFunc
-	continuousChan   chan any
-	isRunning        bool
-	lastError        error
+	continuousMu   sync.Mutex
+	continuousChan chan any
+	stopped        chan struct{}
+	isRunning      bool
+	lastError      error
 }
 
 // Compile-time interface check
@@ -348,12 +347,12 @@ func (c *KernelCollector) Start(ctx context.Context) (<-chan any, error) {
 		return nil, fmt.Errorf("failed to get boot time: %w", err)
 	}
 
-	c.continuousCtx, c.continuousCancel = context.WithCancel(ctx)
 	c.continuousChan = make(chan any, continuousChannelBuffer)
+	c.stopped = make(chan struct{})
 	c.isRunning = true
 	c.lastError = nil
 
-	go c.continuousCollectionLoop(bootTime)
+	go c.continuousCollectionLoop(ctx, bootTime)
 
 	return c.continuousChan, nil
 }
@@ -366,12 +365,17 @@ func (c *KernelCollector) Stop() error {
 		return nil
 	}
 
-	if c.continuousCancel != nil {
-		c.continuousCancel()
+	if c.stopped != nil {
+		close(c.stopped)
+		c.stopped = nil
 	}
+
+	// Give the goroutine a moment to exit cleanly
+	time.Sleep(10 * time.Millisecond)
 
 	if c.continuousChan != nil {
 		close(c.continuousChan)
+		c.continuousChan = nil
 	}
 
 	c.isRunning = false
@@ -398,7 +402,7 @@ func (c *KernelCollector) LastError() error {
 	return c.lastError
 }
 
-func (c *KernelCollector) continuousCollectionLoop(bootTime time.Time) {
+func (c *KernelCollector) continuousCollectionLoop(ctx context.Context, bootTime time.Time) {
 	defer func() {
 		if r := recover(); r != nil {
 			c.continuousMu.Lock()
@@ -426,7 +430,9 @@ func (c *KernelCollector) continuousCollectionLoop(bootTime time.Time) {
 
 	for {
 		select {
-		case <-c.continuousCtx.Done():
+		case <-ctx.Done():
+			return
+		case <-c.stopped:
 			return
 		default:
 		}
