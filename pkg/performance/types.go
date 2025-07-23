@@ -379,20 +379,7 @@ type ValidateOption struct {
 
 // Validate ensures that all configured paths are absolute paths and that required paths are non-empty.
 // This centralizes path validation logic previously duplicated across all collectors.
-func (c CollectionConfig) Validate(opts ...ValidateOption) error {
-	// Merge all options
-	var opt ValidateOption
-	for _, o := range opts {
-		if o.RequireHostProcPath {
-			opt.RequireHostProcPath = true
-		}
-		if o.RequireHostSysPath {
-			opt.RequireHostSysPath = true
-		}
-		if o.RequireHostDevPath {
-			opt.RequireHostDevPath = true
-		}
-	}
+func (c *CollectionConfig) Validate(opt ValidateOption) error {
 
 	// Check required paths are non-empty
 	if opt.RequireHostProcPath && c.HostProcPath == "" {
