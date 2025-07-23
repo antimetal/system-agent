@@ -18,6 +18,14 @@ import (
 	"github.com/go-logr/logr"
 )
 
+func init() {
+	performance.Register(performance.MetricTypeDiskInfo, performance.PartialNewOnceContinuousCollector(
+		func(logger logr.Logger, config performance.CollectionConfig) (performance.PointCollector, error) {
+			return NewDiskInfoCollector(logger, config)
+		},
+	))
+}
+
 // DiskInfoCollector collects disk hardware configuration from the Linux sysfs filesystem.
 //
 // Data Sources and Methodology:

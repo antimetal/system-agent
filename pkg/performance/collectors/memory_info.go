@@ -19,6 +19,14 @@ import (
 	"github.com/go-logr/logr"
 )
 
+func init() {
+	performance.Register(performance.MetricTypeMemoryInfo, performance.PartialNewOnceContinuousCollector(
+		func(logger logr.Logger, config performance.CollectionConfig) (performance.PointCollector, error) {
+			return NewMemoryInfoCollector(logger, config)
+		},
+	))
+}
+
 // MemoryInfoCollector collects memory hardware configuration and NUMA topology.
 //
 // Purpose: Hardware inventory and NUMA topology discovery

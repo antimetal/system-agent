@@ -23,6 +23,14 @@ import (
 	"github.com/go-logr/logr"
 )
 
+func init() {
+	performance.Register(performance.MetricTypeKernel,
+		func(logger logr.Logger, config performance.CollectionConfig) (performance.ContinuousCollector, error) {
+			return NewKernelCollector(logger, config)
+		},
+	)
+}
+
 // Compile-time interface checks
 var (
 	_ performance.PointCollector      = (*KernelCollector)(nil)

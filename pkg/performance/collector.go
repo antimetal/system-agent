@@ -44,6 +44,12 @@ type ContinuousCollector interface {
 	LastError() error
 }
 
+// NewContinuousCollector creates a new continuous collector instance with the provided config
+type NewContinuousCollector func(logr.Logger, CollectionConfig) (ContinuousCollector, error)
+
+// NewPointCollector creates a new point collector instance with the provided config
+type NewPointCollector func(logr.Logger, CollectionConfig) (PointCollector, error)
+
 type CollectorCapabilities struct {
 	SupportsOneShot    bool
 	SupportsContinuous bool
@@ -160,6 +166,19 @@ func NewContinuousPointCollector(
 	}
 }
 
+// PartialNewContinuousPointCollector wraps collector into a NewContinuousCollector.
+// This is a convenience function for creating registry-compatible collectors
+// from existing PointCollector instances.
+func PartialNewContinuousPointCollector(collector NewPointCollector) NewContinuousCollector {
+	return func(logger logr.Logger, config CollectionConfig) (ContinuousCollector, error) {
+		c, err := collector(logger, config)
+		if err != nil {
+			return nil, err
+		}
+		return NewContinuousPointCollector(c, config, logger), nil
+	}
+}
+
 // Start begins the continuous point collection
 func (c *ContinuousPointCollector) Start(ctx context.Context) (<-chan any, error) {
 	if c.Status() != CollectorStatusDisabled {
@@ -185,7 +204,9 @@ func (c *ContinuousPointCollector) start(ctx context.Context) {
 			}
 			c.ch <- data
 		case <-ctx.Done():
-			c.Stop()
+			if err := c.Stop(); err != nil {
+				c.SetError(err)
+			}
 		case <-c.stopped:
 			ticker.Stop()
 			return
@@ -246,6 +267,18 @@ func NewOnceContinuousCollector(
 				MinKernelVersion:   pointCaps.MinKernelVersion,
 			},
 		),
+	}
+}
+
+// PartialNewOnceContinuousCollector wraps collector into a NewContinuousCollector.
+// This is a convenience function for creating registry-compatible collectors from point collectors.
+func PartialNewOnceContinuousCollector(collector NewPointCollector) NewContinuousCollector {
+	return func(logger logr.Logger, config CollectionConfig) (ContinuousCollector, error) {
+		c, err := collector(logger, config)
+		if err != nil {
+			return nil, err
+		}
+		return NewOnceContinuousCollector(c, config, logger), nil
 	}
 }
 

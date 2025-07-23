@@ -19,6 +19,14 @@ import (
 	"github.com/go-logr/logr"
 )
 
+func init() {
+	performance.Register(performance.MetricTypeCPUInfo, performance.PartialNewOnceContinuousCollector(
+		func(logger logr.Logger, config performance.CollectionConfig) (performance.PointCollector, error) {
+			return NewCPUInfoCollector(logger, config)
+		},
+	))
+}
+
 // CPUInfoCollector collects CPU hardware configuration from /proc/cpuinfo.
 //
 // IMPORTANT: The /proc/cpuinfo format is NOT standardized across architectures.

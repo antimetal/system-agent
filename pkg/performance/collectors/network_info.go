@@ -18,6 +18,14 @@ import (
 	"github.com/go-logr/logr"
 )
 
+func init() {
+	performance.Register(performance.MetricTypeNetworkInfo, performance.PartialNewOnceContinuousCollector(
+		func(logger logr.Logger, config performance.CollectionConfig) (performance.PointCollector, error) {
+			return NewNetworkInfoCollector(logger, config)
+		},
+	))
+}
+
 // NetworkInfoCollector collects network interface hardware configuration from the Linux sysfs filesystem.
 //
 // Data Sources and Standardization:

@@ -12,9 +12,14 @@ jobs:
     
     steps:
     - name: Create Linear Issue
+      env:
+        ISSUE_BODY: ${{ github.event.issue.body }}
+        ISSUE_TITLE: ${{ github.event.issue.title }}
+        ISSUE_URL: ${{ github.event.issue.html_url }}
+        LINEAR_TEAM_ID: ${{ vars.LINEAR_TEAM_ID }}
       run: |
         # Validate required variables
-        if [ -z "${{ vars.LINEAR_TEAM_ID }}" ]; then
+        if [ -z "$LINEAR_TEAM_ID" ]; then
           echo "ERROR: LINEAR_TEAM_ID variable is not set"
           echo "Please configure LINEAR_TEAM_ID in your repository variables"
           exit 1
@@ -26,18 +31,16 @@ jobs:
           exit 1
         fi
         
-        # Build description
-        DESCRIPTION="GitHub Issue: ${{ github.event.issue.html_url }}
+        # Build the full description using environment variables
+        DESCRIPTION="GitHub Issue: $ISSUE_URL
         
-        ${{ toJSON(github.event.issue.body) }}"
-        # Remove the JSON quotes that toJSON adds
-        DESCRIPTION="${DESCRIPTION:1:-1}"
+        $ISSUE_BODY"
         
         # Use jq to build the GraphQL query with proper JSON escaping
         QUERY=$(jq -n \
-          --arg title "${{ github.event.issue.title }}" \
+          --arg title "$ISSUE_TITLE" \
           --arg desc "$DESCRIPTION" \
-          --arg teamId "${{ vars.LINEAR_TEAM_ID }}" \
+          --arg teamId "$LINEAR_TEAM_ID" \
           '{ query: ("mutation { issueCreate(input: { title: " + ($title | @json) + ", description: " + ($desc | @json) + ", teamId: " + ($teamId | @json) + " }) { issue { identifier url } } }") }')
         
         # Create Linear issue via GraphQL API
