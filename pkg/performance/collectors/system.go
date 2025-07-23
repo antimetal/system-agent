@@ -48,24 +48,26 @@ var _ performance.PointCollector = (*SystemStatsCollector)(nil)
 // Context Switches (cs in vmstat):
 // - Measures kernel switches between processes/threads since boot
 // - High rates (>10,000/sec) indicate CPU scheduling pressure:
-//   * Too many competing processes for CPU resources
-//   * Processes frequently blocking on I/O or synchronization
-//   * Poor thread pool sizing in applications
+//   - Too many competing processes for CPU resources
+//   - Processes frequently blocking on I/O or synchronization
+//   - Poor thread pool sizing in applications
+//
 // - Diagnostic patterns:
-//   * High CS + High CPU = CPU-bound workload with many competing processes
-//   * High CS + Low CPU = Processes blocking on I/O, locks, or synchronization
-//   * High CS + High Load = System overloaded with too many runnable processes
+//   - High CS + High CPU = CPU-bound workload with many competing processes
+//   - High CS + Low CPU = Processes blocking on I/O, locks, or synchronization
+//   - High CS + High Load = System overloaded with too many runnable processes
 //
 // Interrupts (in in vmstat):
 // - Measures total hardware/software interrupts processed since boot
 // - Shows system activity level for:
-//   * Network packets (NIC interrupts)
-//   * Disk I/O completions (storage controller interrupts)
-//   * Timer interrupts and inter-processor interrupts (IPI)
+//   - Network packets (NIC interrupts)
+//   - Disk I/O completions (storage controller interrupts)
+//   - Timer interrupts and inter-processor interrupts (IPI)
+//
 // - Diagnostic patterns:
-//   * High interrupts + High I/O = Normal for busy systems
-//   * High interrupts + Low I/O = May indicate interrupt storms or driver issues
-//   * Sudden spikes = Hardware issues or inefficient drivers
+//   - High interrupts + High I/O = Normal for busy systems
+//   - High interrupts + Low I/O = May indicate interrupt storms or driver issues
+//   - Sudden spikes = Hardware issues or inefficient drivers
 //
 // Integration with Brendan Gregg's 60-Second Methodology:
 // These counters enable calculation of vmstat's 'cs' and 'in' fields, which are
