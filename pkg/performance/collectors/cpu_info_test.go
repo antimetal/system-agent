@@ -277,7 +277,7 @@ func TestCPUInfoCollector_Constructor(t *testing.T) {
 				HostSysPath:  "",
 			},
 			wantErr: true,
-			errMsg:  "HostProcPath must be an absolute path",
+			errMsg:  "HostProcPath is required but not provided",
 		},
 	}
 

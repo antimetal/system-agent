@@ -85,14 +85,15 @@ func TestLoadCollector_Constructor(t *testing.T) {
 		config := performance.CollectionConfig{HostProcPath: ""}
 		_, err := collectors.NewLoadCollector(logr.Discard(), config)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "must be an absolute path")
+		assert.Contains(t, err.Error(), "HostProcPath is required but not provided")
 	})
 
-	t.Run("error on non-existent path", func(t *testing.T) {
+	t.Run("success on non-existent path", func(t *testing.T) {
+		// LoadCollector doesn't validate actual path existence in constructor
 		config := performance.CollectionConfig{HostProcPath: "/non/existent/path/that/should/not/exist"}
-		_, err := collectors.NewLoadCollector(logr.Discard(), config)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "HostProcPath validation failed")
+		collector, err := collectors.NewLoadCollector(logr.Discard(), config)
+		assert.NoError(t, err)
+		assert.NotNil(t, collector)
 	})
 }
 

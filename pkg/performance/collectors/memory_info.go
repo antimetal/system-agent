@@ -105,12 +105,8 @@ type MemoryInfoCollector struct {
 var _ performance.PointCollector = (*MemoryInfoCollector)(nil)
 
 func NewMemoryInfoCollector(logger logr.Logger, config performance.CollectionConfig) (*MemoryInfoCollector, error) {
-	// Validate paths are absolute
-	if !filepath.IsAbs(config.HostProcPath) {
-		return nil, fmt.Errorf("HostProcPath must be an absolute path, got: %q", config.HostProcPath)
-	}
-	if !filepath.IsAbs(config.HostSysPath) {
-		return nil, fmt.Errorf("HostSysPath must be an absolute path, got: %q", config.HostSysPath)
+	if err := config.Validate(performance.ValidateOption{RequireHostProcPath: true, RequireHostSysPath: true}); err != nil {
+		return nil, err
 	}
 
 	capabilities := performance.CollectorCapabilities{

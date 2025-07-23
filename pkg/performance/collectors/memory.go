@@ -68,9 +68,8 @@ type MemoryCollector struct {
 }
 
 func NewMemoryCollector(logger logr.Logger, config performance.CollectionConfig) (*MemoryCollector, error) {
-	// Validate that HostProcPath is absolute
-	if !filepath.IsAbs(config.HostProcPath) {
-		return nil, fmt.Errorf("HostProcPath must be an absolute path, got: %q", config.HostProcPath)
+	if err := config.Validate(performance.ValidateOption{RequireHostProcPath: true}); err != nil {
+		return nil, err
 	}
 
 	capabilities := performance.CollectorCapabilities{

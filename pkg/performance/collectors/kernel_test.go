@@ -59,7 +59,7 @@ func TestKernelCollector_Constructor(t *testing.T) {
 				HostDevPath:  "",
 			},
 			wantErr: true,
-			errMsg:  "HostDevPath must be an absolute path",
+			errMsg:  "HostProcPath is required but not provided",
 		},
 	}
 

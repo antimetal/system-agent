@@ -76,9 +76,8 @@ type DiskInfoCollector struct {
 var _ performance.PointCollector = (*DiskInfoCollector)(nil)
 
 func NewDiskInfoCollector(logger logr.Logger, config performance.CollectionConfig) (*DiskInfoCollector, error) {
-	// Validate paths are absolute
-	if !filepath.IsAbs(config.HostSysPath) {
-		return nil, fmt.Errorf("HostSysPath must be an absolute path, got: %q", config.HostSysPath)
+	if err := config.Validate(performance.ValidateOption{RequireHostSysPath: true}); err != nil {
+		return nil, err
 	}
 
 	capabilities := performance.CollectorCapabilities{

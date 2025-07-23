@@ -89,7 +89,7 @@ func TestDiskInfoCollector_Constructor(t *testing.T) {
 				HostSysPath: "",
 			},
 			wantErr: true,
-			errMsg:  "HostSysPath must be an absolute path",
+			errMsg:  "HostSysPath is required but not provided",
 		},
 	}
 

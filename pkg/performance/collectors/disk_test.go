@@ -108,7 +108,7 @@ func TestDiskCollector_Constructor(t *testing.T) {
 				HostProcPath: "",
 			},
 			wantErr: true,
-			errMsg:  "HostProcPath must be an absolute path",
+			errMsg:  "HostProcPath is required but not provided",
 		},
 	}
 

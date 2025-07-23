@@ -7,6 +7,8 @@
 package performance
 
 import (
+	"fmt"
+	"path/filepath"
 	"time"
 )
 
@@ -366,6 +368,54 @@ func (c *CollectionConfig) ApplyDefaults() {
 	if c.HostDevPath == "" {
 		c.HostDevPath = defaults.HostDevPath
 	}
+}
+
+// ValidateOption specifies validation requirements for CollectionConfig
+type ValidateOption struct {
+	RequireHostProcPath bool
+	RequireHostSysPath  bool
+	RequireHostDevPath  bool
+}
+
+// Validate ensures that all configured paths are absolute paths and that required paths are non-empty.
+// This centralizes path validation logic previously duplicated across all collectors.
+func (c CollectionConfig) Validate(opts ...ValidateOption) error {
+	// Merge all options
+	var opt ValidateOption
+	for _, o := range opts {
+		if o.RequireHostProcPath {
+			opt.RequireHostProcPath = true
+		}
+		if o.RequireHostSysPath {
+			opt.RequireHostSysPath = true
+		}
+		if o.RequireHostDevPath {
+			opt.RequireHostDevPath = true
+		}
+	}
+
+	// Check required paths are non-empty
+	if opt.RequireHostProcPath && c.HostProcPath == "" {
+		return fmt.Errorf("HostProcPath is required but not provided")
+	}
+	if opt.RequireHostSysPath && c.HostSysPath == "" {
+		return fmt.Errorf("HostSysPath is required but not provided")
+	}
+	if opt.RequireHostDevPath && c.HostDevPath == "" {
+		return fmt.Errorf("HostDevPath is required but not provided")
+	}
+
+	// Check all non-empty paths are absolute
+	if c.HostProcPath != "" && !filepath.IsAbs(c.HostProcPath) {
+		return fmt.Errorf("HostProcPath must be an absolute path, got: %q", c.HostProcPath)
+	}
+	if c.HostSysPath != "" && !filepath.IsAbs(c.HostSysPath) {
+		return fmt.Errorf("HostSysPath must be an absolute path, got: %q", c.HostSysPath)
+	}
+	if c.HostDevPath != "" && !filepath.IsAbs(c.HostDevPath) {
+		return fmt.Errorf("HostDevPath must be an absolute path, got: %q", c.HostDevPath)
+	}
+	return nil
 }
 
 // CPUInfo represents CPU hardware configuration

@@ -84,12 +84,8 @@ func WithMessageLimit(limit int) KernelCollectorOption {
 }
 
 func NewKernelCollector(logger logr.Logger, config performance.CollectionConfig, opts ...KernelCollectorOption) (*KernelCollector, error) {
-	// Validate paths are absolute
-	if !filepath.IsAbs(config.HostDevPath) {
-		return nil, fmt.Errorf("HostDevPath must be an absolute path, got: %q", config.HostDevPath)
-	}
-	if !filepath.IsAbs(config.HostProcPath) {
-		return nil, fmt.Errorf("HostProcPath must be an absolute path, got: %q", config.HostProcPath)
+	if err := config.Validate(performance.ValidateOption{RequireHostProcPath: true, RequireHostDevPath: true}); err != nil {
+		return nil, err
 	}
 
 	capabilities := performance.CollectorCapabilities{
