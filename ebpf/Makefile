@@ -30,7 +30,15 @@ endif
 
 # Compiler flags
 INCLUDES := -I$(LIBBPF_HEADERS) -I./include
-CFLAGS := -g -O2 -Wall -target bpf -D__TARGET_ARCH_$(ARCH)
+# CO-RE-specific flags:
+# -g: Enable BTF generation (debug info)
+# -O2: Optimization level
+# -Wall: Enable all warnings
+# -target bpf: Target BPF architecture
+# -fdebug-types-section: Improve BTF generation
+# -fno-stack-protector: Disable stack protector (not supported in BPF)
+CFLAGS := -g -O2 -Wall -target bpf -D__TARGET_ARCH_$(ARCH) \
+	-fdebug-types-section -fno-stack-protector
 
 # eBPF programs
 BPF_PROGS := execsnoop
@@ -60,15 +68,17 @@ $(1): $(OUTPUT) src/$(1).bpf.c docker-build-check
 ifneq ($(OS),Linux)
 	@echo "Using Docker for non-Linux build"
 	@$(MKDIR) $(OUTPUT)/$(1)
-	@$(DOCKER_RUN) sh -c "clang $(CFLAGS) $(INCLUDES) -c src/$(1).bpf.c -o $(OUTPUT)/$(1)/$(1).bpf.o && \
-		cd $(OUTPUT)/$(1) && \
-		bpftool gen skeleton $(1).bpf.o > $(1).bpf.h"
+	@$(DOCKER_RUN) sh -c "/usr/local/bin/ensure-vmlinux.sh && \
+		clang $(CFLAGS) $(INCLUDES) -c src/$(1).bpf.c -o $(OUTPUT)/$(1)/$(1).bpf.o && \
+		echo 'Verifying BTF information for $(1)' && \
+		bpftool btf dump file $(OUTPUT)/$(1)/$(1).bpf.o format raw > /dev/null"
 	@echo "Successfully built $(1)"
 else
 	@$(MKDIR) $(OUTPUT)/$(1)
 	$(CLANG) $(CFLAGS) $(INCLUDES) -c src/$(1).bpf.c -o $(OUTPUT)/$(1)/$(1).bpf.o
-	@echo "Generating skeleton for $(1)"
-	$(CD) $(OUTPUT)/$(1) && $(BPFTOOL) gen skeleton $(1).bpf.o > $(1).bpf.h
+	@echo "Verifying BTF information for $(1)"
+	$(BPFTOOL) btf dump file $(OUTPUT)/$(1)/$(1).bpf.o format raw > /dev/null || \
+		(echo "Warning: BTF verification failed for $(1)" && exit 1)
 	@echo "Successfully built $(1)"
 endif
 endef
@@ -120,7 +130,7 @@ endif
 .PHONY: help
 help:
 	@echo "Available targets:"
-	@echo "  all         - Build all eBPF programs (.o and .h files)"
+	@echo "  all         - Build all eBPF programs (.o files)"
 ifneq ($(OS),Linux)
 	@echo "  docker-build - Build Docker image if it doesn't exist"
 	@echo "  docker-rebuild - Force rebuild Docker image"
