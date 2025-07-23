@@ -53,7 +53,7 @@ type DiskCollector struct {
 }
 
 func NewDiskCollector(logger logr.Logger, config performance.CollectionConfig) (*DiskCollector, error) {
-	if err := config.Validate(performance.ValidateOption{RequireHostProcPath: true}); err != nil {
+	if err := config.Validate(performance.ValidateOptions{RequireHostProcPath: true}); err != nil {
 		return nil, err
 	}
 

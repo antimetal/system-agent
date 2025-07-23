@@ -75,7 +75,7 @@ type NetworkInfoCollector struct {
 var _ performance.PointCollector = (*NetworkInfoCollector)(nil)
 
 func NewNetworkInfoCollector(logger logr.Logger, config performance.CollectionConfig) (*NetworkInfoCollector, error) {
-	if err := config.Validate(performance.ValidateOption{RequireHostSysPath: true}); err != nil {
+	if err := config.Validate(performance.ValidateOptions{RequireHostSysPath: true}); err != nil {
 		return nil, err
 	}
 

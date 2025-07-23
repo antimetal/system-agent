@@ -70,7 +70,7 @@ var tcpStates = map[string]string{
 }
 
 func NewTCPCollector(logger logr.Logger, config performance.CollectionConfig) (*TCPCollector, error) {
-	if err := config.Validate(performance.ValidateOption{RequireHostProcPath: true}); err != nil {
+	if err := config.Validate(performance.ValidateOptions{RequireHostProcPath: true}); err != nil {
 		return nil, err
 	}
 

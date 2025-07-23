@@ -53,7 +53,7 @@ type CPUInfoCollector struct {
 var _ performance.PointCollector = (*CPUInfoCollector)(nil)
 
 func NewCPUInfoCollector(logger logr.Logger, config performance.CollectionConfig) (*CPUInfoCollector, error) {
-	if err := config.Validate(performance.ValidateOption{RequireHostProcPath: true, RequireHostSysPath: true}); err != nil {
+	if err := config.Validate(performance.ValidateOptions{RequireHostProcPath: true, RequireHostSysPath: true}); err != nil {
 		return nil, err
 	}
 

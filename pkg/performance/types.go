@@ -370,8 +370,8 @@ func (c *CollectionConfig) ApplyDefaults() {
 	}
 }
 
-// ValidateOption specifies validation requirements for CollectionConfig
-type ValidateOption struct {
+// ValidateOptions specifies validation requirements for CollectionConfig
+type ValidateOptions struct {
 	RequireHostProcPath bool
 	RequireHostSysPath  bool
 	RequireHostDevPath  bool
@@ -379,7 +379,7 @@ type ValidateOption struct {
 
 // Validate ensures that all configured paths are absolute paths and that required paths are non-empty.
 // This centralizes path validation logic previously duplicated across all collectors.
-func (c *CollectionConfig) Validate(opt ValidateOption) error {
+func (c *CollectionConfig) Validate(opt ValidateOptions) error {
 
 	// Check required paths are non-empty
 	if opt.RequireHostProcPath && c.HostProcPath == "" {

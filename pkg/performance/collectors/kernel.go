@@ -84,7 +84,7 @@ func WithMessageLimit(limit int) KernelCollectorOption {
 }
 
 func NewKernelCollector(logger logr.Logger, config performance.CollectionConfig, opts ...KernelCollectorOption) (*KernelCollector, error) {
-	if err := config.Validate(performance.ValidateOption{RequireHostProcPath: true, RequireHostDevPath: true}); err != nil {
+	if err := config.Validate(performance.ValidateOptions{RequireHostProcPath: true, RequireHostDevPath: true}); err != nil {
 		return nil, err
 	}
 

@@ -105,7 +105,7 @@ type MemoryInfoCollector struct {
 var _ performance.PointCollector = (*MemoryInfoCollector)(nil)
 
 func NewMemoryInfoCollector(logger logr.Logger, config performance.CollectionConfig) (*MemoryInfoCollector, error) {
-	if err := config.Validate(performance.ValidateOption{RequireHostProcPath: true, RequireHostSysPath: true}); err != nil {
+	if err := config.Validate(performance.ValidateOptions{RequireHostProcPath: true, RequireHostSysPath: true}); err != nil {
 		return nil, err
 	}
 
