@@ -463,6 +463,115 @@ if data, err := os.ReadFile(optionalPath); err == nil {
 }
 ```
 
+### Continuous Collector Pattern
+
+When implementing collectors that support continuous collection (ContinuousCollector interface), follow this standardized pattern for proper lifecycle management:
+
+#### Key Components
+1. **Two control mechanisms**:
+   - **Context** (passed to Start): External lifecycle management from parent/app
+   - **Stopped channel** (internal): Direct control via Stop() method
+
+2. **Channel management**:
+   - Data channel (`ch`): Created in Start(), closed in Stop()
+   - Stopped channel (`stopped`): Created in Start(), closed in Stop()
+
+#### Implementation Pattern
+```go
+type MyCollector struct {
+    performance.BaseContinuousCollector
+    // ... collector-specific fields ...
+    
+    // Channel management
+    ch      chan any
+    stopped chan struct{}
+}
+
+func (c *MyCollector) Start(ctx context.Context) (<-chan any, error) {
+    if c.Status() != performance.CollectorStatusDisabled {
+        return nil, fmt.Errorf("collector already running")
+    }
+    
+    c.SetStatus(performance.CollectorStatusActive)
+    
+    // Initialize state if needed
+    // ...
+    
+    c.ch = make(chan any)
+    c.stopped = make(chan struct{})
+    go c.runCollection(ctx)
+    return c.ch, nil
+}
+
+func (c *MyCollector) Stop() error {
+    if c.Status() == performance.CollectorStatusDisabled {
+        return nil
+    }
+    
+    if c.stopped != nil {
+        close(c.stopped)
+        c.stopped = nil
+    }
+    
+    // Give goroutine time to exit cleanly
+    time.Sleep(10 * time.Millisecond)
+    
+    if c.ch != nil {
+        close(c.ch)
+        c.ch = nil
+    }
+    
+    c.SetStatus(performance.CollectorStatusDisabled)
+    return nil
+}
+
+func (c *MyCollector) runCollection(ctx context.Context) {
+    ticker := time.NewTicker(c.interval)
+    defer ticker.Stop()
+    
+    for {
+        select {
+        case <-ctx.Done():
+            // External shutdown (app closing)
+            return
+        case <-c.stopped:
+            // Stop() was called
+            return
+        case <-ticker.C:
+            data, err := c.collect(ctx)
+            if err != nil {
+                c.Logger().Error(err, "Failed to collect")
+                c.SetError(err)
+                continue
+            }
+            
+            select {
+            case c.ch <- data:
+            case <-ctx.Done():
+                return
+            case <-c.stopped:
+                return
+            }
+        }
+    }
+}
+```
+
+#### Why This Pattern?
+1. **Dual control**: Responds to both external shutdown (context) and explicit Stop()
+2. **Clean shutdown**: Stop() actually stops the goroutine and cleans up resources
+3. **No orphaned goroutines**: Either mechanism ensures proper cleanup
+4. **Consistent behavior**: All continuous collectors work the same way
+5. **Prevents resource leaks**: Channels are properly closed
+
+#### Usage Scenarios
+- **App shutdown**: Context cancellation stops all collectors automatically
+- **Individual control**: Stop() specific collectors while others continue
+- **Reconfiguration**: Stop(), reconfigure, Start() again
+- **Debugging**: Temporarily disable specific collectors
+
+This pattern ensures collectors integrate well with Kubernetes controllers and other lifecycle management systems while providing fine-grained control when needed.
+
 ## Resource Store Architecture
 
 ### BadgerDB Integration
