@@ -245,11 +245,6 @@ type NetworkStats struct {
 	TxCollisions uint64 // Collisions detected
 	TxCarrier    uint64 // Carrier losses
 	TxCompressed uint64 // Compressed packets transmitted
-	// Calculated fields
-	RxBytesPerSec   float64
-	RxPacketsPerSec float64
-	TxBytesPerSec   float64
-	TxPacketsPerSec float64
 	// Interface metadata from /sys/class/net/[interface]/
 	Speed        uint64 // Link speed in Mbps from /sys/class/net/[interface]/speed
 	Duplex       string // Duplex mode from /sys/class/net/[interface]/duplex
