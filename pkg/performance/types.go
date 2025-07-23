@@ -29,6 +29,7 @@ const (
 	MetricTypeMemoryInfo  MetricType = "memory_info"
 	MetricTypeDiskInfo    MetricType = "disk_info"
 	MetricTypeNetworkInfo MetricType = "network_info"
+	MetricTypeNUMA        MetricType = "numa"
 )
 
 // CollectorStatus represents the operational status of a collector
@@ -79,6 +80,7 @@ type Metrics struct {
 	MemoryInfo  *MemoryInfo
 	DiskInfo    []DiskInfo
 	NetworkInfo []NetworkInfo
+	NUMA        *NUMAStats
 }
 
 // LoadStats represents system load information
@@ -338,6 +340,7 @@ func DefaultCollectionConfig() CollectionConfig {
 			MetricTypeMemoryInfo:  true,
 			MetricTypeDiskInfo:    true,
 			MetricTypeNetworkInfo: true,
+			MetricTypeNUMA:        true,
 		},
 		HostProcPath: "/proc",
 		HostSysPath:  "/sys",
@@ -502,4 +505,39 @@ type NetworkInfo struct {
 	// State
 	OperState string // From /sys/class/net/[interface]/operstate
 	Carrier   bool   // From /sys/class/net/[interface]/carrier
+}
+
+// NUMAStats represents NUMA (Non-Uniform Memory Access) statistics
+type NUMAStats struct {
+	// Whether NUMA is enabled on this system
+	Enabled bool
+	// Number of NUMA nodes
+	NodeCount int
+	// Per-node statistics
+	Nodes []NUMANodeStats
+	// Whether automatic NUMA balancing is enabled
+	AutoBalance bool
+}
+
+// NUMANodeStats represents statistics for a single NUMA node
+type NUMANodeStats struct {
+	// Node ID (0-based)
+	ID int
+	// CPUs assigned to this node
+	CPUs []int
+	// Memory information (in bytes)
+	MemTotal  uint64 // Total memory on this node
+	MemFree   uint64 // Free memory on this node
+	MemUsed   uint64 // Used memory on this node
+	FilePages uint64 // File-backed pages (page cache)
+	AnonPages uint64 // Anonymous pages (process memory)
+	// NUMA allocation statistics (in pages)
+	NumaHit       uint64 // Memory successfully allocated on intended node
+	NumaMiss      uint64 // Memory allocated here despite preferring different node
+	NumaForeign   uint64 // Memory intended for here but allocated elsewhere
+	InterleaveHit uint64 // Interleaved memory successfully allocated here
+	LocalNode     uint64 // Memory allocated here while process was running here
+	OtherNode     uint64 // Memory allocated here while process was on other node
+	// Distance to other nodes (lower is better, typically 10 for local, 20+ for remote)
+	Distances []int
 }
