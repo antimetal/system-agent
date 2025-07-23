@@ -78,19 +78,11 @@ type ProcessCPUTime struct {
 }
 
 func NewProcessCollector(logger logr.Logger, config performance.CollectionConfig) (*ProcessCollector, error) {
-	// Validate paths are absolute
-	if !filepath.IsAbs(config.HostProcPath) {
-		return nil, fmt.Errorf("HostProcPath must be an absolute path, got: %q", config.HostProcPath)
-	}
-	if !filepath.IsAbs(config.HostSysPath) {
-		return nil, fmt.Errorf("HostSysPath must be an absolute path, got: %q", config.HostSysPath)
-	}
-
-	// Verify the proc path exists and is accessible
-	if info, err := os.Stat(config.HostProcPath); err != nil {
-		return nil, fmt.Errorf("HostProcPath not accessible: %w", err)
-	} else if !info.IsDir() {
-		return nil, fmt.Errorf("HostProcPath is not a directory: %q", config.HostProcPath)
+	// Use centralized path validation
+	if err := config.Validate(performance.ValidateOption{
+		RequireHostProcPath: true,
+	}); err != nil {
+		return nil, err
 	}
 
 	capabilities := performance.CollectorCapabilities{

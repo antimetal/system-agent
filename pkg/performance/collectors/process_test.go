@@ -130,16 +130,15 @@ func TestProcessCollector_Constructor(t *testing.T) {
 		assert.Contains(t, err.Error(), "HostProcPath must be an absolute path")
 	})
 
-	t.Run("relative sys path rejected", func(t *testing.T) {
+	t.Run("sys path not required", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		config := performance.DefaultCollectionConfig()
 		config.HostProcPath = tmpDir
-		config.HostSysPath = "sys"
+		config.HostSysPath = "" // empty since not required
 
 		collector, err := collectors.NewProcessCollector(logger, config)
-		assert.Error(t, err)
-		assert.Nil(t, collector)
-		assert.Contains(t, err.Error(), "HostSysPath must be an absolute path")
+		assert.NoError(t, err)
+		assert.NotNil(t, collector)
 	})
 
 	t.Run("empty path rejected", func(t *testing.T) {
@@ -149,32 +148,20 @@ func TestProcessCollector_Constructor(t *testing.T) {
 		collector, err := collectors.NewProcessCollector(logger, config)
 		assert.Error(t, err)
 		assert.Nil(t, collector)
+		assert.Contains(t, err.Error(), "HostProcPath is required but not provided")
 	})
 
-	t.Run("non-existent path rejected", func(t *testing.T) {
+	t.Run("success on non-existent path", func(t *testing.T) {
+		// ProcessCollector doesn't validate actual path existence in constructor
 		config := performance.DefaultCollectionConfig()
 		config.HostProcPath = "/this/path/does/not/exist"
+		config.HostSysPath = "/also/does/not/exist"
 
 		collector, err := collectors.NewProcessCollector(logger, config)
-		assert.Error(t, err)
-		assert.Nil(t, collector)
-		assert.Contains(t, err.Error(), "not accessible")
+		assert.NoError(t, err)
+		assert.NotNil(t, collector)
 	})
 
-	t.Run("file path rejected", func(t *testing.T) {
-		// Create a temp file
-		tmpFile, err := os.CreateTemp(t.TempDir(), "test")
-		require.NoError(t, err)
-		tmpFile.Close()
-
-		config := performance.DefaultCollectionConfig()
-		config.HostProcPath = tmpFile.Name()
-
-		collector, err := collectors.NewProcessCollector(logger, config)
-		assert.Error(t, err)
-		assert.Nil(t, collector)
-		assert.Contains(t, err.Error(), "not a directory")
-	})
 }
 
 func TestProcessCollectorParseStatFull(t *testing.T) {
