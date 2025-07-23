@@ -61,13 +61,12 @@ type NUMACollector struct {
 }
 
 func NewNUMACollector(logger logr.Logger, config performance.CollectionConfig) (*NUMACollector, error) {
-	// Validate that HostSysPath is absolute
-	if !filepath.IsAbs(config.HostSysPath) {
-		return nil, fmt.Errorf("HostSysPath must be an absolute path, got: %q", config.HostSysPath)
-	}
-	// Validate that HostProcPath is absolute
-	if !filepath.IsAbs(config.HostProcPath) {
-		return nil, fmt.Errorf("HostProcPath must be an absolute path, got: %q", config.HostProcPath)
+	// Validate configuration - NUMA collector requires both proc and sys paths
+	if err := config.Validate(performance.ValidateOptions{
+		RequireHostProcPath: true,
+		RequireHostSysPath:  true,
+	}); err != nil {
+		return nil, err
 	}
 
 	capabilities := performance.CollectorCapabilities{

@@ -161,13 +161,22 @@ func TestNUMACollector_Constructor(t *testing.T) {
 			errorMsg:    "HostProcPath must be an absolute path",
 		},
 		{
-			name: "empty paths",
+			name: "empty proc path",
 			config: performance.CollectionConfig{
-				HostSysPath:  "",
+				HostSysPath:  "/sys",
 				HostProcPath: "",
 			},
 			expectError: true,
-			errorMsg:    "must be an absolute path",
+			errorMsg:    "HostProcPath is required but not provided",
+		},
+		{
+			name: "empty sys path",
+			config: performance.CollectionConfig{
+				HostSysPath:  "",
+				HostProcPath: "/proc",
+			},
+			expectError: true,
+			errorMsg:    "HostSysPath is required but not provided",
 		},
 	}
 

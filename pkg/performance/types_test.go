@@ -36,6 +36,7 @@ func TestCollectionConfig_ApplyDefaults(t *testing.T) {
 					MetricTypeMemoryInfo:  true,
 					MetricTypeDiskInfo:    true,
 					MetricTypeNetworkInfo: true,
+					MetricTypeNUMA:        true,
 				},
 				HostProcPath: "/proc",
 				HostSysPath:  "/sys",
@@ -64,6 +65,7 @@ func TestCollectionConfig_ApplyDefaults(t *testing.T) {
 					MetricTypeMemoryInfo:  true,
 					MetricTypeDiskInfo:    true,
 					MetricTypeNetworkInfo: true,
+					MetricTypeNUMA:        true,
 				},
 				HostProcPath: "/custom/proc", // User value kept
 				HostSysPath:  "/sys",         // Default applied
