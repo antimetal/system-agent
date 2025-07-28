@@ -558,7 +558,7 @@ func (s *store) Subscribe(typeDef *resourcev1.TypeDescriptor) <-chan resource.Ev
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	ch := make(chan resource.Event)
+	ch := make(chan resource.Event, 1000)
 	if s.closed {
 		close(ch)
 		return ch
