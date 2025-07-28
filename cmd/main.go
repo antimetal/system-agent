@@ -61,7 +61,8 @@ var (
 
 func init() {
 	flag.StringVar(&intakeAddr, "intake-address", "intake.antimetal.com:443",
-		"The address of the cloud inventory intake service")
+		"The address of the intake service",
+	)
 	flag.StringVar(&intakeAPIKey, "intake-api-key", "",
 		"The API key to use upload resources",
 	)
@@ -195,9 +196,14 @@ func main() {
 		}),
 	)
 	if err != nil {
-		setupLog.Error(err, "unable to connect to cloud inventory service")
+		setupLog.Error(err, "unable to connect to intake service")
 		os.Exit(1)
 	}
+	defer func() {
+		if err := intakeConn.Close(); err != nil {
+			setupLog.Error(err, "unable to close intake service connection")
+		}
+	}()
 
 	// Setup Intake Worker
 	intakeWorker, err := intake.NewWorker(rsrcStore,
