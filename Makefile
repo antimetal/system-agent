@@ -182,7 +182,8 @@ clean-ebpf: ## Clean eBPF build artifacts
 
 ##@ Build
 
-build: goreleaser manifests fmt vet build-ebpf ## Build agent binary for current GOOS and GOARCH.
+build: ## Build agent binary for current GOOS and GOARCH.
+build: goreleaser manifests fmt vet build-ebpf generate	
 	GOOS=$(GO_OS) $(GORELEASER) build --snapshot --clean --single-target
 
 .PHONY: build-all
