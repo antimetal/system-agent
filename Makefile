@@ -145,7 +145,12 @@ endif
 build-ebpf: build-ebpf-$(EBPF_BUILDER) ## Build all eBPF programs
 
 .PHONY: build-ebpf-native
-build-ebpf-native: $(EBPF_BUILD_DIR) $(EBPF_OBJECTS) ## Build eBPF programs natively (Linux only)
+build-ebpf-native: generate-vmlinux $(EBPF_BUILD_DIR) $(EBPF_OBJECTS) ## Build eBPF programs natively (Linux only)
+
+.PHONY: generate-vmlinux
+generate-vmlinux: ## Generate vmlinux.h for eBPF compilation
+	@echo "Checking/generating vmlinux.h..."
+	@$(EBPF_DIR)/scripts/generate_vmlinux.sh
 
 $(EBPF_BUILD_DIR):
 	@mkdir -p $(EBPF_BUILD_DIR)
@@ -153,8 +158,6 @@ $(EBPF_BUILD_DIR):
 $(EBPF_BUILD_DIR)/%.bpf.o: $(EBPF_SRC_DIR)/%.bpf.c
 	@echo "Building eBPF program: $<"
 	$(CLANG) $(CLANG_FLAGS) -c $< -o $@
-	@echo "Generating skeleton for: $@"
-	bpftool gen skeleton $@ > $(EBPF_BUILD_DIR)/$*.skel.h
 
 .PHONY: build-ebpf-docker
 build-ebpf-docker: ## Build eBPF programs using Docker (for consistent build environment)
@@ -175,6 +178,7 @@ build-ebpf-builder: ## Force rebuild the eBPF builder Docker image
 .PHONY: clean-ebpf
 clean-ebpf: ## Clean eBPF build artifacts
 	rm -rf $(EBPF_BUILD_DIR)
+	rm -f $(EBPF_DIR)/include/vmlinux.h
 
 ##@ Build
 
