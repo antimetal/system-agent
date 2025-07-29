@@ -1,0 +1,55 @@
+# Lima configuration for Ubuntu with kernel 5.8
+# Uses Ubuntu 22.04 which has kernel 5.15+ (supports CAP_BPF)
+
+# VM configuration
+vmType: "qemu"  # Use QEMU for compatibility
+cpus: 2         # Minimal CPUs for testing
+memory: "1GiB"  # 1GB is sufficient for eBPF testing
+disk: "20GiB"   # Reduced disk size for testing
+
+# Use Ubuntu 22.04 LTS image (kernel 5.15+)
+images:
+  - location: "https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img"
+    arch: "x86_64"
+  - location: "https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-arm64.img"
+    arch: "aarch64"
+
+# Mount configuration
+mounts:
+  - location: "~"
+    writable: false
+  - location: "/tmp/lima"
+    writable: true
+
+# SSH configuration
+ssh:
+  localPort: 60122
+  loadDotSSHPubKeys: true
+
+# Provisioning scripts to verify kernel version
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      
+      # Display kernel version
+      echo "Current kernel version:"
+      uname -r
+      
+      # Update package list
+      apt-get update
+      
+      # Install minimal packages for eBPF testing
+      apt-get install -y --no-install-recommends \
+        bpftool \
+        linux-tools-$(uname -r) \
+        libcap2-bin
+
+# Network configuration
+# Using default network to avoid socket_vmnet requirement
+
+# Additional configuration
+containerd:
+  system: false
+  user: false

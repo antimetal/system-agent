@@ -1,0 +1,61 @@
+# Lima configuration for Ubuntu with modern kernel
+# Ubuntu 24.04 LTS (Noble Numbat) with kernel 6.8+
+
+# VM configuration
+vmType: "qemu"  # Can also use "vz" on macOS 13+ for better performance
+cpus: 2         # Minimal CPUs for testing
+memory: "1GiB"  # 1GB is sufficient for eBPF testing
+disk: "20GiB"   # Reduced disk size for testing
+
+# Use Ubuntu 24.04 LTS image (latest stable with modern kernel)
+images:
+  # Ubuntu 24.04 LTS with kernel 6.8+
+  - location: "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img"
+    arch: "x86_64"
+  - location: "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-arm64.img"
+    arch: "aarch64"
+
+# Mount configuration
+mounts:
+  - location: "~"
+    writable: false
+  - location: "/tmp/lima"
+    writable: true
+
+# SSH configuration
+ssh:
+  localPort: 60123
+  loadDotSSHPubKeys: true
+
+# Provisioning scripts
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      
+      # Display kernel version
+      echo "Current kernel version:"
+      uname -r
+      
+      # Update package list
+      apt-get update
+      
+      # Install minimal packages for eBPF testing
+      apt-get install -y --no-install-recommends \
+        bpftool \
+        linux-tools-$(uname -r) \
+        libcap2-bin
+
+# Network configuration
+# Using default network to avoid socket_vmnet requirement
+
+# Additional configuration
+containerd:
+  system: true
+  user: false
+
+# Enable Rosetta for x86_64 emulation on ARM64 Macs (macOS 13+)
+rosetta:
+  enabled: true
+  binfmt: true
