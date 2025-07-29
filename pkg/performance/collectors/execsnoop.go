@@ -295,24 +295,35 @@ func (c *ExecSnoopCollector) ParseEvent(data []byte) (*ExecEvent, error) {
 		Args:      make([]string, 0, raw.ArgsCount),
 	}
 
-	// Parse arguments
+	// Parse arguments from 2D array structure
+	// Each argument slot is ARGSIZE (128) bytes
 	offset := int(unsafe.Sizeof(ExecsnoopEvent{}))
 	argsData := data[offset:]
 
-	if int(raw.ArgsSize) > len(argsData) {
-		return nil, fmt.Errorf("args size mismatch: expected %d, got %d", raw.ArgsSize, len(argsData))
+	// Ensure we have enough data for the expected arguments
+	expectedSize := int(raw.ArgsCount) * ArgSize
+	if expectedSize > len(argsData) {
+		return nil, fmt.Errorf("insufficient args data: need %d bytes, got %d", expectedSize, len(argsData))
 	}
 
-	// Split null-terminated strings
-	currentArg := []byte{}
-	for i := 0; i < int(raw.ArgsSize) && len(event.Args) < int(raw.ArgsCount); i++ {
-		if argsData[i] == 0 {
-			if len(currentArg) > 0 {
-				event.Args = append(event.Args, string(currentArg))
-				currentArg = []byte{}
-			}
-		} else {
-			currentArg = append(currentArg, argsData[i])
+	// Parse each argument from its fixed slot
+	for i := 0; i < int(raw.ArgsCount) && i < TotalMaxArgs; i++ {
+		slotOffset := i * ArgSize
+		if slotOffset+ArgSize > len(argsData) {
+			break
+		}
+		
+		// Find the null terminator in this slot
+		slot := argsData[slotOffset : slotOffset+ArgSize]
+		nullIndex := bytes.IndexByte(slot, 0)
+		if nullIndex == -1 {
+			// No null terminator, use entire slot
+			nullIndex = ArgSize
+		}
+		
+		if nullIndex > 0 {
+			arg := string(slot[:nullIndex])
+			event.Args = append(event.Args, arg)
 		}
 	}
 

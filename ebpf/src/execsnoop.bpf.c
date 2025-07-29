@@ -13,7 +13,7 @@ char LICENSE[] SEC("license") = "GPL";
 
 struct event {
     struct execsnoop_event base;
-    char args[FULL_MAX_ARGS_ARR];
+    char args[DEFAULT_MAXARGS][ARGSIZE];
 };
 
 struct {
@@ -76,22 +76,10 @@ int tracepoint__syscalls__sys_enter_execve(struct trace_event_raw_sys_enter *ctx
             break;
         }
 
-        // Calculate remaining space
-        int remaining_space = FULL_MAX_ARGS_ARR - event->base.args_size;
-        if (remaining_space <= 0) {
-            break;
-        }
-        
-        // Limit read size to available space
-        int read_size = remaining_space < ARGSIZE ? remaining_space : ARGSIZE;
-
-        int ret = bpf_probe_read_user_str(&event->args[event->base.args_size], 
-                                          read_size, argp);
+        // Use direct array indexing - verifier friendly
+        int ret = bpf_probe_read_user_str(event->args[i], 
+                                          ARGSIZE, argp);
         if (ret > 0) {
-            // Additional safety check
-            if (event->base.args_size + ret > FULL_MAX_ARGS_ARR) {
-                break;
-            }
             event->base.args_count++;
             event->base.args_size += ret;
         } else {
@@ -135,8 +123,9 @@ int tracepoint__syscalls__sys_exit_execve(struct trace_event_raw_sys_exit *ctx) 
     // Read comm on exit tracepoint since the command name may change during execve
     bpf_get_current_comm(&e->base.comm, sizeof(e->base.comm));
 
-    if (event->base.args_size > 0 && event->base.args_size <= FULL_MAX_ARGS_ARR) {
-        bpf_probe_read_kernel(e->args, event->base.args_size, event->args);
+    // Copy the entire args array - verifier friendly with fixed size
+    if (event->base.args_size > 0) {
+        bpf_probe_read_kernel(e->args, sizeof(event->args), event->args);
     }
     
     bpf_ringbuf_submit(e, 0);
