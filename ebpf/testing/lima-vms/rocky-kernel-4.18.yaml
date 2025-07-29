@@ -1,0 +1,73 @@
+# CentOS 8 Stream VM with kernel 4.18 (minimal CO-RE support)
+# This VM tests the minimum kernel version for CO-RE eBPF programs
+
+images:
+# CentOS 8 reached EOL, using Rocky Linux 8 as replacement (RHEL 8 clone with kernel 4.18)
+# Note: Using x86_64 only to avoid ARM64 kernel compatibility issues
+- location: "https://dl.rockylinux.org/pub/rocky/8/images/x86_64/Rocky-8-GenericCloud-Base.latest.x86_64.qcow2"
+  arch: "x86_64"
+
+# Force x86_64 architecture even on ARM hosts (will use emulation)
+arch: "x86_64"
+
+cpus: 2
+memory: "1GiB"
+disk: "20GiB"
+vmType: "qemu"
+
+ssh:
+  localPort: 60124
+  loadDotSSHPubKeys: true
+
+containerd:
+  system: false
+  user: false
+
+provision:
+- mode: system
+  script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    
+    # Update system
+    dnf update -y
+    
+    # Install development tools and eBPF dependencies
+    dnf groupinstall -y "Development Tools"
+    dnf install -y \
+      kernel-devel-$(uname -r) \
+      kernel-headers-$(uname -r) \
+      elfutils-libelf-devel \
+      clang \
+      llvm \
+      bpftool \
+      perf \
+      trace-cmd \
+      strace \
+      sudo \
+      which \
+      tar \
+      gzip
+    
+    # Enable BTF if available (CentOS 8 kernel 4.18 has limited BTF)
+    echo "Kernel version: $(uname -r)"
+    echo "BTF support:"
+    ls -la /sys/kernel/btf/ 2>/dev/null || echo "No native BTF support"
+    
+    # Verify BPF support
+    echo "BPF syscall support:"
+    grep CONFIG_BPF_SYSCALL /boot/config-$(uname -r) || echo "Not found in config"
+    
+    echo "eBPF setup complete for kernel 4.18 testing"
+
+- mode: user
+  script: |
+    #!/bin/bash
+    echo "CentOS 8 Stream with kernel 4.18 ready for eBPF testing"
+    uname -a
+
+# networks:
+# - lima: shared
+
+env:
+  LIMA_VM_TYPE: "centos-4.18"

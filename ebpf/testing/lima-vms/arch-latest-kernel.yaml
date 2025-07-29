@@ -1,0 +1,88 @@
+# Arch Linux VM with latest kernel
+# This VM tests cutting-edge kernel features for eBPF
+# Note: On ARM64 hosts, this will use emulation (slower but functional)
+
+images:
+- location: "https://geo.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2"
+  arch: "x86_64"
+
+# Force x86_64 architecture even on ARM hosts (will use emulation)
+arch: "x86_64"
+
+cpus: 2
+memory: "1GiB"
+disk: "20GiB"
+
+ssh:
+  localPort: 60125
+  loadDotSSHPubKeys: true
+
+containerd:
+  system: false
+  user: false
+
+provision:
+- mode: system
+  script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    
+    # Initialize pacman keyring
+    pacman-key --init
+    pacman-key --populate archlinux
+    
+    # Update system to get latest kernel
+    pacman -Syu --noconfirm
+    
+    # Install development tools and eBPF dependencies
+    pacman -S --noconfirm \
+      base-devel \
+      linux-headers \
+      clang \
+      llvm \
+      libbpf \
+      bpf \
+      perf \
+      trace-cmd \
+      strace \
+      sudo \
+      which \
+      tar \
+      gzip
+    
+    # Install bpftool from AUR (using a simple approach)
+    # Note: In production, you'd want to use an AUR helper
+    echo "Installing bpftool..."
+    pacman -S --noconfirm git
+    cd /tmp
+    git clone https://aur.archlinux.org/bpftool-git.git || true
+    cd bpftool-git
+    chown -R nobody:nobody .
+    sudo -u nobody makepkg --noconfirm || echo "bpftool build failed, continuing..."
+    pacman -U --noconfirm bpftool-git-*.pkg.tar.* || echo "bpftool install failed"
+    
+    # Show kernel and eBPF information
+    echo "Kernel version: $(uname -r)"
+    echo "BTF support:"
+    ls -la /sys/kernel/btf/vmlinux || echo "No BTF found"
+    
+    # Show BPF features
+    echo "BPF features:"
+    grep -E "CONFIG_BPF|CONFIG_DEBUG_INFO_BTF" /proc/config.gz | zcat || \
+      grep -E "CONFIG_BPF|CONFIG_DEBUG_INFO_BTF" /boot/config-$(uname -r) || \
+      echo "Config not accessible"
+    
+    echo "eBPF setup complete for latest kernel testing"
+
+- mode: user
+  script: |
+    #!/bin/bash
+    echo "Arch Linux with latest kernel ready for eBPF testing"
+    uname -a
+    echo "Kernel version: $(uname -r)"
+
+# networks:
+# - lima: shared
+
+env:
+  LIMA_VM_TYPE: "arch-latest"

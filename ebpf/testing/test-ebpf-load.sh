@@ -23,7 +23,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-VMS=("ebpf-kernel-5.8" "ebpf-modern")
+VMS=("rocky-4.18" "ebpf-kernel-5.8" "ebpf-modern" "arch-latest")
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 BPF_OBJECTS=("execsnoop.bpf.o")  # Add more as needed
