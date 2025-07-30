@@ -33,6 +33,18 @@ type Manager struct {
 	kernelFeatures *KernelFeatures
 }
 
+// kernelVersionRequirement defines a minimum kernel version for a feature
+type kernelVersionRequirement struct {
+	major, minor int
+	feature      string
+}
+
+var (
+	// Define all kernel version requirements in one place
+	requirementCORE     = kernelVersionRequirement{4, 18, "CO-RE"}
+	requirementFullCORE = kernelVersionRequirement{5, 2, "full CO-RE with BTF"}
+)
+
 func NewManager(logger logr.Logger) (*Manager, error) {
 	if runtime.GOOS != "linux" {
 		return nil, errors.New("CO-RE is only supported on Linux")
@@ -116,11 +128,11 @@ func detectKernelFeatures() (*KernelFeatures, error) {
 	major, minor, _ := parseKernelVersion(features.KernelVersion)
 
 	switch {
-	case major > 5 || (major == 5 && minor >= 2):
+	case meetsRequirement(major, minor, requirementFullCORE):
 		// Kernel 5.2+ has full CO-RE support with native BTF
 		features.CORESupport = "full"
 		features.RequiredKernel = "5.2"
-	case major == 4 && minor >= 18:
+	case meetsRequirement(major, minor, requirementCORE):
 		// Kernel 4.18-5.1 can use CO-RE with external BTF
 		features.CORESupport = "partial"
 		features.RequiredKernel = "4.18"
@@ -154,27 +166,24 @@ func parseKernelVersion(version string) (major, minor, patch int) {
 		version = parts[0]
 	}
 
-	// Parse x.y.z format
-	var err error
+	// Parse x.y.z format using a simpler approach
 	nums := strings.Split(version, ".")
-	if len(nums) >= 1 {
-		_, err = fmt.Sscanf(nums[0], "%d", &major)
-		if err != nil {
-			major = 0
+	parseVersionNumber := func(idx int) int {
+		if idx < len(nums) {
+			var val int
+			fmt.Sscanf(nums[idx], "%d", &val)
+			return val
 		}
-	}
-	if len(nums) >= 2 {
-		_, err = fmt.Sscanf(nums[1], "%d", &minor)
-		if err != nil {
-			minor = 0
-		}
-	}
-	if len(nums) >= 3 {
-		_, err = fmt.Sscanf(nums[2], "%d", &patch)
-		if err != nil {
-			patch = 0
-		}
+		return 0
 	}
 
+	major = parseVersionNumber(0)
+	minor = parseVersionNumber(1)
+	patch = parseVersionNumber(2)
+
 	return major, minor, patch
+}
+
+func meetsRequirement(major, minor int, req kernelVersionRequirement) bool {
+	return major > req.major || (major == req.major && minor >= req.minor)
 }

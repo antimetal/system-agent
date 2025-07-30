@@ -1,0 +1,437 @@
+name: eBPF VM Verifier Tests
+
+# This workflow tests eBPF programs across multiple kernel versions using VMs
+# to ensure they pass the kernel verifier. It builds eBPF programs once with
+# CO-RE support and then loads them on different kernel versions.
+
+on:
+  pull_request:
+    paths:
+      - 'ebpf/**'
+      - 'pkg/performance/collectors/**/ebpf/**'
+      - '.github/workflows/ebpf-vm-verifier-tests.yml'
+      - 'test/integration/scripts/ebpf-verifier-test.sh'
+  push:
+    branches:
+      - main
+    paths:
+      - 'ebpf/**'
+      - 'pkg/performance/collectors/**/ebpf/**'
+      - '.github/workflows/ebpf-vm-verifier-tests.yml'
+      - 'test/integration/scripts/ebpf-verifier-test.sh'
+  workflow_dispatch:
+
+jobs:
+  build-ebpf:
+    name: Build eBPF Programs
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq clang llvm libelf-dev libbpf-dev
+    
+    - name: Generate vmlinux.h
+      run: |
+        cd ebpf
+        if [ ! -f include/vmlinux.h ]; then
+          echo "Generating vmlinux.h..."
+          ./scripts/generate_vmlinux.sh || {
+            echo "Failed to generate vmlinux.h, using fallback..."
+            mkdir -p include
+            curl -sL https://raw.githubusercontent.com/libbpf/libbpf-bootstrap/master/examples/c/vmlinux.h -o include/vmlinux.h
+          }
+        fi
+        echo "✅ vmlinux.h ready ($(wc -l < include/vmlinux.h) lines)"
+    
+    - name: Build eBPF programs with CO-RE
+      run: |
+        cd ebpf
+        make clean all
+        
+        # Verify BTF sections exist
+        echo "=== Verifying BTF support ==="
+        for prog in ../internal/ebpf/*/*.bpf.o; do
+          if [ -f "$prog" ]; then
+            echo "Checking $(basename $prog):"
+            llvm-readelf -S "$prog" | grep -E "BTF|\.BTF\.ext" || exit 1
+          fi
+        done
+        echo "✅ All programs built with BTF support"
+    
+    - name: Upload BPF artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: bpf-programs
+        path: internal/ebpf/**/*.bpf.o
+        retention-days: 1
+
+  test-on-vms:
+    name: Test on kernel ${{ matrix.kernel }}
+    needs: build-ebpf
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        kernel: ["5.10", "5.15", "6.1", "6.6"]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download BPF artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: bpf-programs
+        path: bpf-programs/
+    
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+    
+    - name: Install LVH
+      run: |
+        go install github.com/cilium/little-vm-helper/cmd/lvh@latest
+        echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+    
+    - name: Install VM dependencies
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq qemu-system-x86 cpu-checker mmdebstrap debian-archive-keyring
+        
+        # Check virtualization support
+        if kvm-ok; then
+          echo "KVM acceleration available"
+        else
+          echo "No KVM - will use software emulation"
+        fi
+    
+    - name: Pull kernel
+      run: |
+        echo "=== Pulling kernel ${{ matrix.kernel }} ==="
+        
+        # Pull the kernel - it downloads to current directory
+        $(go env GOPATH)/bin/lvh kernels pull ${{ matrix.kernel }}-main || {
+          echo "Failed to pull kernel ${{ matrix.kernel }}, trying alternative sources..."
+          exit 1
+        }
+        
+        # Find what was downloaded
+        echo "Contents after kernel pull:"
+        ls -la
+        
+        # Find the kernel directory and files
+        if [ -d "${{ matrix.kernel }}-main" ]; then
+          echo "Found kernel directory: ${{ matrix.kernel }}-main"
+          echo "Contents:"
+          find "${{ matrix.kernel }}-main" -type f | head -20
+        fi
+    
+    - name: Cache VM image
+      uses: actions/cache@v4
+      id: vm-cache
+      with:
+        path: vm-images/
+        key: vm-image-bpf-test-${{ runner.os }}-v1
+    
+    - name: Build VM image
+      if: steps.vm-cache.outputs.cache-hit != 'true'
+      run: |
+        mkdir -p vm-images
+        
+        # Create LVH image configuration
+        cat > vm-images/images.json << 'EOF'
+        [
+          {
+            "name": "bpf-test",
+            "packages": [
+              "bpftool",
+              "linux-tools-generic",
+              "build-essential"
+            ],
+            "actions": [
+              {
+                "comment": "Enable root login",
+                "op": "run-command", 
+                "command": ["sed", "-i", "s/^#PermitRootLogin .*/PermitRootLogin yes/", "/etc/ssh/sshd_config"]
+              },
+              {
+                "comment": "Set root password",
+                "op": "run-command",
+                "command": ["sh", "-c", "echo 'root:root' | chpasswd"]
+              }
+            ]
+          }
+        ]
+        EOF
+        
+        # Build the image
+        $(go env GOPATH)/bin/lvh images build --dir vm-images/ || {
+          echo "LVH image build failed, downloading pre-built image..."
+          # Fallback to a pre-built image
+          wget -O vm-images/bpf-test.qcow2 https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2
+          qemu-img resize vm-images/bpf-test.qcow2 5G
+        }
+    
+    - name: Create test runner script
+      run: |
+        cat > test-in-vm.sh << 'EOF'
+        #!/bin/bash
+        # Script that runs inside VMs to load and verify BPF programs
+        
+        set -e
+        
+        PROG_DIR="/host/bpf-programs"
+        RESULTS_FILE="/host/test-results.json"
+        
+        echo "=== BPF Test Runner (Inside VM) ==="
+        echo "Date: $(date)"
+        echo "Hostname: $(hostname)"
+        echo "Kernel: $(uname -r)"
+        echo "Architecture: $(uname -m)"
+        
+        # Check if we have the necessary tools
+        echo -e "\n--- Checking tools ---"
+        for tool in bpftool mount; do
+          if ! command -v $tool &> /dev/null; then
+            echo "❌ Missing required tool: $tool"
+            # Try to install it
+            apt-get update -qq && apt-get install -y -qq $tool || exit 1
+          fi
+        done
+        echo "✅ All required tools present"
+        
+        # Ensure BPF filesystem is mounted
+        echo -e "\n--- Checking BPF filesystem ---"
+        if ! mount | grep -q "type bpf"; then
+          echo "Mounting BPF filesystem..."
+          mount -t bpf bpf /sys/fs/bpf || {
+            echo "❌ Failed to mount BPF filesystem"
+            exit 1
+          }
+        fi
+        echo "✅ BPF filesystem mounted"
+        
+        # Change to program directory
+        cd "$PROG_DIR"
+        
+        # Initialize results
+        cat > "$RESULTS_FILE" << JSON
+        {
+          "kernel": "$(uname -r)",
+          "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+          "programs": {
+        JSON
+        
+        # Test each BPF program
+        FIRST=true
+        SUCCESS_COUNT=0
+        TOTAL_COUNT=0
+        
+        for obj in $(find . -name "*.bpf.o" -type f | sort); do
+          TOTAL_COUNT=$((TOTAL_COUNT + 1))
+          
+          # Add comma for JSON formatting
+          if [ "$FIRST" = true ]; then
+            FIRST=false
+          else
+            echo "," >> "$RESULTS_FILE"
+          fi
+          
+          progname=$(basename "$obj" .bpf.o)
+          echo -e "\n--- Testing $progname ---"
+          echo -n "    \"$progname\": {" >> "$RESULTS_FILE"
+          
+          # Try to load the program
+          OUTPUT=$(bpftool prog load "$obj" /sys/fs/bpf/test_prog 2>&1)
+          EXIT_CODE=$?
+          
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "✅ $progname loaded successfully"
+            SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+            
+            # Get program info
+            PROG_INFO=$(bpftool prog show name test_prog -j 2>/dev/null || echo "{}")
+            
+            echo "\"status\": \"success\"," >> "$RESULTS_FILE"
+            echo "\"verifier_log\": \"\"," >> "$RESULTS_FILE"
+            echo "\"prog_info\": $PROG_INFO" >> "$RESULTS_FILE"
+            
+            # Cleanup
+            rm -f /sys/fs/bpf/test_prog
+          else
+            echo "❌ $progname failed to load"
+            echo "Verifier output:"
+            echo "$OUTPUT"
+            
+            # Escape the output for JSON
+            ESCAPED_OUTPUT=$(echo "$OUTPUT" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\n/\\n/g' | tr '\n' ' ')
+            
+            echo "\"status\": \"failed\"," >> "$RESULTS_FILE"
+            echo "\"verifier_log\": \"$ESCAPED_OUTPUT\"," >> "$RESULTS_FILE"
+            echo "\"prog_info\": null" >> "$RESULTS_FILE"
+          fi
+          
+          echo -n "}" >> "$RESULTS_FILE"
+        done
+        
+        # Close JSON
+        echo -e "\n  }," >> "$RESULTS_FILE"
+        echo "  \"summary\": {" >> "$RESULTS_FILE"
+        echo "    \"total\": $TOTAL_COUNT," >> "$RESULTS_FILE"
+        echo "    \"passed\": $SUCCESS_COUNT," >> "$RESULTS_FILE"
+        echo "    \"failed\": $((TOTAL_COUNT - SUCCESS_COUNT))" >> "$RESULTS_FILE"
+        echo "  }" >> "$RESULTS_FILE"
+        echo "}" >> "$RESULTS_FILE"
+        
+        # Final summary
+        echo -e "\n=== Test Summary ==="
+        echo "Total programs: $TOTAL_COUNT"
+        echo "Passed: $SUCCESS_COUNT"
+        echo "Failed: $((TOTAL_COUNT - SUCCESS_COUNT))"
+        
+        if [ $SUCCESS_COUNT -eq $TOTAL_COUNT ]; then
+          echo -e "\n✅ All BPF programs passed verification on kernel $(uname -r)"
+          exit 0
+        else
+          echo -e "\n❌ Some BPF programs failed verification"
+          exit 1
+        fi
+        EOF
+        chmod +x test-in-vm.sh
+    
+    - name: Run VM test
+      run: |
+        echo "=== Starting VM with kernel ${{ matrix.kernel }} ==="
+        
+        # Find the VM image
+        VM_IMAGE=$(find vm-images -name "*.qcow2" -o -name "*.img" | head -1)
+        if [ -z "$VM_IMAGE" ]; then
+          echo "❌ No VM image found"
+          exit 1
+        fi
+        
+        echo "Using VM image: $VM_IMAGE"
+        
+        # Find the kernel path - LVH downloads to current directory
+        KERNEL_PATH=""
+        
+        # Look for the kernel in the downloaded directory
+        if [ -d "${{ matrix.kernel }}-main" ]; then
+          # Find vmlinuz file
+          KERNEL_PATH=$(find "${{ matrix.kernel }}-main/boot" -name "vmlinuz*" | head -1)
+          if [ -z "$KERNEL_PATH" ]; then
+            # Try other common kernel file names
+            KERNEL_PATH=$(find "${{ matrix.kernel }}-main/boot" -name "bzImage*" -o -name "vmlinux*" | head -1)
+          fi
+        fi
+        
+        if [ -n "$KERNEL_PATH" ]; then
+          echo "Found kernel at: $KERNEL_PATH"
+          # Run with explicit kernel path
+          echo "Running: lvh run --kernel $(pwd)/$KERNEL_PATH --image $VM_IMAGE"
+          timeout 300 $(go env GOPATH)/bin/lvh run \
+            --kernel "$(pwd)/$KERNEL_PATH" \
+            --image "$VM_IMAGE" \
+            --host-mount $(pwd) \
+            -- /host/test-in-vm.sh || {
+              exit_code=$?
+              echo "LVH failed with exit code: $exit_code"
+              # Try without daemonize and serial-port flags
+              exit $exit_code
+            }
+        else
+          echo "WARNING: No kernel file found, trying without --kernel flag"
+          # Run without kernel flag (use VM's default kernel)
+          timeout 300 $(go env GOPATH)/bin/lvh run \
+            --image "$VM_IMAGE" \
+            --host-mount $(pwd) \
+            -- /host/test-in-vm.sh || {
+            exit_code=$?
+            if [ $exit_code -eq 124 ]; then
+              echo "❌ Test timed out"
+              exit 1
+            else
+              echo "❌ Test failed with exit code $exit_code"
+              exit $exit_code
+            fi
+          }
+        fi
+    
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-kernel-${{ matrix.kernel }}
+        path: test-results.json
+        retention-days: 7
+    
+    - name: Report results
+      if: always()
+      run: |
+        echo "=== Test Summary ==="
+        echo "Kernel: ${{ matrix.kernel }}"
+        echo "Status: ${{ job.status }}"
+        
+        if [ -f test-results.json ]; then
+          echo ""
+          echo "Results:"
+          jq -r '.summary' test-results.json || cat test-results.json
+        fi
+
+  summary:
+    name: Test Summary
+    needs: test-on-vms
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Download all test results
+      uses: actions/download-artifact@v4
+      with:
+        pattern: test-results-*
+        path: all-results/
+    
+    - name: Generate summary report
+      run: |
+        echo "# eBPF VM Test Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## Results by Kernel Version" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Create a summary table
+        echo "| Kernel | Total | Passed | Failed | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|--------|-------|---------|---------|---------|" >> $GITHUB_STEP_SUMMARY
+        
+        # Process each kernel's results
+        for results_dir in all-results/test-results-*/; do
+          if [ -d "$results_dir" ]; then
+            kernel=$(basename "$results_dir" | sed 's/test-results-kernel-//')
+            if [ -f "$results_dir/test-results.json" ]; then
+              total=$(jq -r '.summary.total' "$results_dir/test-results.json" 2>/dev/null || echo "0")
+              passed=$(jq -r '.summary.passed' "$results_dir/test-results.json" 2>/dev/null || echo "0")
+              failed=$(jq -r '.summary.failed' "$results_dir/test-results.json" 2>/dev/null || echo "0")
+              
+              if [ "$failed" = "0" ] && [ "$total" != "0" ]; then
+                status="✅ Pass"
+              elif [ "$total" = "0" ]; then
+                status="❌ No tests"
+              else
+                status="❌ Fail"
+              fi
+              
+              echo "| $kernel | $total | $passed | $failed | $status |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| $kernel | - | - | - | ❌ No results |" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+        done
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## Details" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Build**: Single build produces eBPF programs with CO-RE support" >> $GITHUB_STEP_SUMMARY
+        echo "- **Test**: Each kernel version runs in its own VM" >> $GITHUB_STEP_SUMMARY
+        echo "- **Verification**: Programs are loaded using bpftool to verify kernel acceptance" >> $GITHUB_STEP_SUMMARY
