@@ -36,6 +36,11 @@ int test_core_field_access(void *ctx)
     /* Test 4: Simple field read that should work on all kernels */
     int prio = BPF_CORE_READ(task, prio);
     
+    /* Use the variables to avoid compiler warnings */
+    if (pid > 0 && tgid > 0 && prio >= 0) {
+        /* All fields read successfully */
+    }
+    
     return 0;
 }
 
