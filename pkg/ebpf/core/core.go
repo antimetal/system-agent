@@ -171,7 +171,9 @@ func parseKernelVersion(version string) (major, minor, patch int) {
 	parseVersionNumber := func(idx int) int {
 		if idx < len(nums) {
 			var val int
-			fmt.Sscanf(nums[idx], "%d", &val)
+			if _, err := fmt.Sscanf(nums[idx], "%d", &val); err != nil {
+				return 0
+			}
 			return val
 		}
 		return 0
