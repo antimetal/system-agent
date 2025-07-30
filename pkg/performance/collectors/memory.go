@@ -298,18 +298,20 @@ func (c *MemoryCollector) convertToBytes(stats *performance.MemoryStats, hugePag
 // - Pages swapped from disk back into RAM since boot
 // - Rate indicates memory pressure requiring disk access for reclaimed pages
 // - High swap-in rates (>1000 pages/sec) indicate:
-//   * Insufficient RAM for current workload
-//   * Memory-intensive applications competing for physical memory
-//   * System accessing previously swapped-out data
+//   - Insufficient RAM for current workload
+//   - Memory-intensive applications competing for physical memory
+//   - System accessing previously swapped-out data
+//
 // - Causes severe performance degradation (disk is ~1000x slower than RAM)
 //
 // Swap Out (so in vmstat):
 // - Pages moved from RAM to swap space on disk since boot
 // - Rate indicates kernel reclaiming memory under pressure
 // - High swap-out rates (>1000 pages/sec) indicate:
-//   * Memory pressure forcing kernel to free RAM
-//   * Applications allocating more memory than physically available
-//   * Kernel choosing to swap out inactive pages
+//   - Memory pressure forcing kernel to free RAM
+//   - Applications allocating more memory than physically available
+//   - Kernel choosing to swap out inactive pages
+//
 // - Often precedes swap-in activity as applications later access swapped data
 //
 // Diagnostic Patterns:
