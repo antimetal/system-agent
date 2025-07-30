@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/antimetal/agent/pkg/ebpf/core"
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
@@ -99,33 +100,31 @@ func TestKernelCompatibility(t *testing.T) {
 
 	t.Logf("Running on kernel version: %d.%d.%d", currentKernel.Major, currentKernel.Minor, currentKernel.Patch)
 
-	// TODO: These functions were removed from core.go during refactoring
-	// They should be re-implemented if kernel feature checking is needed
 	features := []KernelFeature{
-		// {
-		// 	Name:        "BTF Support",
-		// 	MinVersion:  KernelVersion{5, 2, 0},
-		// 	CheckFunc:   core.CheckBTFSupport,
-		// 	Description: "Native BTF (BPF Type Format) support",
-		// },
-		// {
-		// 	Name:        "Ring Buffer",
-		// 	MinVersion:  KernelVersion{5, 8, 0},
-		// 	CheckFunc:   core.CheckRingBufferSupport,
-		// 	Description: "BPF Ring Buffer for efficient data transfer",
-		// },
-		// {
-		// 	Name:        "CO-RE Support",
-		// 	MinVersion:  KernelVersion{4, 18, 0},
-		// 	CheckFunc:   core.CheckCORESupport,
-		// 	Description: "Compile Once - Run Everywhere support",
-		// },
-		// {
-		// 	Name:        "Perf Buffer",
-		// 	MinVersion:  KernelVersion{4, 4, 0},
-		// 	CheckFunc:   core.CheckPerfBufferSupport,
-		// 	Description: "BPF Perf Buffer support",
-		// },
+		{
+			Name:        "BTF Support",
+			MinVersion:  KernelVersion{5, 2, 0},
+			CheckFunc:   core.CheckBTFSupport,
+			Description: "Native BTF (BPF Type Format) support",
+		},
+		{
+			Name:        "Ring Buffer",
+			MinVersion:  KernelVersion{5, 8, 0},
+			CheckFunc:   core.CheckRingBufferSupport,
+			Description: "BPF Ring Buffer for efficient data transfer",
+		},
+		{
+			Name:        "CO-RE Support",
+			MinVersion:  KernelVersion{4, 18, 0},
+			CheckFunc:   core.CheckCORESupport,
+			Description: "Compile Once - Run Everywhere support",
+		},
+		{
+			Name:        "Perf Buffer",
+			MinVersion:  KernelVersion{4, 4, 0},
+			CheckFunc:   core.CheckPerfBufferSupport,
+			Description: "BPF Perf Buffer support",
+		},
 	}
 
 	for _, feature := range features {
