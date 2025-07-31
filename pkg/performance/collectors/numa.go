@@ -32,6 +32,21 @@ var _ performance.PointCollector = (*NUMACollector)(nil)
 
 // NUMACollector collects NUMA (Non-Uniform Memory Access) statistics
 //
+// DEPRECATED: This collector will be removed in a future version.
+// Use NUMAInfoCollector (MetricTypeNUMAInfo) for static topology information
+// and NUMAStatsCollector (MetricTypeNUMAStats) for runtime statistics instead.
+//
+// This collector mixes static hardware topology with runtime performance statistics,
+// which is inconsistent with our collector architecture. The split collectors provide:
+// - Better separation of concerns (hardware info vs runtime stats)
+// - More efficient collection (static data collected once vs continuously)
+// - Clearer data models and configuration options
+//
+// Migration guide:
+// - Replace MetricTypeNUMA with MetricTypeNUMAInfo + MetricTypeNUMAStats
+// - Update configuration to use separate collection intervals if needed
+// - Update data processing to handle the new structured types
+//
 // NUMA is a computer memory design where memory access time depends on the
 // memory location relative to the processor. In NUMA systems, processors
 // can access their own local memory faster than non-local memory.
@@ -91,6 +106,9 @@ func NewNUMACollector(logger logr.Logger, config performance.CollectionConfig) (
 }
 
 func (c *NUMACollector) Collect(ctx context.Context) (any, error) {
+	// Log deprecation warning
+	c.Logger().Info("DEPRECATED: NUMACollector will be removed in a future version. Use NUMAInfoCollector (MetricTypeNUMAInfo) for topology and NUMAStatsCollector (MetricTypeNUMAStats) for runtime statistics instead.")
+
 	// First check if this is a NUMA system
 	nodes, err := c.detectNUMANodes()
 	if err != nil {
