@@ -31,6 +31,8 @@ const (
 	MetricTypeDiskInfo    MetricType = "disk_info"
 	MetricTypeNetworkInfo MetricType = "network_info"
 	MetricTypeNUMA        MetricType = "numa"
+	MetricTypeNUMAInfo    MetricType = "numa_info"
+	MetricTypeNUMAStats   MetricType = "numa_stats"
 )
 
 // CollectorStatus represents the operational status of a collector
@@ -83,6 +85,8 @@ type Metrics struct {
 	DiskInfo    []DiskInfo
 	NetworkInfo []NetworkInfo
 	NUMA        *NUMAStats
+	NUMAInfo    *NUMAInfo
+	NUMAStats   *NUMAStatistics
 }
 
 // LoadStats represents system load information
@@ -557,4 +561,62 @@ type NUMANodeStats struct {
 	OtherNode     uint64 // Memory allocated here while process was on other node
 	// Distance to other nodes (lower is better, typically 10 for local, 20+ for remote)
 	Distances []int
+}
+
+// NUMAInfo represents static NUMA hardware topology information
+// This is collected once at startup and provides the hardware layout
+type NUMAInfo struct {
+	// Whether NUMA is enabled/available on this system
+	Enabled bool
+	// Number of NUMA nodes detected
+	NodeCount int
+	// Static topology information per node
+	Nodes []NUMANodeInfo
+	// Whether automatic NUMA balancing is available (from /proc/sys/kernel/numa_balancing)
+	BalancingAvailable bool
+}
+
+// NUMANodeInfo represents static topology information for a single NUMA node
+type NUMANodeInfo struct {
+	// Node ID (0-based)
+	ID int
+	// CPUs assigned to this node (from /sys/devices/system/node/node*/cpulist)
+	CPUs []int
+	// Total memory on this node in bytes (from /sys/devices/system/node/node*/meminfo MemTotal)
+	TotalMemory uint64
+	// Distance to other nodes (from /sys/devices/system/node/node*/distance)
+	// Lower is better, typically 10 for local, 20+ for remote nodes
+	Distances []int
+}
+
+// NUMAStatistics represents runtime NUMA performance statistics
+// This is collected continuously to monitor allocation patterns and performance
+type NUMAStatistics struct {
+	// Whether NUMA is enabled on this system (must match NUMAInfo.Enabled)
+	Enabled bool
+	// Number of NUMA nodes (must match NUMAInfo.NodeCount)
+	NodeCount int
+	// Runtime statistics per node
+	Nodes []NUMANodeStatistics
+	// Whether automatic NUMA balancing is currently enabled (runtime state)
+	AutoBalanceEnabled bool
+}
+
+// NUMANodeStatistics represents runtime statistics for a single NUMA node
+type NUMANodeStatistics struct {
+	// Node ID (0-based, must match NUMANodeInfo.ID)
+	ID int
+	// Current memory usage in bytes (from /sys/devices/system/node/node*/meminfo)
+	MemFree   uint64 // Currently free
+	MemUsed   uint64 // Currently used
+	FilePages uint64 // File-backed pages (page cache)
+	AnonPages uint64 // Anonymous pages (process memory)
+	// NUMA allocation statistics in pages (from /sys/devices/system/node/node*/numastat)
+	// These are monotonically increasing counters since boot
+	NumaHit       uint64 // Memory successfully allocated on intended node
+	NumaMiss      uint64 // Memory allocated here despite preferring different node
+	NumaForeign   uint64 // Memory intended for here but allocated elsewhere
+	InterleaveHit uint64 // Interleaved memory successfully allocated here
+	LocalNode     uint64 // Memory allocated here while process was running here
+	OtherNode     uint64 // Memory allocated here while process was on other node
 }
