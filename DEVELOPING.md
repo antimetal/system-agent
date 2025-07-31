@@ -12,6 +12,16 @@ Use the links for installation steps for each prerequisite as neccessary.
 - [kubectl](https://kubernetes.io/docs/tasks/tools/)
 - [Docker](https://docs.docker.com/engine/install/)
 
+## Initial Setup
+
+After cloning the repository, install the shared git hooks for optimal development workflow:
+
+```bash
+make install-hooks
+```
+
+This sets up git hooks that automatically configure Claude Code context when working with git worktrees for PR reviews. See [.githooks/README.md](.githooks/README.md) for details.
+
 ### Docker setup
 
 There are a couple things you'll want to configure for your Docker setup:
