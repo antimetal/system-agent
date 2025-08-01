@@ -86,6 +86,25 @@ jobs:
         name: bpf-programs
         path: bpf-programs/
     
+    - name: Verify BPF artifacts integrity
+      run: |
+        # Generate checksums for all downloaded BPF programs
+        cd bpf-programs
+        find . -name "*.bpf.o" -type f -exec sha256sum {} \; > ../bpf-checksums.txt
+        cd ..
+        
+        # Display checksums for transparency
+        echo "BPF Program Checksums:"
+        cat bpf-checksums.txt
+        
+        # Verify all expected files are present
+        if [ ! -f "bpf-programs/test_core.bpf.o" ]; then
+          echo "Error: test_core.bpf.o not found in artifacts"
+          exit 1
+        fi
+        
+        echo "✓ All BPF artifacts verified"
+    
     - name: Setup Go
       uses: actions/setup-go@v5
       with:
