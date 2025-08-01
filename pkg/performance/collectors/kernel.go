@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/antimetal/agent/pkg/performance"
+	"github.com/antimetal/agent/pkg/performance/capabilities"
 	"github.com/antimetal/agent/pkg/performance/procutils"
 	"github.com/antimetal/agent/pkg/performance/ringbuffer"
 	"github.com/go-logr/logr"
@@ -88,11 +89,10 @@ func NewKernelCollector(logger logr.Logger, config performance.CollectionConfig,
 	}
 
 	capabilities := performance.CollectorCapabilities{
-		SupportsOneShot:    true,
-		SupportsContinuous: true,
-		RequiresRoot:       true, // /dev/kmsg typically requires CAP_SYSLOG or root
-		RequiresEBPF:       false,
-		MinKernelVersion:   "3.5.0", // /dev/kmsg was introduced in 3.5
+		SupportsOneShot:      true,
+		SupportsContinuous:   true,
+		RequiredCapabilities: []capabilities.Capability{capabilities.CAP_SYSLOG},
+		MinKernelVersion:     "3.5.0", // /dev/kmsg was introduced in 3.5
 	}
 
 	collector := &KernelCollector{
