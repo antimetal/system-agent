@@ -21,7 +21,7 @@ import (
 )
 
 func init() {
-	performance.Register(performance.MetricTypeLoad, performance.PartialNewContinuousPointCollector(
+	performance.TryRegister(performance.MetricTypeLoad, performance.PartialNewContinuousPointCollector(
 		func(logger logr.Logger, config performance.CollectionConfig) (performance.PointCollector, error) {
 			return NewLoadCollector(logger, config)
 		},

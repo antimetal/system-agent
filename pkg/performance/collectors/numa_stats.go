@@ -20,7 +20,7 @@ import (
 )
 
 func init() {
-	performance.Register(performance.MetricTypeNUMAStats, performance.PartialNewContinuousPointCollector(
+	performance.TryRegister(performance.MetricTypeNUMAStats, performance.PartialNewContinuousPointCollector(
 		func(logger logr.Logger, config performance.CollectionConfig) (performance.PointCollector, error) {
 			return NewNUMAStatsCollector(logger, config)
 		},
