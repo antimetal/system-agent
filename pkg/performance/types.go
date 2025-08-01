@@ -472,6 +472,10 @@ type CPUCore struct {
 type MemoryInfo struct {
 	// Total memory from /proc/meminfo
 	TotalBytes uint64
+	// Whether NUMA is enabled/available on this system
+	NUMAEnabled bool
+	// Whether automatic NUMA balancing is available (from /proc/sys/kernel/numa_balancing)
+	NUMABalancingAvailable bool
 	// NUMA configuration from /sys/devices/system/node/
 	NUMANodes []NUMANode
 }
@@ -481,6 +485,10 @@ type NUMANode struct {
 	NodeID     int32
 	TotalBytes uint64
 	CPUs       []int32 // CPU cores in this NUMA node
+	// Distance to other nodes (from /sys/devices/system/node/node*/distance)
+	// Index corresponds to target node ID, value is relative distance
+	// Lower is better, typically 10 for local, 20+ for remote nodes
+	Distances []int32
 }
 
 // DiskInfo represents disk hardware configuration
