@@ -2,6 +2,24 @@
 
 Component that connects your infrastructure to the [Antimetal](https://antimetal.com) platform.
 
+## Features
+
+- **Kubernetes Resource Monitoring**: Real-time collection of Kubernetes resources via controller-runtime
+- **System Performance Monitoring**: Comprehensive system metrics including CPU, memory, disk, and network
+- **Container Resource Monitoring**: Per-container CPU and memory metrics with throttling and pressure detection
+- **eBPF-based Observability**: Kernel-level insights with CO-RE support for cross-kernel compatibility
+- **Multi-Cloud Support**: Works with EKS, GKE, AKS, and self-managed Kubernetes clusters
+- **Efficient Data Storage**: BadgerDB-backed resource state tracking with event-driven updates
+- **gRPC Streaming**: Efficient data upload to Antimetal platform with automatic retry and recovery
+
+### Container Monitoring Capabilities
+
+- **CPU Throttling Detection**: Identify containers hitting CPU limits
+- **Memory Pressure Analysis**: Detect containers approaching OOM conditions  
+- **Resource Contention**: Find "noisy neighbor" containers affecting others
+- **Multi-Runtime Support**: Works with Docker, containerd, and CRI-O
+- **Cgroup v1 and v2**: Compatible with both cgroup hierarchies
+
 ## Contributing
 
 If you want to contribute, refer to our [DEVELOPING](./DEVELOPING.md) docs.
