@@ -20,7 +20,7 @@ import (
 )
 
 func init() {
-	performance.Register(performance.MetricTypeMemoryInfo, performance.PartialNewOnceContinuousCollector(
+	performance.TryRegister(performance.MetricTypeMemoryInfo, performance.PartialNewOnceContinuousCollector(
 		func(logger logr.Logger, config performance.CollectionConfig) (performance.PointCollector, error) {
 			return NewMemoryInfoCollector(logger, config)
 		},

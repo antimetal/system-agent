@@ -331,3 +331,10 @@ func (c *ExecSnoopCollector) ParseEvent(data []byte) (*ExecEvent, error) {
 
 	return event, nil
 }
+
+// NOTE: ExecSnoopCollector is not automatically registered via init() because:
+// 1. It requires eBPF capabilities that may not be available
+// 2. It needs a BPF object file path that should be configured
+// 3. It's a specialized collector that overlaps with ProcessCollector
+// 
+// To use ExecSnoopCollector, instantiate it directly with NewExecSnoopCollector
