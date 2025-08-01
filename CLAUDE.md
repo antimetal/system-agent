@@ -602,6 +602,104 @@ func (c *MyCollector) runCollection(ctx context.Context) {
 
 This pattern ensures collectors integrate well with Kubernetes controllers and other lifecycle management systems while providing fine-grained control when needed.
 
+## Container Resource Monitoring
+
+### Overview
+
+The system agent includes collectors for monitoring container resource usage via cgroups, providing visibility into CPU throttling, memory pressure, and resource contention between containers.
+
+### Cgroup Collectors
+
+#### Cgroup CPU Collector (`MetricTypeCgroupCPU`)
+- Monitors CPU usage and throttling per container
+- Reads from cgroup cpu and cpuacct controllers
+- Detects CPU resource contention between containers
+- Tracks throttling events to identify CPU limits being hit
+- Supports both cgroup v1 and v2
+
+#### Cgroup Memory Collector (`MetricTypeCgroupMemory`)
+- Tracks memory usage, limits, and pressure
+- Monitors for OOM events and memory failures
+- Provides detailed memory breakdown (RSS, cache, swap)
+- Identifies containers approaching memory limits
+- Supports both cgroup v1 and v2
+
+### Container Discovery
+
+The agent automatically discovers containers through:
+- Docker containers in `/sys/fs/cgroup/*/docker/`
+- containerd containers in `/sys/fs/cgroup/*/containerd/`
+- CRI-O containers in `/sys/fs/cgroup/*/crio/`
+- Kubernetes pods in `/sys/fs/cgroup/kubepods.slice/`
+- systemd-managed containers in `system.slice`
+
+### Configuration
+
+```go
+// Set cgroup path in CollectionConfig
+config := performance.CollectionConfig{
+    HostCgroupPath: "/sys/fs/cgroup", // Default
+}
+
+// Or use environment variable
+export HOST_CGROUP=/host/sys/fs/cgroup
+```
+
+### Deployment Requirements
+
+For container monitoring in Kubernetes:
+
+```yaml
+spec:
+  containers:
+  - name: antimetal-agent
+    securityContext:
+      privileged: false  # Not required for cgroup monitoring
+      readOnlyRootFilesystem: true
+    volumeMounts:
+    - name: cgroup
+      mountPath: /host/sys/fs/cgroup
+      readOnly: true
+    env:
+    - name: HOST_CGROUP
+      value: /host/sys/fs/cgroup
+  volumes:
+  - name: cgroup
+    hostPath:
+      path: /sys/fs/cgroup
+      type: Directory
+```
+
+### Metrics Collected
+
+**CPU Metrics:**
+- `UsageNanos`: Total CPU time consumed
+- `NrPeriods`: Number of enforcement periods
+- `NrThrottled`: Number of times throttled
+- `ThrottledTime`: Total time throttled
+- `CpuShares`: Relative CPU weight
+- `CpuQuotaUs`: CPU quota per period
+- `ThrottlePercent`: Percentage of periods throttled
+
+**Memory Metrics:**
+- `RSS`: Resident set size (active memory)
+- `Cache`: Page cache memory
+- `ActiveAnon`/`InactiveAnon`: Anonymous memory breakdown
+- `ActiveFile`/`InactiveFile`: File cache breakdown
+- `LimitBytes`: Memory limit
+- `UsageBytes`: Current usage
+- `FailCount`: Times limit was hit
+- `OOMKillCount`: Number of OOM kills
+- `UsagePercent`: Usage as percentage of limit
+
+### Use Cases
+
+1. **CPU Throttling Detection**: Identify containers hitting CPU limits
+2. **Memory Pressure Analysis**: Detect containers approaching OOM
+3. **Resource Contention**: Find "noisy neighbor" containers
+4. **Right-sizing**: Optimize resource requests and limits
+5. **Cost Optimization**: Identify over-provisioned containers
+
 ## Resource Store Architecture
 
 ### BadgerDB Integration
