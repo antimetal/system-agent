@@ -217,11 +217,10 @@ func NewXCollector(logger logr.Logger, config performance.CollectionConfig) (*XC
     
     // 2. Define capabilities
     capabilities := performance.CollectorCapabilities{
-        SupportsOneShot:    true,
-        SupportsContinuous: false,
-        RequiresRoot:       false,
-        RequiresEBPF:       false,
-        MinKernelVersion:   "2.6.0",
+        SupportsOneShot:      true,
+        SupportsContinuous:   false,
+        RequiredCapabilities: nil, // No special capabilities required
+        MinKernelVersion:     "2.6.0",
     }
     
     // 3. Return collector with pre-computed paths
@@ -251,13 +250,44 @@ type BaseCollector struct {
 ```
 
 #### Capabilities System
+The collector capabilities system provides granular Linux kernel capability requirements for collectors:
+
 ```go
 type CollectorCapabilities struct {
-    SupportsOneShot    bool
-    SupportsContinuous bool
-    RequiresRoot       bool
-    RequiresEBPF       bool
-    MinKernelVersion   string
+    SupportsOneShot      bool
+    SupportsContinuous   bool
+    RequiredCapabilities []capabilities.Capability
+    MinKernelVersion     string
+}
+
+// Check if collector can run with current process capabilities
+func (c CollectorCapabilities) CanRun() (bool, []capabilities.Capability, error)
+```
+
+**Available Linux Capabilities:**
+- `CAP_SYS_ADMIN`: Required for eBPF on older kernels, tracepoints
+- `CAP_SYSLOG`: Required for /dev/kmsg access (kernel messages)
+- `CAP_PERFMON`: Required for eBPF performance monitoring (kernel 5.8+)
+- `CAP_BPF`: Required for eBPF programs (kernel 5.8+)
+
+**Collector Capability Examples:**
+```go
+// No capabilities required (most collectors)
+RequiredCapabilities: nil
+
+// Kernel message collector  
+RequiredCapabilities: []capabilities.Capability{capabilities.CAP_SYSLOG}
+
+// eBPF collector
+RequiredCapabilities: append(capabilities.GetEBPFCapabilities(), capabilities.CAP_SYSLOG)
+```
+
+**Runtime Capability Checking:**
+```go
+capabilities := collector.Capabilities()
+canRun, missing, err := capabilities.CanRun()
+if !canRun {
+    log.Warn("Collector cannot run, missing capabilities", "missing", missing)
 }
 ```
 
