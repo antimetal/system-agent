@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-    paths: 
+    paths:
       - 'pkg/performance/collectors/**'
       - 'pkg/performance/types.go'
       - 'tools/collector-bench/**'
@@ -14,7 +14,7 @@ on:
   pull_request:
     paths:
       - 'pkg/performance/collectors/**'
-      - 'pkg/performance/types.go' 
+      - 'pkg/performance/types.go'
       - 'tools/collector-bench/**'
       - 'ebpf/include/**'
       - 'ebpf/src/**'
@@ -25,7 +25,7 @@ jobs:
   test-real-hardware:
     name: Test on ${{ matrix.runner-name }}
     runs-on: ${{ matrix.os }}
-    
+
     strategy:
       fail-fast: false
       matrix:
@@ -33,10 +33,10 @@ jobs:
           # Linux runners
           - os: ubuntu-latest
             runner-name: "Ubuntu Latest (x86_64)"
-            
+
           - os: ubuntu-22.04
             runner-name: "Ubuntu 22.04 (x86_64)"
-            
+
           # ARM64 Linux runner (commented out - not available for public repos)
           # - os: ubuntu-latest-arm64
           #   runner-name: "Ubuntu ARM64"
@@ -45,12 +45,29 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
         go-version: '1.21'
-        
+
+    - name: Install build dependencies
+      run: |
+        echo "Installing build dependencies for Linux..."
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq \
+          clang \
+          llvm \
+          libbpf-dev \
+          linux-tools-common \
+          linux-tools-generic \
+          linux-tools-$(uname -r) || true
+        # Try to install bpftool
+        if ! command -v bpftool &> /dev/null; then
+          echo "bpftool not found in linux-tools, trying direct install..."
+          sudo apt-get install -y -qq bpftool || echo "::warning::bpftool not available via apt"
+        fi
+
     - name: System hardware discovery
       run: |
         echo "::group::System Information"
@@ -61,7 +78,7 @@ jobs:
         echo "Hostname: $(hostname)"
         echo "Date: $(date)"
         echo "::endgroup::"
-        
+
         echo "::group::CPU Information"
         echo "✓ /proc/cpuinfo exists"
         echo "CPU cores detected: $(nproc)"
@@ -71,13 +88,13 @@ jobs:
         echo "CPU flags summary:"
         grep -m1 "^flags" /proc/cpuinfo || echo "No flags found"
         echo "::endgroup::"
-        
+
         echo "::group::Memory Information"
         echo "✓ /proc/meminfo exists"
         echo "Memory summary:"
         cat /proc/meminfo | head -20
         echo "::endgroup::"
-        
+
         echo "::group::NUMA Topology"
         if command -v numactl >/dev/null 2>&1; then
           echo "✓ numactl available"
@@ -85,7 +102,7 @@ jobs:
         else
           echo "❌ numactl not available"
         fi
-        
+
         echo "✓ /sys/devices/system/node exists"
         echo "NUMA nodes: $(ls /sys/devices/system/node/node* 2>/dev/null | wc -l)"
         for node in /sys/devices/system/node/node*; do
@@ -94,7 +111,7 @@ jobs:
           fi
         done
         echo "::endgroup::"
-        
+
         echo "::group::Block Devices"
         echo "✓ /sys/block exists"
         echo "Block devices found: $(ls /sys/block 2>/dev/null | wc -l)"
@@ -111,7 +128,7 @@ jobs:
           fi
         done
         echo "::endgroup::"
-        
+
         echo "::group::Network Interfaces"
         echo "✓ /sys/class/net exists"
         echo "Network interfaces found: $(ls /sys/class/net 2>/dev/null | wc -l)"
@@ -124,64 +141,64 @@ jobs:
           fi
         done
         echo "::endgroup::"
-        
+
     - name: Generate eBPF types
       run: |
         echo "Building ebpf-typegen tool..."
         make ebpf-typegen
         echo "Generating eBPF types from C headers..."
         make generate-ebpf-types
-        
+
     - name: Run collector unit tests
       run: |
         echo "Running collector unit tests on Linux..."
         go test ./pkg/performance/collectors -v -timeout 60s
-        
+
     - name: Test benchmark tool execution
       run: |
         cd tools/collector-bench
         echo "Building benchmark tool..."
         go build -o collector-bench main.go
-        
+
         echo "Testing benchmark tool execution on Linux..."
         ./collector-bench -show-data -verbose
-        
+
     - name: Test cross-compilation
       run: |
         echo "Testing cross-compilation for various architectures..."
         mkdir -p dist
-        
+
         echo "Building for Linux amd64..."
         GOOS=linux GOARCH=amd64 go build -o dist/collector-bench-linux-amd64 tools/collector-bench/main.go
-        
+
         echo "Building for Linux arm64..."
         GOOS=linux GOARCH=arm64 go build -o dist/collector-bench-linux-arm64 tools/collector-bench/main.go
-        
+
         echo "Building for Linux arm..."
         GOOS=linux GOARCH=arm go build -o dist/collector-bench-linux-arm tools/collector-bench/main.go
-        
+
         echo "Verifying built binaries..."
         ls -la dist/
         file dist/* || echo "file command not available"
-        
+
     - name: Collect hardware samples
       run: |
         echo "Collecting hardware samples from ${{ matrix.runner-name }}..."
-        
+
         # Create testdata directory if it doesn't exist
         mkdir -p pkg/performance/collectors/testdata
-        
+
         # Collect basic hardware info for potential future test cases
         OUTPUT_NAME="github-${{ matrix.os }}-runner"
-        
+
         # CPU info
         cp /proc/cpuinfo "pkg/performance/collectors/testdata/${OUTPUT_NAME}.cpuinfo"
         echo "✓ Saved CPU info"
-        
-        # Memory info  
+
+        # Memory info
         cp /proc/meminfo "pkg/performance/collectors/testdata/${OUTPUT_NAME}.meminfo"
         echo "✓ Saved memory info"
-        
+
         # Create summary
         {
           echo "=== GitHub Runner Hardware Sample ==="
@@ -193,10 +210,10 @@ jobs:
           echo "CPU model: $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | xargs)"
           echo "Total memory: $(grep MemTotal /proc/meminfo | awk '{print $2 " " $3}')"
         } > "pkg/performance/collectors/testdata/${OUTPUT_NAME}.summary"
-        
+
         echo "Generated test data files:"
         ls -la pkg/performance/collectors/testdata/github-* 2>/dev/null || echo "No sample files generated"
-        
+
     - name: Upload hardware samples
       uses: actions/upload-artifact@v4
       with:
@@ -207,7 +224,7 @@ jobs:
           pkg/performance/collectors/testdata/github-*.summary
         retention-days: 30
         if-no-files-found: warn
-        
+
     - name: Upload benchmark binaries
       uses: actions/upload-artifact@v4
       with:
@@ -223,7 +240,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: test-real-hardware
     if: always()
-    
+
     steps:
     - name: Download hardware samples
       uses: actions/download-artifact@v4
@@ -231,7 +248,7 @@ jobs:
         pattern: hardware-samples-*
         merge-multiple: true
         path: hardware-samples/
-        
+
     - name: Generate test summary
       run: |
         echo "# Hardware Collector Test Results" >> $GITHUB_STEP_SUMMARY
@@ -245,7 +262,7 @@ jobs:
         echo "| Ubuntu 20.04 | ✅ Pass | ${{ needs.test-real-hardware.result }} |" >> $GITHUB_STEP_SUMMARY
         echo "| Ubuntu ARM64 | ✅ Pass | ${{ needs.test-real-hardware.result }} |" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        
+
         echo "## Hardware Samples Collected" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         if [ -d "hardware-samples" ]; then
@@ -257,7 +274,7 @@ jobs:
         else
           echo "No hardware samples were collected." >> $GITHUB_STEP_SUMMARY
         fi
-        
+
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "## Linux Platform Testing" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY

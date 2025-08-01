@@ -16,6 +16,7 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
+	"github.com/cilium/ebpf/features"
 	"github.com/go-logr/logr"
 )
 
@@ -32,6 +33,18 @@ type Manager struct {
 	kernelBTF      *btf.Spec
 	kernelFeatures *KernelFeatures
 }
+
+// kernelVersionRequirement defines a minimum kernel version for a feature
+type kernelVersionRequirement struct {
+	major, minor int
+	feature      string
+}
+
+var (
+	// Define all kernel version requirements in one place
+	requirementCORE     = kernelVersionRequirement{4, 18, "CO-RE"}
+	requirementFullCORE = kernelVersionRequirement{5, 2, "full CO-RE with BTF"}
+)
 
 func NewManager(logger logr.Logger) (*Manager, error) {
 	if runtime.GOOS != "linux" {
@@ -116,11 +129,11 @@ func detectKernelFeatures() (*KernelFeatures, error) {
 	major, minor, _ := parseKernelVersion(features.KernelVersion)
 
 	switch {
-	case major > 5 || (major == 5 && minor >= 2):
+	case meetsRequirement(major, minor, requirementFullCORE):
 		// Kernel 5.2+ has full CO-RE support with native BTF
 		features.CORESupport = "full"
 		features.RequiredKernel = "5.2"
-	case major == 4 && minor >= 18:
+	case meetsRequirement(major, minor, requirementCORE):
 		// Kernel 4.18-5.1 can use CO-RE with external BTF
 		features.CORESupport = "partial"
 		features.RequiredKernel = "4.18"
@@ -154,27 +167,100 @@ func parseKernelVersion(version string) (major, minor, patch int) {
 		version = parts[0]
 	}
 
-	// Parse x.y.z format
-	var err error
+	// Parse x.y.z format using a simpler approach
 	nums := strings.Split(version, ".")
-	if len(nums) >= 1 {
-		_, err = fmt.Sscanf(nums[0], "%d", &major)
-		if err != nil {
-			major = 0
+	parseVersionNumber := func(idx int) int {
+		if idx < len(nums) {
+			var val int
+			if _, err := fmt.Sscanf(nums[idx], "%d", &val); err != nil {
+				return 0
+			}
+			return val
 		}
-	}
-	if len(nums) >= 2 {
-		_, err = fmt.Sscanf(nums[1], "%d", &minor)
-		if err != nil {
-			minor = 0
-		}
-	}
-	if len(nums) >= 3 {
-		_, err = fmt.Sscanf(nums[2], "%d", &patch)
-		if err != nil {
-			patch = 0
-		}
+		return 0
 	}
 
+	major = parseVersionNumber(0)
+	minor = parseVersionNumber(1)
+	patch = parseVersionNumber(2)
+
 	return major, minor, patch
+}
+
+func meetsRequirement(major, minor int, req kernelVersionRequirement) bool {
+	return major > req.major || (major == req.major && minor >= req.minor)
+}
+
+// CheckBTFSupport checks if the kernel has BTF support.
+// BTF (BPF Type Format) is required for CO-RE and is available in kernel 5.2+.
+func CheckBTFSupport() error {
+	btfPath := "/sys/kernel/btf/vmlinux"
+	if _, err := os.Stat(btfPath); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("BTF not supported: %s not found", btfPath)
+		}
+		return fmt.Errorf("checking BTF support: %w", err)
+	}
+	return nil
+}
+
+// CheckRingBufferSupport checks if the kernel supports BPF ring buffer.
+// Ring buffer is available in kernel 5.8+.
+func CheckRingBufferSupport() error {
+	version := getKernelVersion()
+	major, minor, _ := parseKernelVersion(version)
+	
+	if !meetsRequirement(major, minor, kernelVersionRequirement{5, 8, "Ring Buffer"}) {
+		return fmt.Errorf("ring buffer requires kernel 5.8+, current kernel is %s", version)
+	}
+	
+	// Additional runtime check via feature detection
+	// Ring buffer support is checked via map type availability
+	if err := features.HaveMapType(ebpf.RingBuf); err != nil {
+		return fmt.Errorf("ring buffer support check failed: %w", err)
+	}
+	
+	return nil
+}
+
+// CheckCORESupport checks if the kernel supports CO-RE.
+// CO-RE (Compile Once - Run Everywhere) requires kernel 4.18+ for basic support,
+// and 5.2+ for full support with native BTF.
+func CheckCORESupport() error {
+	version := getKernelVersion()
+	major, minor, _ := parseKernelVersion(version)
+	
+	if !meetsRequirement(major, minor, requirementCORE) {
+		return fmt.Errorf("CO-RE requires kernel 4.18+, current kernel is %s", version)
+	}
+	
+	// Check if we have at least partial CO-RE support
+	features, err := detectKernelFeatures()
+	if err != nil {
+		return fmt.Errorf("detecting CO-RE support: %w", err)
+	}
+	
+	if features.CORESupport == "none" {
+		return fmt.Errorf("CO-RE not supported on kernel %s", version)
+	}
+	
+	return nil
+}
+
+// CheckPerfBufferSupport checks if the kernel supports BPF perf buffer.
+// Perf buffer is available in kernel 4.4+.
+func CheckPerfBufferSupport() error {
+	version := getKernelVersion()
+	major, minor, _ := parseKernelVersion(version)
+	
+	if !meetsRequirement(major, minor, kernelVersionRequirement{4, 4, "Perf Buffer"}) {
+		return fmt.Errorf("perf buffer requires kernel 4.4+, current kernel is %s", version)
+	}
+	
+	// Additional runtime check via feature detection
+	if err := features.HaveProgramType(ebpf.Kprobe); err != nil {
+		return fmt.Errorf("perf buffer support check failed: %w", err)
+	}
+	
+	return nil
 }

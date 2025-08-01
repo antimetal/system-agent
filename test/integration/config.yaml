@@ -1,0 +1,211 @@
+# Kernel Integration Test Configuration
+# This file defines expected features and capabilities for different kernel versions
+
+kernel_versions:
+  - version: "4.18"
+    expected_features:
+      co_re: partial         # CO-RE works with external BTF
+      btf: external          # Requires BTF from btfhub
+      ring_buffer: false     # Not available until 5.8
+      perf_buffer: true      # Available since 4.3
+      bpf_helpers:
+        - bpf_probe_read
+        - bpf_probe_read_str
+        - bpf_get_current_pid_tgid
+        - bpf_get_current_comm
+      collectors:
+        all_basic: true      # Load, Memory, CPU, Network, Disk
+        ebpf_based: false    # eBPF collectors not fully supported
+    notes: "Minimum kernel for CO-RE support"
+
+  - version: "5.2"
+    expected_features:
+      co_re: full           # Full CO-RE with native BTF
+      btf: native           # Native BTF in /sys/kernel/btf/vmlinux
+      ring_buffer: false    # Not available until 5.8
+      perf_buffer: true
+      bpf_helpers:
+        - bpf_probe_read
+        - bpf_probe_read_str
+        - bpf_get_current_pid_tgid
+        - bpf_get_current_comm
+        - bpf_probe_read_kernel  # New in 5.5
+        - bpf_probe_read_user    # New in 5.5
+      collectors:
+        all_basic: true
+        ebpf_based: partial  # Some eBPF collectors work
+    notes: "First kernel with native BTF support"
+
+  - version: "5.4"
+    expected_features:
+      co_re: full
+      btf: native
+      ring_buffer: false
+      perf_buffer: true
+      psi: true             # Pressure Stall Information
+      cgroup_v2: true       # Better cgroup v2 support
+      bpf_helpers:
+        - bpf_probe_read
+        - bpf_probe_read_str
+        - bpf_probe_read_kernel
+        - bpf_probe_read_user
+        - bpf_get_current_pid_tgid
+        - bpf_get_current_comm
+      collectors:
+        all_basic: true
+        ebpf_based: partial
+    notes: "Ubuntu 20.04 LTS kernel"
+
+  - version: "5.8"
+    expected_features:
+      co_re: full
+      btf: native
+      ring_buffer: true     # BPF ring buffer introduced
+      perf_buffer: true
+      psi: true
+      cgroup_v2: true
+      bpf_helpers:
+        - bpf_probe_read
+        - bpf_probe_read_str
+        - bpf_probe_read_kernel
+        - bpf_probe_read_user
+        - bpf_get_current_pid_tgid
+        - bpf_get_current_comm
+        - bpf_ringbuf_reserve    # New ring buffer helpers
+        - bpf_ringbuf_submit
+        - bpf_ringbuf_discard
+      collectors:
+        all_basic: true
+        ebpf_based: true    # Full eBPF collector support
+    notes: "First kernel with BPF ring buffer support"
+
+  - version: "5.15"
+    expected_features:
+      co_re: full
+      btf: native
+      ring_buffer: true
+      perf_buffer: true
+      psi: true
+      cgroup_v2: true
+      btf_func: true        # BTF for kernel functions
+      bpf_helpers:
+        - bpf_probe_read
+        - bpf_probe_read_str
+        - bpf_probe_read_kernel
+        - bpf_probe_read_user
+        - bpf_get_current_pid_tgid
+        - bpf_get_current_comm
+        - bpf_ringbuf_reserve
+        - bpf_ringbuf_submit
+        - bpf_ringbuf_discard
+        - bpf_get_func_ip       # New in 5.15
+      collectors:
+        all_basic: true
+        ebpf_based: true
+    notes: "Ubuntu 22.04 LTS kernel, excellent eBPF support"
+
+  - version: "6.1"
+    expected_features:
+      co_re: full
+      btf: native
+      ring_buffer: true
+      perf_buffer: true
+      psi: true
+      cgroup_v2: true
+      btf_func: true
+      bpf_cookie: true      # BPF cookie support
+      collectors:
+        all_basic: true
+        ebpf_based: true
+    notes: "LTS kernel with advanced eBPF features"
+
+  - version: "6.6"
+    expected_features:
+      co_re: full
+      btf: native
+      ring_buffer: true
+      perf_buffer: true
+      psi: true
+      cgroup_v2: true
+      btf_func: true
+      bpf_cookie: true
+      multi_attach: true    # Multi-attach for kprobes
+      collectors:
+        all_basic: true
+        ebpf_based: true
+    notes: "Latest LTS kernel with cutting-edge eBPF features"
+
+# Test configuration
+test_config:
+  # Timeout for individual tests
+  test_timeout: "2m"
+  
+  # Number of data points to collect for continuous collectors
+  continuous_collection_points: 3
+  
+  # Interval between collections for continuous collectors
+  collection_interval: "500ms"
+  
+  # Whether to run stress tests
+  enable_stress_tests: false
+  
+  # Log verbosity (0-5, higher is more verbose)
+  log_verbosity: 2
+
+# Collector-specific configuration
+collectors:
+  load:
+    min_kernel: "2.6.0"
+    proc_files:
+      - "/proc/loadavg"
+  
+  memory:
+    min_kernel: "2.6.0"
+    proc_files:
+      - "/proc/meminfo"
+  
+  cpu:
+    min_kernel: "2.6.0"
+    proc_files:
+      - "/proc/stat"
+  
+  network:
+    min_kernel: "2.6.0"
+    proc_files:
+      - "/proc/net/dev"
+    sys_files:
+      - "/sys/class/net"
+  
+  disk:
+    min_kernel: "2.6.0"
+    proc_files:
+      - "/proc/diskstats"
+  
+  process:
+    min_kernel: "2.6.0"
+    proc_files:
+      - "/proc/[pid]/stat"
+      - "/proc/[pid]/status"
+      - "/proc/[pid]/io"
+  
+  numa:
+    min_kernel: "2.6.0"
+    sys_files:
+      - "/sys/devices/system/node"
+
+# eBPF-specific tests
+ebpf_tests:
+  - name: "execsnoop"
+    min_kernel: "5.8.0"
+    requires_root: true
+    description: "Process execution monitoring"
+    
+  - name: "opensnoop"
+    min_kernel: "4.18.0"
+    requires_root: true
+    description: "File open monitoring"
+    
+  - name: "tcpconnect"
+    min_kernel: "4.18.0"
+    requires_root: true
+    description: "TCP connection monitoring"

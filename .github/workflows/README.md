@@ -7,19 +7,30 @@ This directory contains GitHub Actions workflows for the Antimetal System Agent 
 ### 1. Linear Sync (`linear-sync.yml`)
 Synchronizes GitHub issues with Linear tasks.
 - **Triggers**: When issues are opened, closed, or reopened
-- **Actions**: 
+- **Actions**:
   - Creates Linear issues when GitHub issues are opened
   - Updates Linear issue status when GitHub issues are closed/reopened
 
-### 2. Claude Code Review (`claude-code-review.yml`)
-Provides AI-powered code review using Claude on pull requests.
-- **Triggers**: Pull request events (opened, synchronize)
-- **Actions**: Reviews code changes and provides feedback
-
-### 3. Claude Code (`claude.yml`)
+### 2. Claude Code (`claude.yml`)
 Responds to mentions of Claude in issue comments.
 - **Triggers**: Issue comments containing "@claude"
 - **Actions**: Processes requests and provides assistance
+
+### 3. eBPF VM Verifier Tests (`ebpf-vm-verifier-tests.yml`)
+Tests eBPF programs across multiple kernel versions using VMs to ensure kernel verifier compatibility.
+- **Triggers**:
+  - Pull requests modifying eBPF code
+  - Pushes to main branch with eBPF changes
+  - Manual workflow dispatch
+- **Actions**:
+  - Builds eBPF programs with CO-RE support
+  - Tests loading on kernels 5.10, 5.15, 6.1, and 6.6
+  - Uses Cilium's LVH (Little VM Helper) for VM management
+
+### 4. Hardware Collector Real Hardware Tests (`hardware-collector-tests.yml`)
+Tests hardware collectors on real hardware configurations.
+- **Triggers**: Changes to hardware-related collectors
+- **Actions**: Validates hardware detection and data collection
 
 ## Testing Workflows Locally
 
@@ -29,7 +40,7 @@ Responds to mentions of Claude in issue comments.
    ```bash
    # macOS
    brew install act
-   
+
    # Linux
    curl https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash
    ```
@@ -42,7 +53,7 @@ Responds to mentions of Claude in issue comments.
    ```bash
    # Copy from example
    cp .secrets.example .secrets
-   
+
    # Edit and add your tokens
    vim .secrets
    ```
@@ -86,18 +97,6 @@ act issues -j create-linear-issue \
 EOF
 ```
 
-#### Test Claude Code Review
-
-```bash
-# Test PR review
-act pull_request -j claude-review \
-  --secret-file .secrets \
-  -e test-events/pull-request.json
-
-# Dry run (see what would execute)
-act pull_request -j claude-review --dryrun
-```
-
 #### Test Claude Code (Issue Comments)
 
 ```bash
@@ -117,7 +116,6 @@ make test-actions
 
 # Test specific workflows
 make test-linear-sync
-make test-claude-review
 
 # Dry run (see what would execute)
 make test-actions-dry

@@ -41,7 +41,7 @@ CFLAGS := -g -O2 -Wall -target bpf -D__TARGET_ARCH_$(ARCH) \
 	-fdebug-types-section -fno-stack-protector
 
 # eBPF programs
-BPF_PROGS := execsnoop
+BPF_PROGS := execsnoop test_core
 
 # Build all eBPF programs
 .PHONY: all
