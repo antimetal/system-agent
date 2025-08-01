@@ -1,0 +1,71 @@
+#!/bin/bash
+# Git post-checkout hook to set up Claude configuration for new worktrees
+
+# Arguments passed by git (though we don't use them for worktree detection):
+# $1 = previous HEAD ref
+# $2 = new HEAD ref  
+# $3 = flag indicating checkout type (1 = branch checkout, 0 = file checkout)
+
+# Check if we're in a worktree by comparing git dir with work tree
+GIT_DIR=$(git rev-parse --git-dir)
+WORK_TREE=$(git rev-parse --show-toplevel)
+
+# If .git is a file (not a directory), we're in a worktree
+if [ ! -d "$WORK_TREE/.git" ] || [[ "$GIT_DIR" == *"/.git/worktrees/"* ]]; then
+    # We're in a worktree, find the main repo root
+    if [[ "$GIT_DIR" == *"/.git/worktrees/"* ]]; then
+        # Extract main repo path from the .git/worktrees path
+        # /path/to/repo/.git/worktrees/name -> /path/to/repo
+        MAIN_REPO_ROOT=$(echo "$GIT_DIR" | sed 's|/.git/worktrees/.*||')
+    else
+        # Fallback method
+        MAIN_REPO_ROOT=$(git rev-parse --show-superproject-working-tree)
+        if [ -z "$MAIN_REPO_ROOT" ]; then
+            # Another fallback: follow the gitdir file
+            MAIN_REPO_ROOT=$(dirname "$(dirname "$GIT_DIR")")
+        fi
+    fi
+else
+    # We're in the main repo, not a worktree
+    exit 0
+fi
+
+echo "🔧 Setting up Claude configuration for worktree..."
+
+MAIN_CLAUDE_DIR="$MAIN_REPO_ROOT/.claude"
+WORKTREE_ROOT="$(git rev-parse --show-toplevel)"
+WORKTREE_CLAUDE_DIR="$WORKTREE_ROOT/.claude"
+
+# Ensure .claude directory exists in worktree (it should from git checkout)
+if [ ! -d "$WORKTREE_CLAUDE_DIR" ]; then
+    mkdir -p "$WORKTREE_CLAUDE_DIR"
+    echo "  ✓ Created .claude directory in worktree"
+fi
+
+# Symlink personal settings file if it exists in main repo
+if [ -f "$MAIN_CLAUDE_DIR/settings.local.json" ] && [ ! -e "$WORKTREE_CLAUDE_DIR/settings.local.json" ]; then
+    ln -sf "$MAIN_CLAUDE_DIR/settings.local.json" "$WORKTREE_CLAUDE_DIR/settings.local.json"
+    echo "  ✓ Linked personal settings: $WORKTREE_CLAUDE_DIR/settings.local.json -> $MAIN_CLAUDE_DIR/settings.local.json"
+fi
+
+# Symlink personal Claude files that should be shared across worktrees
+if [ -f "$MAIN_REPO_ROOT/CLAUDE.local.md" ] && [ ! -e "$WORKTREE_ROOT/CLAUDE.local.md" ]; then
+    ln -sf "$MAIN_REPO_ROOT/CLAUDE.local.md" "$WORKTREE_ROOT/CLAUDE.local.md"
+    echo "  ✓ Linked CLAUDE.local.md -> $MAIN_REPO_ROOT/CLAUDE.local.md"
+fi
+
+# Copy any other git-ignored Claude context files
+for file in CLAUDE.*.local.md .claude.*.md; do
+    if [ -f "$MAIN_REPO_ROOT/$file" ] && [ ! -f "$WORKTREE_ROOT/$file" ]; then
+        cp "$MAIN_REPO_ROOT/$file" "$WORKTREE_ROOT/"
+        echo "  ✓ Copied $file"
+    fi
+done
+
+# Copy any scratch pad or notes directories that might be git-ignored
+if [ -d "$MAIN_REPO_ROOT/.claude-scratch" ] && [ ! -d "$WORKTREE_ROOT/.claude-scratch" ]; then
+    cp -r "$MAIN_REPO_ROOT/.claude-scratch" "$WORKTREE_ROOT/"
+    echo "  ✓ Copied .claude-scratch directory"
+fi
+
+echo "✅ Claude configuration setup complete for worktree"
