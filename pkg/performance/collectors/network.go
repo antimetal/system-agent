@@ -42,7 +42,7 @@ type NetworkCollector struct {
 var _ performance.Collector = (*NetworkCollector)(nil)
 
 func init() {
-	performance.Register(performance.MetricTypeNetwork, performance.PartialNewContinuousPointCollector(
+	performance.TryRegister(performance.MetricTypeNetwork, performance.PartialNewContinuousPointCollector(
 		func(logger logr.Logger, config performance.CollectionConfig) (performance.PointCollector, error) {
 			return NewNetworkCollector(logger, config)
 		},

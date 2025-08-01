@@ -20,7 +20,7 @@ import (
 )
 
 func init() {
-	performance.Register(performance.MetricTypeTCP, performance.PartialNewContinuousPointCollector(
+	performance.TryRegister(performance.MetricTypeTCP, performance.PartialNewContinuousPointCollector(
 		func(logger logr.Logger, config performance.CollectionConfig) (performance.PointCollector, error) {
 			return NewTCPCollector(logger, config)
 		},

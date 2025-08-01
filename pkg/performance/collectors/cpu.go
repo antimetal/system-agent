@@ -19,7 +19,7 @@ import (
 )
 
 func init() {
-	performance.Register(performance.MetricTypeCPU, performance.PartialNewContinuousPointCollector(
+	performance.TryRegister(performance.MetricTypeCPU, performance.PartialNewContinuousPointCollector(
 		func(logger logr.Logger, config performance.CollectionConfig) (performance.PointCollector, error) {
 			return NewCPUCollector(logger, config)
 		},

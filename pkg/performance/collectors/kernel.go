@@ -25,7 +25,7 @@ import (
 )
 
 func init() {
-	performance.Register(performance.MetricTypeKernel,
+	performance.TryRegister(performance.MetricTypeKernel,
 		func(logger logr.Logger, config performance.CollectionConfig) (performance.ContinuousCollector, error) {
 			return NewKernelCollector(logger, config)
 		},
