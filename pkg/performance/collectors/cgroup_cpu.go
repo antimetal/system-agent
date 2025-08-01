@@ -38,6 +38,7 @@ var _ performance.PointCollector = (*CgroupCPUCollector)(nil)
 type CgroupCPUCollector struct {
 	performance.BaseCollector
 	cgroupPath string
+	discovery  *ContainerDiscovery
 }
 
 // NewCgroupCPUCollector creates a new cgroup CPU collector
@@ -63,13 +64,14 @@ func NewCgroupCPUCollector(logger logr.Logger, config performance.CollectionConf
 			capabilities,
 		),
 		cgroupPath: config.HostCgroupPath,
+		discovery:  NewContainerDiscovery(config.HostCgroupPath),
 	}, nil
 }
 
 // Collect performs a one-shot collection of cgroup CPU statistics
 func (c *CgroupCPUCollector) Collect(ctx context.Context) (any, error) {
 	// Detect cgroup version
-	version, err := c.detectCgroupVersion()
+	version, err := c.discovery.DetectCgroupVersion()
 	if err != nil {
 		return nil, fmt.Errorf("failed to detect cgroup version: %w", err)
 	}
@@ -77,7 +79,7 @@ func (c *CgroupCPUCollector) Collect(ctx context.Context) (any, error) {
 	c.Logger().V(2).Info("Detected cgroup version", "version", version)
 
 	// Discover containers
-	containers, err := c.discoverContainers(version)
+	containers, err := c.discovery.DiscoverContainers("cpu", version)
 	if err != nil {
 		return nil, fmt.Errorf("failed to discover containers: %w", err)
 	}
@@ -99,157 +101,13 @@ func (c *CgroupCPUCollector) Collect(ctx context.Context) (any, error) {
 	return stats, nil
 }
 
-// containerPath represents a discovered container
-type containerPath struct {
-	ID         string
-	Runtime    string
-	CgroupPath string
-}
 
-// detectCgroupVersion determines if we're using cgroup v1 or v2
-func (c *CgroupCPUCollector) detectCgroupVersion() (int, error) {
-	// Check for cgroup v2 unified hierarchy
-	v2Marker := filepath.Join(c.cgroupPath, "cgroup.controllers")
-	if _, err := os.Stat(v2Marker); err == nil {
-		return 2, nil
-	}
 
-	// Check for cgroup v1 cpu controller
-	v1CPU := filepath.Join(c.cgroupPath, "cpu")
-	if _, err := os.Stat(v1CPU); err == nil {
-		return 1, nil
-	}
 
-	return 0, fmt.Errorf("unable to detect cgroup version at %s", c.cgroupPath)
-}
 
-// discoverContainers finds all containers by scanning cgroup directories
-func (c *CgroupCPUCollector) discoverContainers(version int) ([]containerPath, error) {
-	var containers []containerPath
-
-	if version == 1 {
-		// Cgroup v1: Look in cpu and cpuacct controllers
-		cpuPath := filepath.Join(c.cgroupPath, "cpu")
-		containers = append(containers, c.scanCgroupV1Directory(cpuPath)...)
-	} else {
-		// Cgroup v2: Scan unified hierarchy
-		containers = c.scanCgroupV2Directory(c.cgroupPath)
-	}
-
-	return containers, nil
-}
-
-// scanCgroupV1Directory scans a cgroup v1 controller directory for containers
-func (c *CgroupCPUCollector) scanCgroupV1Directory(basePath string) []containerPath {
-	var containers []containerPath
-	
-	// Common runtime paths to check
-	runtimePaths := map[string]string{
-		"docker":     filepath.Join(basePath, "docker"),
-		"containerd": filepath.Join(basePath, "containerd"),
-		"crio":       filepath.Join(basePath, "crio"),
-		"podman":     filepath.Join(basePath, "machine.slice"),
-	}
-
-	// Also check systemd slice format
-	systemdPath := filepath.Join(basePath, "system.slice")
-	if entries, err := os.ReadDir(systemdPath); err == nil {
-		for _, entry := range entries {
-			if entry.IsDir() && strings.HasPrefix(entry.Name(), "docker-") {
-				if id := extractContainerID(entry.Name()); id != "" {
-					containers = append(containers, containerPath{
-						ID:         id,
-						Runtime:    "docker",
-						CgroupPath: filepath.Join(systemdPath, entry.Name()),
-					})
-				}
-			}
-		}
-	}
-
-	// Check each runtime path
-	for runtime, path := range runtimePaths {
-		entries, err := os.ReadDir(path)
-		if err != nil {
-			continue
-		}
-
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				continue
-			}
-
-			// Extract container ID
-			id := entry.Name()
-			// Skip if it doesn't look like a container ID
-			if len(id) < 12 || !isHexString(id) {
-				continue
-			}
-
-			containers = append(containers, containerPath{
-				ID:         id,
-				Runtime:    runtime,
-				CgroupPath: filepath.Join(path, id),
-			})
-		}
-	}
-
-	return containers
-}
-
-// scanCgroupV2Directory scans a cgroup v2 unified hierarchy for containers
-func (c *CgroupCPUCollector) scanCgroupV2Directory(basePath string) []containerPath {
-	var containers []containerPath
-
-	// In cgroup v2, containers might be in various locations
-	// Check system.slice for systemd-managed containers
-	systemSlice := filepath.Join(basePath, "system.slice")
-	if entries, err := os.ReadDir(systemSlice); err == nil {
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				continue
-			}
-
-			// Look for patterns like docker-<id>.scope
-			if strings.HasPrefix(entry.Name(), "docker-") && strings.HasSuffix(entry.Name(), ".scope") {
-				if id := extractContainerID(entry.Name()); id != "" {
-					containers = append(containers, containerPath{
-						ID:         id,
-						Runtime:    "docker",
-						CgroupPath: filepath.Join(systemSlice, entry.Name()),
-					})
-				}
-			}
-		}
-	}
-
-	// Check for Kubernetes pods
-	kubepods := filepath.Join(basePath, "kubepods.slice")
-	if _, err := os.Stat(kubepods); err == nil {
-		// Walk through kubepods hierarchy
-		filepath.Walk(kubepods, func(path string, info os.FileInfo, err error) error {
-			if err != nil || !info.IsDir() {
-				return nil
-			}
-
-			// Look for container directories (usually long hex strings)
-			name := filepath.Base(path)
-			if len(name) >= 64 && isHexString(name) {
-				containers = append(containers, containerPath{
-					ID:         name,
-					Runtime:    "containerd", // Kubernetes typically uses containerd
-					CgroupPath: path,
-				})
-			}
-			return nil
-		})
-	}
-
-	return containers
-}
 
 // collectContainerStats collects CPU stats for a single container
-func (c *CgroupCPUCollector) collectContainerStats(container containerPath, version int) (performance.CgroupCPUStats, error) {
+func (c *CgroupCPUCollector) collectContainerStats(container ContainerPath, version int) (performance.CgroupCPUStats, error) {
 	stats := performance.CgroupCPUStats{
 		ContainerID: container.ID,
 		CgroupPath:  container.CgroupPath,
@@ -276,7 +134,7 @@ func (c *CgroupCPUCollector) collectContainerStats(container containerPath, vers
 }
 
 // readCgroupV1Stats reads CPU stats from cgroup v1 files
-func (c *CgroupCPUCollector) readCgroupV1Stats(stats *performance.CgroupCPUStats, container containerPath) error {
+func (c *CgroupCPUCollector) readCgroupV1Stats(stats *performance.CgroupCPUStats, container ContainerPath) error {
 	// Read CPU throttling stats
 	cpuStatPath := filepath.Join(container.CgroupPath, "cpu.stat")
 	if data, err := os.ReadFile(cpuStatPath); err == nil {
@@ -320,7 +178,7 @@ func (c *CgroupCPUCollector) readCgroupV1Stats(stats *performance.CgroupCPUStats
 }
 
 // readCgroupV2Stats reads CPU stats from cgroup v2 files
-func (c *CgroupCPUCollector) readCgroupV2Stats(stats *performance.CgroupCPUStats, container containerPath) error {
+func (c *CgroupCPUCollector) readCgroupV2Stats(stats *performance.CgroupCPUStats, container ContainerPath) error {
 	// Read cpu.stat which contains usage and throttling info
 	cpuStatPath := filepath.Join(container.CgroupPath, "cpu.stat")
 	if data, err := os.ReadFile(cpuStatPath); err == nil {
@@ -417,32 +275,4 @@ func (c *CgroupCPUCollector) parseCgroupV2CPUStat(data string, stats *performanc
 
 // Helper functions
 
-// extractContainerID extracts container ID from various cgroup path formats
-func extractContainerID(name string) string {
-	// Handle docker-<id>.scope format
-	if strings.HasPrefix(name, "docker-") && strings.HasSuffix(name, ".scope") {
-		id := strings.TrimPrefix(name, "docker-")
-		id = strings.TrimSuffix(id, ".scope")
-		return id
-	}
-	
-	// Handle containerd format
-	if strings.Contains(name, "containerd-") {
-		parts := strings.Split(name, "containerd-")
-		if len(parts) > 1 {
-			return strings.TrimSuffix(parts[1], ".scope")
-		}
-	}
 
-	return ""
-}
-
-// isHexString checks if a string contains only hexadecimal characters
-func isHexString(s string) bool {
-	for _, c := range s {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
-			return false
-		}
-	}
-	return true
-}

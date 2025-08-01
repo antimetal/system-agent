@@ -40,6 +40,7 @@ var _ performance.PointCollector = (*CgroupMemoryCollector)(nil)
 type CgroupMemoryCollector struct {
 	performance.BaseCollector
 	cgroupPath string
+	discovery  *ContainerDiscovery
 }
 
 // NewCgroupMemoryCollector creates a new cgroup memory collector
@@ -65,13 +66,14 @@ func NewCgroupMemoryCollector(logger logr.Logger, config performance.CollectionC
 			capabilities,
 		),
 		cgroupPath: config.HostCgroupPath,
+		discovery:  NewContainerDiscovery(config.HostCgroupPath),
 	}, nil
 }
 
 // Collect performs a one-shot collection of cgroup memory statistics
 func (c *CgroupMemoryCollector) Collect(ctx context.Context) (any, error) {
 	// Detect cgroup version
-	version, err := c.detectCgroupVersion()
+	version, err := c.discovery.DetectCgroupVersion()
 	if err != nil {
 		return nil, fmt.Errorf("failed to detect cgroup version: %w", err)
 	}
@@ -79,7 +81,7 @@ func (c *CgroupMemoryCollector) Collect(ctx context.Context) (any, error) {
 	c.Logger().V(2).Info("Detected cgroup version", "version", version)
 
 	// Discover containers
-	containers, err := c.discoverContainers(version)
+	containers, err := c.discovery.DiscoverContainers("memory", version)
 	if err != nil {
 		return nil, fmt.Errorf("failed to discover containers: %w", err)
 	}
@@ -101,150 +103,12 @@ func (c *CgroupMemoryCollector) Collect(ctx context.Context) (any, error) {
 	return stats, nil
 }
 
-// detectCgroupVersion determines if we're using cgroup v1 or v2
-func (c *CgroupMemoryCollector) detectCgroupVersion() (int, error) {
-	// Check for cgroup v2 unified hierarchy
-	v2Marker := filepath.Join(c.cgroupPath, "cgroup.controllers")
-	if _, err := os.Stat(v2Marker); err == nil {
-		return 2, nil
-	}
 
-	// Check for cgroup v1 memory controller
-	v1Memory := filepath.Join(c.cgroupPath, "memory")
-	if _, err := os.Stat(v1Memory); err == nil {
-		return 1, nil
-	}
 
-	return 0, fmt.Errorf("unable to detect cgroup version at %s", c.cgroupPath)
-}
 
-// discoverContainers finds all containers by scanning cgroup directories
-func (c *CgroupMemoryCollector) discoverContainers(version int) ([]containerPath, error) {
-	var containers []containerPath
-
-	if version == 1 {
-		// Cgroup v1: Look in memory controller
-		memPath := filepath.Join(c.cgroupPath, "memory")
-		containers = c.scanCgroupV1Directory(memPath)
-	} else {
-		// Cgroup v2: Scan unified hierarchy
-		containers = c.scanCgroupV2Directory(c.cgroupPath)
-	}
-
-	return containers, nil
-}
-
-// scanCgroupV1Directory scans a cgroup v1 controller directory for containers
-func (c *CgroupMemoryCollector) scanCgroupV1Directory(basePath string) []containerPath {
-	var containers []containerPath
-
-	// Common runtime paths to check
-	runtimePaths := map[string]string{
-		"docker":     filepath.Join(basePath, "docker"),
-		"containerd": filepath.Join(basePath, "containerd"),
-		"crio":       filepath.Join(basePath, "crio"),
-		"podman":     filepath.Join(basePath, "machine.slice"),
-	}
-
-	// Also check systemd slice format
-	systemdPath := filepath.Join(basePath, "system.slice")
-	if entries, err := os.ReadDir(systemdPath); err == nil {
-		for _, entry := range entries {
-			if entry.IsDir() && strings.HasPrefix(entry.Name(), "docker-") {
-				if id := extractContainerID(entry.Name()); id != "" {
-					containers = append(containers, containerPath{
-						ID:         id,
-						Runtime:    "docker",
-						CgroupPath: filepath.Join(systemdPath, entry.Name()),
-					})
-				}
-			}
-		}
-	}
-
-	// Check each runtime path
-	for runtime, path := range runtimePaths {
-		entries, err := os.ReadDir(path)
-		if err != nil {
-			continue
-		}
-
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				continue
-			}
-
-			// Extract container ID
-			id := entry.Name()
-			// Skip if it doesn't look like a container ID
-			if len(id) < 12 || !isHexString(id) {
-				continue
-			}
-
-			containers = append(containers, containerPath{
-				ID:         id,
-				Runtime:    runtime,
-				CgroupPath: filepath.Join(path, id),
-			})
-		}
-	}
-
-	return containers
-}
-
-// scanCgroupV2Directory scans a cgroup v2 unified hierarchy for containers
-func (c *CgroupMemoryCollector) scanCgroupV2Directory(basePath string) []containerPath {
-	var containers []containerPath
-
-	// In cgroup v2, containers might be in various locations
-	// Check system.slice for systemd-managed containers
-	systemSlice := filepath.Join(basePath, "system.slice")
-	if entries, err := os.ReadDir(systemSlice); err == nil {
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				continue
-			}
-
-			// Look for patterns like docker-<id>.scope
-			if strings.HasPrefix(entry.Name(), "docker-") && strings.HasSuffix(entry.Name(), ".scope") {
-				if id := extractContainerID(entry.Name()); id != "" {
-					containers = append(containers, containerPath{
-						ID:         id,
-						Runtime:    "docker",
-						CgroupPath: filepath.Join(systemSlice, entry.Name()),
-					})
-				}
-			}
-		}
-	}
-
-	// Check for Kubernetes pods
-	kubepods := filepath.Join(basePath, "kubepods.slice")
-	if _, err := os.Stat(kubepods); err == nil {
-		// Walk through kubepods hierarchy
-		filepath.Walk(kubepods, func(path string, info os.FileInfo, err error) error {
-			if err != nil || !info.IsDir() {
-				return nil
-			}
-
-			// Look for container directories (usually long hex strings)
-			name := filepath.Base(path)
-			if len(name) >= 64 && isHexString(name) {
-				containers = append(containers, containerPath{
-					ID:         name,
-					Runtime:    "containerd", // Kubernetes typically uses containerd
-					CgroupPath: path,
-				})
-			}
-			return nil
-		})
-	}
-
-	return containers
-}
 
 // collectContainerStats collects memory stats for a single container
-func (c *CgroupMemoryCollector) collectContainerStats(container containerPath, version int) (performance.CgroupMemoryStats, error) {
+func (c *CgroupMemoryCollector) collectContainerStats(container ContainerPath, version int) (performance.CgroupMemoryStats, error) {
 	stats := performance.CgroupMemoryStats{
 		ContainerID: container.ID,
 		CgroupPath:  container.CgroupPath,
@@ -274,7 +138,7 @@ func (c *CgroupMemoryCollector) collectContainerStats(container containerPath, v
 }
 
 // readCgroupV1Stats reads memory stats from cgroup v1 files
-func (c *CgroupMemoryCollector) readCgroupV1Stats(stats *performance.CgroupMemoryStats, container containerPath) error {
+func (c *CgroupMemoryCollector) readCgroupV1Stats(stats *performance.CgroupMemoryStats, container ContainerPath) error {
 	// Read memory.stat for detailed breakdown
 	statPath := filepath.Join(container.CgroupPath, "memory.stat")
 	if data, err := os.ReadFile(statPath); err == nil {
@@ -326,7 +190,7 @@ func (c *CgroupMemoryCollector) readCgroupV1Stats(stats *performance.CgroupMemor
 }
 
 // readCgroupV2Stats reads memory stats from cgroup v2 files
-func (c *CgroupMemoryCollector) readCgroupV2Stats(stats *performance.CgroupMemoryStats, container containerPath) error {
+func (c *CgroupMemoryCollector) readCgroupV2Stats(stats *performance.CgroupMemoryStats, container ContainerPath) error {
 	// Read memory.stat for detailed breakdown
 	statPath := filepath.Join(container.CgroupPath, "memory.stat")
 	if data, err := os.ReadFile(statPath); err == nil {
