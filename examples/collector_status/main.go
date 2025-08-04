@@ -32,17 +32,17 @@ func main() {
 	fmt.Fprintf(w, "AVAILABLE COLLECTORS (%d):\n", len(available))
 	fmt.Fprintf(w, "Metric Type\tStatus\tDescription\n")
 	fmt.Fprintf(w, "-----------\t------\t-----------\n")
-	
+
 	for _, metricType := range available {
 		fmt.Fprintf(w, "%s\t✓\tReady to use\n", metricType)
 	}
-	
+
 	// Print unavailable collectors
 	if len(unavailable) > 0 {
 		fmt.Fprintf(w, "\nUNAVAILABLE COLLECTORS (%d):\n", len(unavailable))
 		fmt.Fprintf(w, "Metric Type\tReason\tMissing Capabilities\tMin Kernel\n")
 		fmt.Fprintf(w, "-----------\t------\t-------------------\t----------\n")
-		
+
 		for metricType, info := range unavailable {
 			capNames := ""
 			if len(info.MissingCapabilities) > 0 {
@@ -52,18 +52,18 @@ func main() {
 				}
 				capNames = fmt.Sprintf("%v", caps)
 			}
-			
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", 
-				metricType, 
+
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
+				metricType,
 				info.Reason,
 				capNames,
 				info.MinKernelVersion,
 			)
 		}
 	}
-	
+
 	w.Flush()
-	
+
 	// Example of checking a specific collector
 	fmt.Println("\nDETAILED STATUS CHECK:")
 	collectors := []performance.MetricType{
@@ -71,18 +71,18 @@ func main() {
 		performance.MetricTypeProcess,
 		performance.MetricTypeLoad,
 	}
-	
+
 	for _, mt := range collectors {
 		available, reason := performance.GetCollectorStatus(mt)
 		fmt.Printf("- %s: available=%v (%s)\n", mt, available, reason)
 	}
-	
+
 	// Summary
 	fmt.Printf("\nSUMMARY:\n")
 	fmt.Printf("- Total collectors: %d\n", len(available)+len(unavailable))
 	fmt.Printf("- Available: %d\n", len(available))
 	fmt.Printf("- Unavailable: %d\n", len(unavailable))
-	
+
 	if runtime.GOOS == "linux" && len(unavailable) > 0 {
 		fmt.Printf("\nNOTE: Some collectors require additional Linux capabilities.\n")
 		fmt.Printf("Run with appropriate privileges or in a container with the required capabilities.\n")

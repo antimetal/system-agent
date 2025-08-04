@@ -41,7 +41,7 @@ CFLAGS := -g -O2 -Wall -target bpf -D__TARGET_ARCH_$(ARCH) \
 	-fdebug-types-section -fno-stack-protector
 
 # eBPF programs
-BPF_PROGS := execsnoop
+BPF_PROGS := execsnoop profiler
 
 # Build all eBPF programs
 .PHONY: all
@@ -68,8 +68,7 @@ $(1): $(OUTPUT) src/$(1).bpf.c docker-build-check
 ifneq ($(OS),Linux)
 	@echo "Using Docker for non-Linux build"
 	@$(MKDIR) $(OUTPUT)/$(1)
-	@$(DOCKER_RUN) sh -c "/usr/local/bin/ensure-vmlinux.sh && \
-		clang $(CFLAGS) $(INCLUDES) -c src/$(1).bpf.c -o $(OUTPUT)/$(1)/$(1).bpf.o && \
+	@$(DOCKER_RUN) sh -c "clang $(CFLAGS) $(INCLUDES) -c src/$(1).bpf.c -o $(OUTPUT)/$(1)/$(1).bpf.o && \
 		echo 'Verifying BTF information for $(1)' && \
 		bpftool btf dump file $(OUTPUT)/$(1)/$(1).bpf.o format raw > /dev/null"
 	@echo "Successfully built $(1)"
