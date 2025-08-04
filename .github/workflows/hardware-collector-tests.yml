@@ -8,12 +8,16 @@ on:
       - 'pkg/performance/collectors/**'
       - 'pkg/performance/types.go'
       - 'tools/collector-bench/**'
+      - 'ebpf/include/**'
+      - 'ebpf/src/**'
       - '.github/workflows/hardware-collector-tests.yml'
   pull_request:
     paths:
       - 'pkg/performance/collectors/**'
       - 'pkg/performance/types.go' 
       - 'tools/collector-bench/**'
+      - 'ebpf/include/**'
+      - 'ebpf/src/**'
       - '.github/workflows/hardware-collector-tests.yml'
   workflow_dispatch:
 
@@ -120,6 +124,13 @@ jobs:
           fi
         done
         echo "::endgroup::"
+        
+    - name: Generate eBPF types
+      run: |
+        echo "Building ebpf-typegen tool..."
+        make ebpf-typegen
+        echo "Generating eBPF types from C headers..."
+        make generate-ebpf-types
         
     - name: Run collector unit tests
       run: |
