@@ -204,7 +204,7 @@ func setupCgroupV1CPU(t *testing.T, basePath string) {
 	// Create docker container
 	dockerPath := filepath.Join(basePath, "cpu", "docker", "abc123def456")
 	require.NoError(t, os.MkdirAll(dockerPath, 0755))
-	
+
 	createFile(t, filepath.Join(dockerPath, "cpu.stat"), `nr_periods 1000
 nr_throttled 50
 throttled_time 5000000000`)
@@ -232,7 +232,7 @@ func setupCgroupV2(t *testing.T, basePath string) {
 	// Create docker container in systemd slice
 	dockerPath := filepath.Join(basePath, "system.slice", "docker-abc123def456.scope")
 	require.NoError(t, os.MkdirAll(dockerPath, 0755))
-	
+
 	createFile(t, filepath.Join(dockerPath, "cpu.stat"), `usage_usec 150000000
 user_usec 120000000
 system_usec 30000000
@@ -243,10 +243,10 @@ throttled_usec 7500000`)
 	createFile(t, filepath.Join(dockerPath, "cpu.weight"), "100")
 
 	// Create kubepods container
-	kubePath := filepath.Join(basePath, "kubepods.slice", "kubepods-pod123.slice", 
+	kubePath := filepath.Join(basePath, "kubepods.slice", "kubepods-pod123.slice",
 		"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	require.NoError(t, os.MkdirAll(kubePath, 0755))
-	
+
 	createFile(t, filepath.Join(kubePath, "cpu.stat"), `usage_usec 200000000
 nr_periods 2000
 nr_throttled 0

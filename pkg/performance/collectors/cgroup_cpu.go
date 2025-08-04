@@ -90,8 +90,8 @@ func (c *CgroupCPUCollector) Collect(ctx context.Context) (any, error) {
 		stat, err := c.collectContainerStats(container, version)
 		if err != nil {
 			// Log error but continue with other containers
-			c.Logger().V(1).Info("Failed to collect stats for container", 
-				"containerID", container.ID, 
+			c.Logger().V(1).Info("Failed to collect stats for container",
+				"containerID", container.ID,
 				"error", err)
 			continue
 		}
@@ -100,11 +100,6 @@ func (c *CgroupCPUCollector) Collect(ctx context.Context) (any, error) {
 
 	return stats, nil
 }
-
-
-
-
-
 
 // collectContainerStats collects CPU stats for a single container
 func (c *CgroupCPUCollector) collectContainerStats(container ContainerPath, version int) (performance.CgroupCPUStats, error) {
@@ -274,5 +269,3 @@ func (c *CgroupCPUCollector) parseCgroupV2CPUStat(data string, stats *performanc
 }
 
 // Helper functions
-
-
