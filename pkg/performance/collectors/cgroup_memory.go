@@ -103,10 +103,6 @@ func (c *CgroupMemoryCollector) Collect(ctx context.Context) (any, error) {
 	return stats, nil
 }
 
-
-
-
-
 // collectContainerStats collects memory stats for a single container
 func (c *CgroupMemoryCollector) collectContainerStats(container ContainerPath, version int) (performance.CgroupMemoryStats, error) {
 	stats := performance.CgroupMemoryStats{
