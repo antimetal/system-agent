@@ -18,10 +18,10 @@ import (
 
 func TestContainerDiscovery_DetectCgroupVersion(t *testing.T) {
 	tests := []struct {
-		name         string
-		setupFunc    func(t *testing.T, basePath string)
-		wantVersion  int
-		wantErr      bool
+		name        string
+		setupFunc   func(t *testing.T, basePath string)
+		wantVersion int
+		wantErr     bool
 	}{
 		{
 			name: "cgroup v2",
@@ -83,34 +83,34 @@ func TestContainerDiscovery_DiscoverContainers(t *testing.T) {
 
 		// Setup cgroup v1 structure
 		cpuPath := filepath.Join(cgroupPath, "cpu")
-		
+
 		// Create docker container
 		dockerPath := filepath.Join(cpuPath, "docker", "abc123def456789")
 		require.NoError(t, os.MkdirAll(dockerPath, 0755))
-		
+
 		// Create systemd container
 		systemdPath := filepath.Join(cpuPath, "system.slice", "docker-fedcba987654321.scope")
 		require.NoError(t, os.MkdirAll(systemdPath, 0755))
-		
+
 		// Create containerd container
 		containerdPath := filepath.Join(cpuPath, "containerd", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 		require.NoError(t, os.MkdirAll(containerdPath, 0755))
-		
+
 		// Create invalid entries
 		require.NoError(t, os.MkdirAll(filepath.Join(cpuPath, "docker", "tooshort"), 0755))
 		require.NoError(t, os.MkdirAll(filepath.Join(cpuPath, "docker", "notahexstring!"), 0755))
 
 		discovery := collectors.NewContainerDiscovery(cgroupPath)
 		containers, err := discovery.DiscoverContainers("cpu", 1)
-		
+
 		require.NoError(t, err)
 		assert.Len(t, containers, 3)
-		
+
 		// Check discovered containers
 		foundDocker := false
 		foundSystemd := false
 		foundContainerd := false
-		
+
 		for _, container := range containers {
 			switch container.ID {
 			case "abc123def456789":
@@ -124,7 +124,7 @@ func TestContainerDiscovery_DiscoverContainers(t *testing.T) {
 				assert.Equal(t, "containerd", container.Runtime)
 			}
 		}
-		
+
 		assert.True(t, foundDocker, "Should find docker container")
 		assert.True(t, foundSystemd, "Should find systemd-managed docker container")
 		assert.True(t, foundContainerd, "Should find containerd container")
@@ -133,14 +133,14 @@ func TestContainerDiscovery_DiscoverContainers(t *testing.T) {
 	t.Run("cgroup v2", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		cgroupPath := filepath.Join(tmpDir, "cgroup")
-		
+
 		// Create cgroup v2 marker
 		createFile(t, filepath.Join(cgroupPath, "cgroup.controllers"), "cpu io memory")
-		
+
 		// Create docker container in systemd slice
 		dockerPath := filepath.Join(cgroupPath, "system.slice", "docker-abc123def456789.scope")
 		require.NoError(t, os.MkdirAll(dockerPath, 0755))
-		
+
 		// Create kubernetes pod
 		kubePath := filepath.Join(cgroupPath, "kubepods.slice", "kubepods-pod123.slice",
 			"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
@@ -148,14 +148,14 @@ func TestContainerDiscovery_DiscoverContainers(t *testing.T) {
 
 		discovery := collectors.NewContainerDiscovery(cgroupPath)
 		containers, err := discovery.DiscoverContainers("", 2)
-		
+
 		require.NoError(t, err)
 		assert.Len(t, containers, 2)
-		
+
 		// Check discovered containers
 		foundDocker := false
 		foundKube := false
-		
+
 		for _, container := range containers {
 			switch container.ID {
 			case "abc123def456789":
@@ -166,7 +166,7 @@ func TestContainerDiscovery_DiscoverContainers(t *testing.T) {
 				assert.Equal(t, "containerd", container.Runtime)
 			}
 		}
-		
+
 		assert.True(t, foundDocker, "Should find docker container")
 		assert.True(t, foundKube, "Should find kubernetes container")
 	})

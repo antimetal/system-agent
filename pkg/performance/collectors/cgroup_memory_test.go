@@ -92,18 +92,18 @@ func TestCgroupMemoryCollector_CgroupV1(t *testing.T) {
 	// Check first container
 	dockerContainer := findMemoryContainerByID(stats, "abc123def456")
 	require.NotNil(t, dockerContainer)
-	assert.Equal(t, uint64(1073741824), dockerContainer.RSS)         // From memory.stat
-	assert.Equal(t, uint64(536870912), dockerContainer.Cache)        // From memory.stat
-	assert.Equal(t, uint64(134217728), dockerContainer.MappedFile)   // From memory.stat
-	assert.Equal(t, uint64(0), dockerContainer.Swap)                // From memory.stat
-	assert.Equal(t, uint64(1610612736), dockerContainer.UsageBytes)  // From memory.usage_in_bytes
-	assert.Equal(t, uint64(2147483648), dockerContainer.LimitBytes)  // From memory.limit_in_bytes
+	assert.Equal(t, uint64(1073741824), dockerContainer.RSS)           // From memory.stat
+	assert.Equal(t, uint64(536870912), dockerContainer.Cache)          // From memory.stat
+	assert.Equal(t, uint64(134217728), dockerContainer.MappedFile)     // From memory.stat
+	assert.Equal(t, uint64(0), dockerContainer.Swap)                   // From memory.stat
+	assert.Equal(t, uint64(1610612736), dockerContainer.UsageBytes)    // From memory.usage_in_bytes
+	assert.Equal(t, uint64(2147483648), dockerContainer.LimitBytes)    // From memory.limit_in_bytes
 	assert.Equal(t, uint64(1879048192), dockerContainer.MaxUsageBytes) // From memory.max_usage_in_bytes
-	assert.Equal(t, uint64(5), dockerContainer.FailCount)           // From memory.failcnt
-	assert.Equal(t, uint64(2), dockerContainer.OOMKillCount)        // From memory.oom_control
-	assert.False(t, dockerContainer.UnderOOM)                        // From memory.oom_control
-	assert.InDelta(t, 75.0, dockerContainer.UsagePercent, 0.1)      // Calculated
-	assert.InDelta(t, 33.3, dockerContainer.CachePercent, 0.1)      // Calculated
+	assert.Equal(t, uint64(5), dockerContainer.FailCount)              // From memory.failcnt
+	assert.Equal(t, uint64(2), dockerContainer.OOMKillCount)           // From memory.oom_control
+	assert.False(t, dockerContainer.UnderOOM)                          // From memory.oom_control
+	assert.InDelta(t, 75.0, dockerContainer.UsagePercent, 0.1)         // Calculated
+	assert.InDelta(t, 33.3, dockerContainer.CachePercent, 0.1)         // Calculated
 }
 
 func TestCgroupMemoryCollector_CgroupV2(t *testing.T) {
@@ -130,13 +130,13 @@ func TestCgroupMemoryCollector_CgroupV2(t *testing.T) {
 	// Check docker container
 	dockerContainer := findMemoryContainerByID(stats, "abc123def456")
 	require.NotNil(t, dockerContainer)
-	assert.Equal(t, uint64(1073741824), dockerContainer.RSS)         // anon from memory.stat
-	assert.Equal(t, uint64(536870912), dockerContainer.Cache)        // file from memory.stat
-	assert.Equal(t, uint64(134217728), dockerContainer.MappedFile)   // file_mapped from memory.stat
+	assert.Equal(t, uint64(1073741824), dockerContainer.RSS)        // anon from memory.stat
+	assert.Equal(t, uint64(536870912), dockerContainer.Cache)       // file from memory.stat
+	assert.Equal(t, uint64(134217728), dockerContainer.MappedFile)  // file_mapped from memory.stat
 	assert.Equal(t, uint64(0), dockerContainer.Swap)                // From memory.stat
-	assert.Equal(t, uint64(1610612736), dockerContainer.UsageBytes)  // From memory.current
-	assert.Equal(t, uint64(2147483648), dockerContainer.LimitBytes)  // From memory.max
-	assert.Equal(t, uint64(10), dockerContainer.FailCount)           // max events from memory.events
+	assert.Equal(t, uint64(1610612736), dockerContainer.UsageBytes) // From memory.current
+	assert.Equal(t, uint64(2147483648), dockerContainer.LimitBytes) // From memory.max
+	assert.Equal(t, uint64(10), dockerContainer.FailCount)          // max events from memory.events
 	assert.Equal(t, uint64(3), dockerContainer.OOMKillCount)        // From memory.events
 	assert.InDelta(t, 75.0, dockerContainer.UsagePercent, 0.1)      // Calculated
 
@@ -144,7 +144,7 @@ func TestCgroupMemoryCollector_CgroupV2(t *testing.T) {
 	kubeContainer := findMemoryContainerByID(stats, "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	require.NotNil(t, kubeContainer)
 	assert.Equal(t, uint64(math.MaxUint64), kubeContainer.LimitBytes) // "max" means unlimited
-	assert.Equal(t, float64(0), kubeContainer.UsagePercent)          // No percentage for unlimited
+	assert.Equal(t, float64(0), kubeContainer.UsagePercent)           // No percentage for unlimited
 }
 
 func TestCgroupMemoryCollector_MissingCgroup(t *testing.T) {
@@ -197,8 +197,8 @@ swap 0`)
 	// Should have memory.stat data but missing usage/limit info
 	assert.Equal(t, uint64(1073741824), stats[0].RSS)
 	assert.Equal(t, uint64(536870912), stats[0].Cache)
-	assert.Equal(t, uint64(0), stats[0].UsageBytes)  // Missing file
-	assert.Equal(t, uint64(0), stats[0].LimitBytes)  // Missing file
+	assert.Equal(t, uint64(0), stats[0].UsageBytes) // Missing file
+	assert.Equal(t, uint64(0), stats[0].LimitBytes) // Missing file
 }
 
 func TestCgroupMemoryCollector_OOMCondition(t *testing.T) {
