@@ -10,7 +10,7 @@ To install these hooks on your local repository:
 ./.githooks/install.sh
 ```
 
-## Available Hooks
+## Available Hook
 
 ### post-checkout
 
@@ -28,21 +28,6 @@ Automatically sets up Claude Code context when working with git worktrees.
 - When reviewing PRs in separate worktrees, you'll have access to your personal Claude configuration
 - Changes to your Claude settings are automatically shared across all worktrees
 - No need to manually set up Claude context for each PR review
-
-### pre-commit
-
-Prevents direct commits to the main branch, enforcing a feature branch workflow.
-
-**What it does:**
-- Checks if you're committing directly to the `main` branch
-- Blocks the commit and displays helpful instructions to create a feature branch
-- Encourages proper Git workflow with feature branches and pull requests
-
-**Why this is useful:**
-- Prevents accidental commits directly to main
-- Enforces code review process through pull requests
-- Maintains clean main branch history
-- Reduces risk of breaking main branch
 
 ## Usage with PR Reviews
 
