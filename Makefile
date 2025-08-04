@@ -94,8 +94,17 @@ manifests: controller-gen ## Generate K8s objects in config/ directory.
 	$(CONTROLLER_GEN) rbac:roleName=antimetal-agent-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
 .PHONY: fmt
-fmt: ## Run go fmt against code.
+fmt: ## Run go fmt against code and clang-format for C/C++ files.
 	go fmt ./...
+	@echo "Running clang-format on C/C++ files..."
+	@if command -v clang-format >/dev/null 2>&1; then \
+		find . -name "*.c" -o -name "*.h" | grep -E "(ebpf|bpf)" | while read -r file; do \
+			echo "Formatting $$file"; \
+			clang-format -i -style=file "$$file"; \
+		done; \
+	else \
+		echo "Warning: clang-format not found, skipping C/C++ formatting"; \
+	fi
 
 .PHONY: vet
 vet: ## Run go vet against code.
