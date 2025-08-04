@@ -327,10 +327,10 @@ func TestNUMAStatsCollector_Collect(t *testing.T) {
 				// Node 0 should have partial data (only numa_miss and numa_foreign parsed)
 				node0 := stats.Nodes[0]
 				assert.Equal(t, 0, node0.ID)
-				assert.Equal(t, uint64(0), node0.NumaHit) // Failed to parse "not-a-number"
-				assert.Equal(t, uint64(12345), node0.NumaMiss) // Valid
+				assert.Equal(t, uint64(0), node0.NumaHit)         // Failed to parse "not-a-number"
+				assert.Equal(t, uint64(12345), node0.NumaMiss)    // Valid
 				assert.Equal(t, uint64(54321), node0.NumaForeign) // Valid
-				
+
 				// Node 1 should have complete data
 				node1 := stats.Nodes[1]
 				assert.Equal(t, 1, node1.ID)
@@ -476,7 +476,7 @@ func TestNUMAStatsCollector_InvalidDirectoryAccess(t *testing.T) {
 
 	// Restore permissions for cleanup
 	defer func() {
-		os.Chmod(nodesPath, 0755)
+		_ = os.Chmod(nodesPath, 0755)
 	}()
 
 	config := performance.CollectionConfig{
