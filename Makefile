@@ -97,14 +97,11 @@ manifests: controller-gen ## Generate K8s objects in config/ directory.
 fmt: ## Run go fmt against code and clang-format for C/C++ files.
 	go fmt ./...
 	@echo "Running clang-format on C/C++ files..."
-	@if command -v clang-format >/dev/null 2>&1; then \
-		find . -name "*.c" -o -name "*.h" | grep -E "(ebpf|bpf)" | while read -r file; do \
-			echo "Formatting $$file"; \
-			clang-format -i -style=file "$$file"; \
-		done; \
-	else \
-		echo "Warning: clang-format not found, skipping C/C++ formatting"; \
-	fi
+	@command -v clang-format >/dev/null 2>&1 || { echo "Error: clang-format is required but not installed. Please install clang-format."; exit 1; }
+	@find . -name "*.c" -o -name "*.h" | grep -E "(ebpf|bpf)" | while read -r file; do \
+		echo "Formatting $$file"; \
+		clang-format -i -style=file "$$file"; \
+	done
 
 .PHONY: vet
 vet: ## Run go vet against code.
