@@ -18,9 +18,9 @@ import (
 )
 
 var (
-	registry             = make(map[MetricType]NewContinuousCollector)
+	registry              = make(map[MetricType]NewContinuousCollector)
 	unavailableCollectors = make(map[MetricType]UnavailableCollector)
-	registryLogger       = stdr.New(log.New(os.Stderr, "[performance.registry] ", log.LstdFlags))
+	registryLogger        = stdr.New(log.New(os.Stderr, "[performance.registry] ", log.LstdFlags))
 )
 
 // UnavailableCollector represents a collector that cannot run on this platform
@@ -61,7 +61,7 @@ func TryRegister(metricType MetricType, collector NewContinuousCollector) {
 
 	// Skip capability checks on non-Linux platforms
 	if runtime.GOOS != "linux" {
-		registryLogger.V(1).Info("Skipping capability check on non-Linux platform", 
+		registryLogger.V(1).Info("Skipping capability check on non-Linux platform",
 			"metric_type", metricType, "platform", runtime.GOOS)
 		registry[metricType] = collector
 		return
@@ -74,7 +74,7 @@ func TryRegister(metricType MetricType, collector NewContinuousCollector) {
 		HostDevPath:  "/dev",
 	}
 	tempLogger := registryLogger.WithName(string(metricType))
-	
+
 	tempCollector, err := collector(tempLogger, config)
 	if err != nil {
 		// If we can't even create the collector, it's likely a platform issue
@@ -89,7 +89,7 @@ func TryRegister(metricType MetricType, collector NewContinuousCollector) {
 
 	// Get collector capabilities
 	caps := tempCollector.Capabilities()
-	
+
 	// Check if collector can run with current capabilities
 	canRun, missing, err := caps.CanRun()
 	if err != nil {
@@ -104,17 +104,17 @@ func TryRegister(metricType MetricType, collector NewContinuousCollector) {
 
 	if !canRun {
 		unavailableCollectors[metricType] = UnavailableCollector{
-			MetricType:           metricType,
-			Reason:               "Missing required capabilities",
-			MissingCapabilities:  missing,
-			MinKernelVersion:     caps.MinKernelVersion,
+			MetricType:          metricType,
+			Reason:              "Missing required capabilities",
+			MissingCapabilities: missing,
+			MinKernelVersion:    caps.MinKernelVersion,
 		}
-		
+
 		capNames := make([]string, len(missing))
 		for i, cap := range missing {
 			capNames[i] = cap.String()
 		}
-		
+
 		registryLogger.Info("Collector requires additional capabilities",
 			"metric_type", metricType,
 			"missing_capabilities", capNames,
@@ -164,7 +164,7 @@ func GetCollectorStatus(metricType MetricType) (available bool, reason string) {
 	if _, exists := registry[metricType]; exists {
 		return true, "Collector is registered and available"
 	}
-	
+
 	if unavail, exists := unavailableCollectors[metricType]; exists {
 		reason = unavail.Reason
 		if len(unavail.MissingCapabilities) > 0 {
@@ -176,7 +176,7 @@ func GetCollectorStatus(metricType MetricType) (available bool, reason string) {
 		}
 		return false, reason
 	}
-	
+
 	return false, "Collector not found"
 }
 
