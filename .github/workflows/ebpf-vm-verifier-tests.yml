@@ -98,7 +98,7 @@ jobs:
         cat bpf-checksums.txt
         
         # Verify all expected files are present
-        if [ ! -f "bpf-programs/test_core.bpf.o" ]; then
+        if [ ! -f "bpf-programs/test_core/test_core.bpf.o" ]; then
           echo "Error: test_core.bpf.o not found in artifacts"
           exit 1
         fi
