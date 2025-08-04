@@ -65,6 +65,7 @@ var _ performance.PointCollector = (*MemoryCollector)(nil)
 type MemoryCollector struct {
 	performance.BaseCollector
 	meminfoPath string
+	vmstatPath  string
 }
 
 func NewMemoryCollector(logger logr.Logger, config performance.CollectionConfig) (*MemoryCollector, error) {
@@ -89,6 +90,7 @@ func NewMemoryCollector(logger logr.Logger, config performance.CollectionConfig)
 			capabilities,
 		),
 		meminfoPath: filepath.Join(config.HostProcPath, "meminfo"),
+		vmstatPath:  filepath.Join(config.HostProcPath, "vmstat"),
 	}, nil
 }
 
@@ -103,7 +105,7 @@ func (c *MemoryCollector) Collect(ctx context.Context) (any, error) {
 	return stats, nil
 }
 
-// collectMemoryStats reads and parses runtime memory statistics from /proc/meminfo
+// collectMemoryStats reads and parses runtime memory statistics from /proc/meminfo and /proc/vmstat
 //
 // This method collects current memory usage and state information for performance
 // monitoring. Unlike MemoryInfoCollector which only reads MemTotal for hardware
@@ -113,11 +115,17 @@ func (c *MemoryCollector) Collect(ctx context.Context) (any, error) {
 //
 //	FieldName:       value kB
 //
-// Most fields are in kilobytes, except HugePages_* which are page counts.
-// The collector converts all values to bytes for consistency.
+// /proc/vmstat format:
+//
+//	field_name value
+//
+// Most meminfo fields are in kilobytes, except HugePages_* which are page counts.
+// Vmstat fields like pswpin/pswpout are in pages.
+// The collector converts all values to consistent units.
 //
 // Error handling:
-// - File read errors return an error (critical failure)
+// - /proc/meminfo read errors return an error (critical failure)
+// - /proc/vmstat read errors are logged but don't fail collection (optional data)
 // - Individual field parsing errors are logged but don't fail collection
 // - Missing fields are left as zero (graceful degradation)
 func (c *MemoryCollector) collectMemoryStats() (*performance.MemoryStats, error) {
@@ -208,6 +216,9 @@ func (c *MemoryCollector) collectMemoryStats() (*performance.MemoryStats, error)
 		return nil, fmt.Errorf("error reading %s: %w", c.meminfoPath, err)
 	}
 
+	// Collect swap activity from /proc/vmstat (optional)
+	c.collectSwapActivity(stats)
+
 	// Post-process: convert values to bytes
 	c.convertToBytes(stats, hugePagesCountFields)
 
@@ -267,5 +278,99 @@ func (c *MemoryCollector) convertToBytes(stats *performance.MemoryStats, hugePag
 		stats.HugePages_Free *= stats.HugePagesize
 		stats.HugePages_Rsvd *= stats.HugePagesize
 		stats.HugePages_Surp *= stats.HugePagesize
+	}
+}
+
+// collectSwapActivity reads swap activity counters from /proc/vmstat
+//
+// This method reads cumulative counters for swap in/out activity that are used
+// to calculate vmstat-compatible swap rates. Fields are in pages and left as raw
+// counts for higher-level rate computation.
+//
+// /proc/vmstat format:
+//
+//	pswpin value
+//	pswpout value
+//
+// Performance Investigation Context:
+//
+// Swap In (si in vmstat):
+// - Pages swapped from disk back into RAM since boot
+// - Rate indicates memory pressure requiring disk access for reclaimed pages
+// - High swap-in rates (>1000 pages/sec) indicate:
+//   - Insufficient RAM for current workload
+//   - Memory-intensive applications competing for physical memory
+//   - System accessing previously swapped-out data
+//
+// - Causes severe performance degradation (disk is ~1000x slower than RAM)
+//
+// Swap Out (so in vmstat):
+// - Pages moved from RAM to swap space on disk since boot
+// - Rate indicates kernel reclaiming memory under pressure
+// - High swap-out rates (>1000 pages/sec) indicate:
+//   - Memory pressure forcing kernel to free RAM
+//   - Applications allocating more memory than physically available
+//   - Kernel choosing to swap out inactive pages
+//
+// - Often precedes swap-in activity as applications later access swapped data
+//
+// Diagnostic Patterns:
+// - si=0, so=0: No swap activity (healthy system with adequate RAM)
+// - si=0, so>0: Memory pressure causing swapping but no page faults yet
+// - si>0, so>0: Active swapping (severe memory pressure, major performance impact)
+// - si>0, so=0: Accessing previously swapped data (recovery from memory pressure)
+//
+// Investigation Actions:
+// - Any sustained swap activity indicates need for more RAM or workload optimization
+// - Identify memory-intensive processes with high RSS/PSS values
+// - Consider increasing swap space as temporary mitigation
+// - Monitor with memory stats to correlate with available/free memory levels
+//
+// Note: Values are in pages (typically 4KB), multiply by page size for bytes.
+//
+// Error handling strategy:
+// - /proc/vmstat is optional - logs warnings but continues if unavailable
+// - Parse errors for specific fields are logged but don't fail collection
+// - Missing fields are left as zero (graceful degradation)
+func (c *MemoryCollector) collectSwapActivity(stats *performance.MemoryStats) {
+	file, err := os.Open(c.vmstatPath)
+	if err != nil {
+		c.Logger().V(2).Info("Optional file not available", "path", c.vmstatPath, "error", err)
+		return
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.Fields(line)
+		if len(parts) != 2 {
+			continue
+		}
+
+		fieldName := parts[0]
+		var fieldPtr *uint64
+
+		switch fieldName {
+		case "pswpin":
+			fieldPtr = &stats.SwapIn
+		case "pswpout":
+			fieldPtr = &stats.SwapOut
+		default:
+			continue
+		}
+
+		value, err := strconv.ParseUint(parts[1], 10, 64)
+		if err != nil {
+			c.Logger().V(2).Info("Failed to parse vmstat field",
+				"field", fieldName, "value", parts[1], "error", err)
+			continue
+		}
+
+		*fieldPtr = value
+	}
+
+	if err := scanner.Err(); err != nil {
+		c.Logger().V(2).Info("Error reading vmstat file", "path", c.vmstatPath, "error", err)
 	}
 }

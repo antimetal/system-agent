@@ -24,6 +24,7 @@ const (
 	MetricTypeNetwork MetricType = "network"
 	MetricTypeTCP     MetricType = "tcp"
 	MetricTypeKernel  MetricType = "kernel"
+	MetricTypeSystem  MetricType = "system"
 	// Hardware configuration collectors
 	MetricTypeCPUInfo     MetricType = "cpu_info"
 	MetricTypeMemoryInfo  MetricType = "memory_info"
@@ -74,6 +75,7 @@ type Metrics struct {
 	Disks     []DiskStats
 	Network   []NetworkStats
 	TCP       *TCPStats
+	System    *SystemStats
 	Kernel    []KernelMessage
 	// Hardware configuration
 	CPUInfo     *CPUInfo
@@ -92,6 +94,8 @@ type LoadStats struct {
 	// Running/total processes from /proc/loadavg (4th field, e.g., "2/1234")
 	RunningProcs int32
 	TotalProcs   int32
+	// Blocked processes from /proc/stat (procs_blocked field)
+	BlockedProcs int32
 	// Last PID from /proc/loadavg (5th field)
 	LastPID int32
 	// System uptime from /proc/uptime (1st field in seconds)
@@ -114,6 +118,9 @@ type MemoryStats struct {
 	// Swap stats
 	SwapTotal uint64 // SwapTotal: Total swap space
 	SwapFree  uint64 // SwapFree: Unused swap space
+	// Swap activity (cumulative counters from /proc/vmstat)
+	SwapIn  uint64 // pswpin: Pages swapped in since boot
+	SwapOut uint64 // pswpout: Pages swapped out since boot
 	// Dirty pages
 	Dirty     uint64 // Dirty: Memory waiting to be written back to disk
 	Writeback uint64 // Writeback: Memory actively being written back to disk
@@ -284,6 +291,15 @@ type TCPStats struct {
 	ConnectionsByState map[string]uint64 // Current count per state (instantaneous)
 }
 
+// SystemStats represents system-wide activity statistics from /proc/stat
+// Used by SystemStatsCollector for monitoring interrupt and context switch activity
+type SystemStats struct {
+	// Total interrupts serviced since boot from /proc/stat (intr line, first value)
+	Interrupts uint64 // Total interrupt count (cumulative counter)
+	// Context switches since boot from /proc/stat (ctxt line)
+	ContextSwitches uint64 // Total context switches (cumulative counter)
+}
+
 // KernelMessage represents a kernel log message from /dev/kmsg
 type KernelMessage struct {
 	// Message header fields from /dev/kmsg format:
@@ -334,6 +350,7 @@ func DefaultCollectionConfig() CollectionConfig {
 			MetricTypeDisk:    true,
 			MetricTypeNetwork: true,
 			MetricTypeTCP:     true,
+			MetricTypeSystem:  true,
 			MetricTypeKernel:  true,
 			// Hardware configuration collectors
 			MetricTypeCPUInfo:     true,

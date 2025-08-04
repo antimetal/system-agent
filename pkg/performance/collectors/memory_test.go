@@ -182,6 +182,80 @@ Cached:           1 kB
 SwapTotal:        1 kB
 SwapFree:         1 kB
 `
+
+	// vmstat test content
+	validVmstatContent = `nr_free_pages 256000
+nr_zone_inactive_anon 123456
+nr_zone_active_anon 234567
+nr_zone_inactive_file 345678
+nr_zone_active_file 456789
+pswpin 1234567
+pswpout 2345678
+pgpgin 3456789
+pgpgout 4567890
+`
+
+	// vmstat with only swap fields
+	swapOnlyVmstatContent = `pswpin 987654
+pswpout 876543
+`
+
+	// vmstat with zero values
+	zeroSwapVmstatContent = `pswpin 0
+pswpout 0
+`
+
+	// vmstat with max values
+	maxSwapVmstatContent = `pswpin 18446744073709551615
+pswpout 18446744073709551615
+`
+
+	// vmstat with invalid values
+	invalidVmstatContent = `pswpin invalid_value
+pswpout 2345678
+`
+
+	// vmstat with missing values
+	missingValueVmstatContent = `pswpin
+pswpout 2345678
+`
+
+	// vmstat with extra whitespace
+	extraWhitespaceVmstatContent = `pswpin    1234567    
+pswpout    2345678    
+`
+
+	// vmstat with tab separation
+	tabSeparatedVmstatContent = `pswpin	1234567
+pswpout	2345678
+`
+
+	// vmstat with only pswpin
+	pswpinOnlyVmstatContent = `pswpin 1234567
+`
+
+	// vmstat with only pswpout
+	pswpoutOnlyVmstatContent = `pswpout 2345678
+`
+
+	// empty vmstat
+	emptyVmstatContent = ``
+
+	// vmstat with other fields but no swap
+	noSwapVmstatContent = `nr_free_pages 256000
+nr_zone_inactive_anon 123456
+nr_zone_active_anon 234567
+`
+
+	// malformed vmstat with no space separator
+	malformedVmstatContent = `pswpin1234567
+pswpout2345678
+`
+
+	// vmstat with multiple values on line (invalid format)
+	multipleValuesVmstatContent = `pswpin 1234567 extra_value
+pswpout 2345678 another_value
+`
 )
 
 func createMemoryTestCollector(t *testing.T, meminfoContent string) *MemoryCollector {
@@ -190,6 +264,28 @@ func createMemoryTestCollector(t *testing.T, meminfoContent string) *MemoryColle
 	meminfoPath := filepath.Join(tmpDir, "meminfo")
 	err := os.WriteFile(meminfoPath, []byte(meminfoContent), 0644)
 	require.NoError(t, err)
+
+	config := performance.CollectionConfig{
+		HostProcPath: tmpDir,
+		HostSysPath:  tmpDir,
+	}
+	collector, err := NewMemoryCollector(logr.Discard(), config)
+	require.NoError(t, err)
+	return collector
+}
+
+func createMemoryTestCollectorWithVmstat(t *testing.T, meminfoContent, vmstatContent string) *MemoryCollector {
+	tmpDir := t.TempDir()
+
+	meminfoPath := filepath.Join(tmpDir, "meminfo")
+	err := os.WriteFile(meminfoPath, []byte(meminfoContent), 0644)
+	require.NoError(t, err)
+
+	if vmstatContent != "" {
+		vmstatPath := filepath.Join(tmpDir, "vmstat")
+		err = os.WriteFile(vmstatPath, []byte(vmstatContent), 0644)
+		require.NoError(t, err)
+	}
 
 	config := performance.CollectionConfig{
 		HostProcPath: tmpDir,
@@ -248,6 +344,8 @@ func validateMemoryStats(t *testing.T, stats *performance.MemoryStats, expected 
 	assert.Equal(t, expected.HugePages_Surp, stats.HugePages_Surp)
 	assert.Equal(t, expected.HugePagesize, stats.HugePagesize)
 	assert.Equal(t, expected.Hugetlb, stats.Hugetlb)
+	assert.Equal(t, expected.SwapIn, stats.SwapIn)
+	assert.Equal(t, expected.SwapOut, stats.SwapOut)
 }
 
 func collectAndValidateMemory(t *testing.T, collector *MemoryCollector, wantErr bool) *performance.MemoryStats {
@@ -590,4 +688,266 @@ func TestMemoryCollector_Comprehensive(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMemoryCollector_VmstatIntegration(t *testing.T) {
+	tests := []struct {
+		name            string
+		meminfoContent  string
+		vmstatContent   string
+		wantErr         bool
+		expectedSwapIn  uint64
+		expectedSwapOut uint64
+	}{
+		{
+			name:            "valid meminfo with valid vmstat",
+			meminfoContent:  validMeminfoContent,
+			vmstatContent:   validVmstatContent,
+			expectedSwapIn:  1234567,
+			expectedSwapOut: 2345678,
+		},
+		{
+			name:            "valid meminfo with swap-only vmstat",
+			meminfoContent:  validMeminfoContent,
+			vmstatContent:   swapOnlyVmstatContent,
+			expectedSwapIn:  987654,
+			expectedSwapOut: 876543,
+		},
+		{
+			name:            "valid meminfo with zero swap values",
+			meminfoContent:  validMeminfoContent,
+			vmstatContent:   zeroSwapVmstatContent,
+			expectedSwapIn:  0,
+			expectedSwapOut: 0,
+		},
+		{
+			name:            "valid meminfo with max swap values",
+			meminfoContent:  validMeminfoContent,
+			vmstatContent:   maxSwapVmstatContent,
+			expectedSwapIn:  18446744073709551615,
+			expectedSwapOut: 18446744073709551615,
+		},
+		{
+			name:            "valid meminfo with invalid vmstat (graceful degradation)",
+			meminfoContent:  validMeminfoContent,
+			vmstatContent:   invalidVmstatContent,
+			expectedSwapIn:  0, // Failed to parse, left as zero
+			expectedSwapOut: 2345678,
+		},
+		{
+			name:            "valid meminfo with missing vmstat values",
+			meminfoContent:  validMeminfoContent,
+			vmstatContent:   missingValueVmstatContent,
+			expectedSwapIn:  0, // No value to parse
+			expectedSwapOut: 2345678,
+		},
+		{
+			name:            "valid meminfo with extra whitespace vmstat",
+			meminfoContent:  validMeminfoContent,
+			vmstatContent:   extraWhitespaceVmstatContent,
+			expectedSwapIn:  1234567,
+			expectedSwapOut: 2345678,
+		},
+		{
+			name:            "valid meminfo with tab-separated vmstat",
+			meminfoContent:  validMeminfoContent,
+			vmstatContent:   tabSeparatedVmstatContent,
+			expectedSwapIn:  1234567,
+			expectedSwapOut: 2345678,
+		},
+		{
+			name:            "valid meminfo with pswpin only",
+			meminfoContent:  validMeminfoContent,
+			vmstatContent:   pswpinOnlyVmstatContent,
+			expectedSwapIn:  1234567,
+			expectedSwapOut: 0,
+		},
+		{
+			name:            "valid meminfo with pswpout only",
+			meminfoContent:  validMeminfoContent,
+			vmstatContent:   pswpoutOnlyVmstatContent,
+			expectedSwapIn:  0,
+			expectedSwapOut: 2345678,
+		},
+		{
+			name:            "valid meminfo with empty vmstat",
+			meminfoContent:  validMeminfoContent,
+			vmstatContent:   emptyVmstatContent,
+			expectedSwapIn:  0,
+			expectedSwapOut: 0,
+		},
+		{
+			name:            "valid meminfo with no swap fields in vmstat",
+			meminfoContent:  validMeminfoContent,
+			vmstatContent:   noSwapVmstatContent,
+			expectedSwapIn:  0,
+			expectedSwapOut: 0,
+		},
+		{
+			name:            "valid meminfo with malformed vmstat",
+			meminfoContent:  validMeminfoContent,
+			vmstatContent:   malformedVmstatContent,
+			expectedSwapIn:  0,
+			expectedSwapOut: 0,
+		},
+		{
+			name:            "valid meminfo with multiple values per line vmstat",
+			meminfoContent:  validMeminfoContent,
+			vmstatContent:   multipleValuesVmstatContent,
+			expectedSwapIn:  0, // Skipped due to unexpected format (more than 2 fields)
+			expectedSwapOut: 0, // Skipped due to unexpected format (more than 2 fields)
+		},
+		{
+			name:            "valid meminfo without vmstat file (graceful degradation)",
+			meminfoContent:  validMeminfoContent,
+			vmstatContent:   "", // No file created
+			expectedSwapIn:  0,
+			expectedSwapOut: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			collector := createMemoryTestCollectorWithVmstat(t, tt.meminfoContent, tt.vmstatContent)
+			stats := collectAndValidateMemory(t, collector, tt.wantErr)
+
+			if tt.wantErr {
+				return
+			}
+
+			assert.Equal(t, tt.expectedSwapIn, stats.SwapIn, "SwapIn mismatch")
+			assert.Equal(t, tt.expectedSwapOut, stats.SwapOut, "SwapOut mismatch")
+
+			// Verify meminfo fields are still parsed correctly
+			assert.Greater(t, stats.MemTotal, uint64(0), "MemTotal should be parsed from meminfo")
+			assert.Greater(t, stats.MemFree, uint64(0), "MemFree should be parsed from meminfo")
+		})
+	}
+}
+
+func TestMemoryCollector_VmstatPermissions(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create meminfo file
+	meminfoPath := filepath.Join(tmpDir, "meminfo")
+	err := os.WriteFile(meminfoPath, []byte(validMeminfoContent), 0644)
+	require.NoError(t, err)
+
+	// Create vmstat file with no read permissions
+	vmstatPath := filepath.Join(tmpDir, "vmstat")
+	err = os.WriteFile(vmstatPath, []byte(validVmstatContent), 0000)
+	require.NoError(t, err)
+
+	config := performance.CollectionConfig{
+		HostProcPath: tmpDir,
+		HostSysPath:  tmpDir,
+	}
+	collector, err := NewMemoryCollector(logr.Discard(), config)
+	require.NoError(t, err)
+
+	// Collection should succeed (graceful degradation - vmstat is optional)
+	stats := collectAndValidateMemory(t, collector, false)
+
+	// Meminfo data should be present
+	assert.Greater(t, stats.MemTotal, uint64(0))
+	assert.Greater(t, stats.MemFree, uint64(0))
+
+	// Swap activity should be zero (couldn't read vmstat)
+	assert.Equal(t, uint64(0), stats.SwapIn)
+	assert.Equal(t, uint64(0), stats.SwapOut)
+}
+
+func TestMemoryCollector_VmstatAsDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create meminfo file
+	meminfoPath := filepath.Join(tmpDir, "meminfo")
+	err := os.WriteFile(meminfoPath, []byte(validMeminfoContent), 0644)
+	require.NoError(t, err)
+
+	// Create vmstat as a directory instead of a file
+	vmstatPath := filepath.Join(tmpDir, "vmstat")
+	err = os.MkdirAll(vmstatPath, 0755)
+	require.NoError(t, err)
+
+	config := performance.CollectionConfig{
+		HostProcPath: tmpDir,
+		HostSysPath:  tmpDir,
+	}
+	collector, err := NewMemoryCollector(logr.Discard(), config)
+	require.NoError(t, err)
+
+	// Collection should succeed (graceful degradation)
+	stats := collectAndValidateMemory(t, collector, false)
+
+	// Meminfo data should be present
+	assert.Greater(t, stats.MemTotal, uint64(0))
+	assert.Greater(t, stats.MemFree, uint64(0))
+
+	// Swap activity should be zero
+	assert.Equal(t, uint64(0), stats.SwapIn)
+	assert.Equal(t, uint64(0), stats.SwapOut)
+}
+
+func TestMemoryCollector_AllFieldsWithVmstat(t *testing.T) {
+	collector := createMemoryTestCollectorWithVmstat(t, comprehensiveValidMeminfoContent, validVmstatContent)
+	stats := collectAndValidateMemory(t, collector, false)
+
+	// Test all 26 meminfo fields are still parsed correctly
+	expectedFields := map[string]struct {
+		got      uint64
+		expected uint64
+		name     string
+	}{
+		"MemTotal":        {stats.MemTotal, 16777216 * 1024, "MemTotal"},
+		"MemFree":         {stats.MemFree, 8388608 * 1024, "MemFree"},
+		"MemAvailable":    {stats.MemAvailable, 12582912 * 1024, "MemAvailable"},
+		"Buffers":         {stats.Buffers, 524288 * 1024, "Buffers"},
+		"Cached":          {stats.Cached, 4194304 * 1024, "Cached"},
+		"SwapCached":      {stats.SwapCached, 262144 * 1024, "SwapCached"},
+		"Active":          {stats.Active, 6291456 * 1024, "Active"},
+		"Inactive":        {stats.Inactive, 4194304 * 1024, "Inactive"},
+		"SwapTotal":       {stats.SwapTotal, 8388608 * 1024, "SwapTotal"},
+		"SwapFree":        {stats.SwapFree, 6291456 * 1024, "SwapFree"},
+		"Dirty":           {stats.Dirty, 32768 * 1024, "Dirty"},
+		"Writeback":       {stats.Writeback, 0, "Writeback"},
+		"AnonPages":       {stats.AnonPages, 3145728 * 1024, "AnonPages"},
+		"Mapped":          {stats.Mapped, 1048576 * 1024, "Mapped"},
+		"Shmem":           {stats.Shmem, 262144 * 1024, "Shmem"},
+		"Slab":            {stats.Slab, 524288 * 1024, "Slab"},
+		"SReclaimable":    {stats.SReclaimable, 262144 * 1024, "SReclaimable"},
+		"SUnreclaim":      {stats.SUnreclaim, 262144 * 1024, "SUnreclaim"},
+		"KernelStack":     {stats.KernelStack, 32768 * 1024, "KernelStack"},
+		"PageTables":      {stats.PageTables, 65536 * 1024, "PageTables"},
+		"CommitLimit":     {stats.CommitLimit, 16777216 * 1024, "CommitLimit"},
+		"CommittedAS":     {stats.CommittedAS, 10485760 * 1024, "CommittedAS"},
+		"VmallocTotal":    {stats.VmallocTotal, 68719476735 * 1024, "VmallocTotal"},
+		"VmallocUsed":     {stats.VmallocUsed, 1048576 * 1024, "VmallocUsed"},
+		"HugePages_Total": {stats.HugePages_Total, 2048 * (2048 * 1024), "HugePages_Total"},
+		"HugePages_Free":  {stats.HugePages_Free, 1024 * (2048 * 1024), "HugePages_Free"},
+		"HugePages_Rsvd":  {stats.HugePages_Rsvd, 512 * (2048 * 1024), "HugePages_Rsvd"},
+		"HugePages_Surp":  {stats.HugePages_Surp, 0 * (2048 * 1024), "HugePages_Surp"},
+		"HugePagesize":    {stats.HugePagesize, 2048 * 1024, "HugePagesize"},
+		"Hugetlb":         {stats.Hugetlb, 4194304 * 1024, "Hugetlb"},
+	}
+
+	// Validate meminfo fields
+	for _, expected := range expectedFields {
+		if expected.got != expected.expected {
+			t.Errorf("%s: got %d bytes, expected %d bytes",
+				expected.name, expected.got, expected.expected)
+		}
+	}
+
+	// Now verify the new vmstat fields
+	assert.Equal(t, uint64(1234567), stats.SwapIn, "SwapIn from vmstat")
+	assert.Equal(t, uint64(2345678), stats.SwapOut, "SwapOut from vmstat")
+
+	// Verify we're testing all 26+ supported fields plus the 2 new vmstat fields
+	totalFields := len(expectedFields) + 2
+	if totalFields < 28 {
+		t.Errorf("Expected to test at least 28 memory fields (26 meminfo + 2 vmstat), but only tested %d", totalFields)
+	}
+
+	t.Logf("Successfully validated %d memory fields including vmstat swap activity", totalFields)
 }

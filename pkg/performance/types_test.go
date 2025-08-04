@@ -30,6 +30,7 @@ func TestCollectionConfig_ApplyDefaults(t *testing.T) {
 					MetricTypeDisk:    true,
 					MetricTypeNetwork: true,
 					MetricTypeTCP:     true,
+					MetricTypeSystem:  true,
 					MetricTypeKernel:  true,
 					// Hardware configuration collectors
 					MetricTypeCPUInfo:     true,
@@ -59,6 +60,7 @@ func TestCollectionConfig_ApplyDefaults(t *testing.T) {
 					MetricTypeDisk:    true,
 					MetricTypeNetwork: true,
 					MetricTypeTCP:     true,
+					MetricTypeSystem:  true,
 					MetricTypeKernel:  true,
 					// Hardware configuration collectors
 					MetricTypeCPUInfo:     true,
