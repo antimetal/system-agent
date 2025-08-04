@@ -357,7 +357,7 @@ func DefaultCollectionConfig() CollectionConfig {
 			MetricTypeMemoryInfo:  true,
 			MetricTypeDiskInfo:    true,
 			MetricTypeNetworkInfo: true,
-			MetricTypeNUMA:        true,
+			MetricTypeNUMAStats:   true,
 		},
 		HostProcPath: "/proc",
 		HostSysPath:  "/sys",
