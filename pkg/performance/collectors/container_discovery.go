@@ -156,7 +156,7 @@ func (d *ContainerDiscovery) scanCgroupV2Directory(basePath string) []ContainerP
 	kubepods := filepath.Join(basePath, "kubepods.slice")
 	if _, err := os.Stat(kubepods); err == nil {
 		// Walk through kubepods hierarchy
-		filepath.Walk(kubepods, func(path string, info os.FileInfo, err error) error {
+		_ = filepath.Walk(kubepods, func(path string, info os.FileInfo, err error) error {
 			if err != nil || !info.IsDir() {
 				return nil
 			}
