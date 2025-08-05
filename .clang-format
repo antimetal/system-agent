@@ -14,3 +14,16 @@ InsertBraces: true
 
 # Never allow single-line blocks
 AllowShortBlocksOnASingleLine: Never
+
+# Include ordering for eBPF programs
+# vmlinux.h must come first, then bpf headers, then local headers
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex:           'vmlinux\.h'
+    Priority:        1
+  - Regex:           '<bpf/.*\.h>'
+    Priority:        2
+  - Regex:           '<.*>'
+    Priority:        3
+  - Regex:           '".*"'
+    Priority:        4
