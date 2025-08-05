@@ -7,6 +7,10 @@ LOCALBIN ?= $(ROOT)/bin
 ## Location to store build & release artifacts
 DIST ?= $(ROOT)/dist
 
+# System environment
+OS ?= $(shell uname -s)
+
+# Golang environment
 GO_OS ?= linux
 GOARCH ?= $(shell go env GOARCH)
 GO_TOOLCHAIN ?= $(shell grep -oE "^toolchain go[[:digit:]]*\.[[:digit:]]*\.+[[:digit:]]*" go.mod | cut -d ' ' -f2)
@@ -186,6 +190,23 @@ build-ebpf-docker: ## Build eBPF programs using Docker (for consistent build env
 		echo "Using existing antimetal/ebpf-builder image"; \
 	fi
 	@docker run --rm -v $(ROOT):/workspace -w /workspace antimetal/ebpf-builder make build-ebpf-native
+
+.PHONY: verify-ebpf
+verify-ebpf: build-ebpf ## Load & verify all ebpf programs
+ifneq ($(OS),Linux)
+	@echo "Verify target is only available on Linux"
+	@exit 1
+else
+	@command -v bpftool >/dev/null 2>&1 || { echo "bpftool not found. For some reason it was not included in your kernel build so you probably need to build it from source: https://github.com/libbpf/bpftool"; exit 1; }
+	@echo "Verifying eBPF programs"
+	@for prog in $(EBPF_OBJECTS); do \
+		echo "Verifying $$prog"; \
+		sudo bpftool prog load $$prog /sys/fs/bpf/`basename $$prog`_test || exit 1; \
+		sudo bpftool prog detach /sys/fs/bpf/`basename $$prog`_test || true; \
+		rm -f /sys/fs/bpf/`basename $$prog`_test; \
+	done
+	@echo "All programs verified successfully"
+endif
 
 .PHONY: build-ebpf-builder
 build-ebpf-builder: ## Force rebuild the eBPF builder Docker image
