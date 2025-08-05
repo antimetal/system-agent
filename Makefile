@@ -201,9 +201,9 @@ else
 	@echo "Verifying eBPF programs"
 	@for prog in $(EBPF_OBJECTS); do \
 		echo "Verifying $$prog"; \
-		sudo bpftool prog load $$prog /sys/fs/bpf/`basename $$prog`_test || exit 1; \
-		sudo bpftool prog detach /sys/fs/bpf/`basename $$prog`_test || true; \
-		rm -f /sys/fs/bpf/`basename $$prog`_test; \
+		prog_name=`basename $$prog`; \
+		sudo bpftool prog load $$prog "/sys/fs/bpf/$${prog_name%%.*}_test" || exit 1; \
+		sudo rm "/sys/fs/bpf/$${prog_name%%.*}_test"; \
 	done
 	@echo "All programs verified successfully"
 endif
