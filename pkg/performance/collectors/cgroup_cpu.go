@@ -48,11 +48,10 @@ func NewCgroupCPUCollector(logger logr.Logger, config performance.CollectionConf
 	}
 
 	capabilities := performance.CollectorCapabilities{
-		SupportsOneShot:    true,
-		SupportsContinuous: false,
-		RequiresRoot:       false,
-		RequiresEBPF:       false,
-		MinKernelVersion:   "2.6.24", // When cgroups were introduced
+		SupportsOneShot:      true,
+		SupportsContinuous:   false,
+		RequiredCapabilities: nil, // No special capabilities required
+		MinKernelVersion:     "2.6.24", // When cgroups were introduced
 	}
 
 	return &CgroupCPUCollector{

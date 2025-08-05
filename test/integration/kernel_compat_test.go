@@ -216,7 +216,7 @@ func TestCollectorCompatibility(t *testing.T) {
 		},
 		{
 			name:       "NUMACollector",
-			metricType: performance.MetricTypeNUMA,
+			metricType: performance.MetricTypeNUMAStats,
 			minKernel:  KernelVersion{2, 6, 0},
 		},
 	}
