@@ -24,6 +24,7 @@ import (
 
 	"github.com/antimetal/agent/pkg/ebpf/core"
 	"github.com/antimetal/agent/pkg/performance"
+	"github.com/antimetal/agent/pkg/performance/capabilities"
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
@@ -80,11 +81,10 @@ func NewExecSnoopCollector(logger logr.Logger, config performance.CollectionConf
 			logger,
 			config,
 			performance.CollectorCapabilities{
-				SupportsOneShot:    false,
-				SupportsContinuous: true,
-				RequiresRoot:       true,
-				RequiresEBPF:       true,
-				MinKernelVersion:   "5.8", // Ring buffer support
+				SupportsOneShot:      false,
+				SupportsContinuous:   true,
+				RequiredCapabilities: append(capabilities.GetEBPFCapabilities(), capabilities.CAP_SYSLOG),
+				MinKernelVersion:     "5.8", // Ring buffer support
 			},
 		),
 		bpfObjectPath: bpfObjectPath,
@@ -331,3 +331,10 @@ func (c *ExecSnoopCollector) ParseEvent(data []byte) (*ExecEvent, error) {
 
 	return event, nil
 }
+
+// NOTE: ExecSnoopCollector is not automatically registered via init() because:
+// 1. It requires eBPF capabilities that may not be available
+// 2. It needs a BPF object file path that should be configured
+// 3. It's a specialized collector that overlaps with ProcessCollector
+// 
+// To use ExecSnoopCollector, instantiate it directly with NewExecSnoopCollector

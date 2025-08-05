@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/antimetal/agent/pkg/performance"
+	"github.com/antimetal/agent/pkg/performance/capabilities"
 	"github.com/go-logr/logr"
 )
 
@@ -22,10 +23,9 @@ type TestCollector struct {
 
 func NewTestCollector() *TestCollector {
 	capabilities := performance.CollectorCapabilities{
-		SupportsOneShot:    true,
-		SupportsContinuous: false,
-		RequiresRoot:       false,
-		RequiresEBPF:       false,
+		SupportsOneShot:      true,
+		SupportsContinuous:   false,
+		RequiredCapabilities: nil, // No special capabilities required
 	}
 
 	return &TestCollector{
@@ -241,4 +241,68 @@ func TestOnceContinuousCollector(t *testing.T) {
 		t.Errorf("Expected status active after start, got %s", onceCollector.Status())
 	}
 	testCollect(ch)
+}
+
+func TestCollectorCapabilities_CanRun(t *testing.T) {
+	tests := []struct {
+		name    string
+		caps    performance.CollectorCapabilities
+		wantRun bool // We can't be sure on all platforms, but we can test the logic
+	}{
+		{
+			name: "No capabilities required",
+			caps: performance.CollectorCapabilities{
+				RequiredCapabilities: nil,
+			},
+			wantRun: true, // Should always run if no capabilities required
+		},
+		{
+			name: "Empty capabilities slice",
+			caps: performance.CollectorCapabilities{
+				RequiredCapabilities: []capabilities.Capability{},
+			},
+			wantRun: true, // Should always run if empty slice
+		},
+		{
+			name: "Single capability",
+			caps: performance.CollectorCapabilities{
+				RequiredCapabilities: []capabilities.Capability{capabilities.CAP_SYSLOG},
+			},
+		},
+		{
+			name: "Multiple capabilities",
+			caps: performance.CollectorCapabilities{
+				RequiredCapabilities: []capabilities.Capability{
+					capabilities.CAP_BPF,
+					capabilities.CAP_PERFMON,
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			canRun, missing, err := tt.caps.CanRun()
+
+			if err != nil {
+				t.Errorf("CanRun() returned error: %v", err)
+			}
+
+			// Verify consistency between canRun and missing
+			if canRun && len(missing) > 0 {
+				t.Error("CanRun() returned canRun=true but missing capabilities is not empty")
+			}
+
+			if !canRun && len(missing) == 0 {
+				t.Error("CanRun() returned canRun=false but missing capabilities is empty")
+			}
+
+			// Special case: no capabilities required should always work
+			if tt.wantRun && !canRun {
+				t.Errorf("CanRun() = %v, want %v", canRun, tt.wantRun)
+			}
+
+			t.Logf("CanRun: %v, Missing capabilities: %v", canRun, missing)
+		})
+	}
 }

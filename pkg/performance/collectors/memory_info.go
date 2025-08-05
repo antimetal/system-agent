@@ -20,7 +20,7 @@ import (
 )
 
 func init() {
-	performance.Register(performance.MetricTypeMemoryInfo, performance.PartialNewOnceContinuousCollector(
+	performance.TryRegister(performance.MetricTypeMemoryInfo, performance.PartialNewOnceContinuousCollector(
 		func(logger logr.Logger, config performance.CollectionConfig) (performance.PointCollector, error) {
 			return NewMemoryInfoCollector(logger, config)
 		},
@@ -110,11 +110,10 @@ func NewMemoryInfoCollector(logger logr.Logger, config performance.CollectionCon
 	}
 
 	capabilities := performance.CollectorCapabilities{
-		SupportsOneShot:    true,
-		SupportsContinuous: false,
-		RequiresRoot:       false,
-		RequiresEBPF:       false,
-		MinKernelVersion:   "2.6.0",
+		SupportsOneShot:      true,
+		SupportsContinuous:   false,
+		RequiredCapabilities: nil, // No special capabilities required
+		MinKernelVersion:     "2.6.0",
 	}
 
 	return &MemoryInfoCollector{
@@ -243,17 +242,20 @@ func (c *MemoryInfoCollector) parseTotalMemory(info *performance.MemoryInfo) err
 // Data Sources per Node:
 // - /sys/devices/system/node/nodeX/meminfo     - Per-node memory information (kernel-guaranteed)
 // - /sys/devices/system/node/nodeX/cpulist     - CPU affinity for node (kernel-guaranteed)
+// - /sys/devices/system/node/nodeX/distance    - Inter-node distances (optional)
 // - Directory existence indicates NUMA topology as detected by kernel
 //
 // Format Specifications:
 // - Node directories: node0, node1, node2, etc. (numbering may not be contiguous)
 // - meminfo format: "Node X MemTotal: XXXXX kB" (always in kilobytes)
 // - cpulist format: "0-3,8-11" (comma-separated ranges, kernel-standardized)
+// - distance format: "10 21" (space-separated distances to all nodes)
 //
 // Graceful Degradation:
 // - If no NUMA nodes found: Create synthetic single node with all CPUs
 // - If individual node parsing fails: Skip that node, continue with others
 // - If CPU enumeration fails: Create node with empty CPU list
+// - If distance file missing: Leave distances empty
 //
 // Important Notes:
 // - NUMA node numbering is not guaranteed to be contiguous (e.g., node0, node2, node4)
@@ -265,6 +267,12 @@ func (c *MemoryInfoCollector) parseTotalMemory(info *performance.MemoryInfo) err
 // - NUMA memory policy: https://www.kernel.org/doc/html/latest/admin-guide/mm/numa_memory_policy.html
 // - NUMA sysfs ABI: https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-devices-system-node
 func (c *MemoryInfoCollector) parseNUMAInfo(info *performance.MemoryInfo) {
+	// Check if NUMA balancing is available
+	balancingPath := filepath.Join(c.meminfoPath, "..", "sys", "kernel", "numa_balancing")
+	if _, err := os.Stat(balancingPath); err == nil {
+		info.NUMABalancingAvailable = true
+	}
+
 	// KERNEL-GUARANTEED: Enumerate NUMA nodes from sysfs
 	// Pattern matches node0, node1, node2, etc.
 	nodePattern := filepath.Join(c.nodeSystemPath, "node[0-9]*")
@@ -272,15 +280,20 @@ func (c *MemoryInfoCollector) parseNUMAInfo(info *performance.MemoryInfo) {
 	if err != nil || len(nodeMatches) == 0 {
 		// GRACEFUL DEGRADATION: No NUMA nodes found - assume single node (UMA system)
 		// This handles systems without NUMA support or where NUMA is disabled
+		info.NUMAEnabled = false
 		if info.TotalBytes > 0 {
 			info.NUMANodes = append(info.NUMANodes, performance.NUMANode{
 				NodeID:     0,
 				TotalBytes: info.TotalBytes,
 				CPUs:       c.getAllCPUs(),
+				Distances:  []int32{10}, // Local access distance
 			})
 		}
 		return
 	}
+
+	// Set NUMA enabled if we have more than one node
+	info.NUMAEnabled = len(nodeMatches) > 1
 
 	// KERNEL-GUARANTEED: Parse each discovered NUMA node
 	for _, nodePath := range nodeMatches {
@@ -290,8 +303,9 @@ func (c *MemoryInfoCollector) parseNUMAInfo(info *performance.MemoryInfo) {
 		}
 
 		node := performance.NUMANode{
-			NodeID: nodeID,
-			CPUs:   make([]int32, 0),
+			NodeID:    nodeID,
+			CPUs:      make([]int32, 0),
+			Distances: make([]int32, 0),
 		}
 
 		// KERNEL-GUARANTEED: Get per-node memory information
@@ -299,6 +313,9 @@ func (c *MemoryInfoCollector) parseNUMAInfo(info *performance.MemoryInfo) {
 
 		// KERNEL-GUARANTEED: Get CPU affinity for this node
 		c.parseNodeCPUs(&node, nodePath)
+
+		// OPTIONAL: Get inter-node distances
+		c.parseNodeDistances(&node, nodePath)
 
 		info.NUMANodes = append(info.NUMANodes, node)
 	}
@@ -439,6 +456,64 @@ func (c *MemoryInfoCollector) parseNodeCPUs(node *performance.NUMANode, nodePath
 			}
 		}
 	}
+}
+
+// parseNodeDistances reads inter-node distance information for a specific NUMA node.
+//
+// Data Source: /sys/devices/system/node/nodeX/distance (OPTIONAL)
+//
+// This method reads the inter-node distance matrix for NUMA nodes, which provides
+// performance hints about memory access latency between different NUMA nodes.
+//
+// Format Specification:
+// - File format: Space-separated distances to all nodes (including self)
+// - Example for node0 in a 2-node system: "10 21" (10 to self, 21 to node1)
+// - Example for node0 in a 4-node system: "10 21 31 41"
+// - Distances are relative values: lower is better/faster
+// - Typical values: 10 for local access, 20+ for remote access
+//
+// Distance Matrix Semantics:
+// - Self-distance (node to itself) is typically 10
+// - Remote distances vary based on interconnect topology
+// - Symmetric in most cases: distance(A→B) = distance(B→A)
+// - Used by kernel scheduler for NUMA-aware placement decisions
+//
+// Important Notes:
+// - This is an optional file - may not exist on all systems
+// - Virtual machines may not expose realistic distance values
+// - Some architectures may have asymmetric distances
+// - Distance values are hints, not precise measurements
+//
+// References:
+// - NUMA sysfs ABI: https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-devices-system-node
+func (c *MemoryInfoCollector) parseNodeDistances(node *performance.NUMANode, nodePath string) {
+	distancePath := filepath.Join(nodePath, "distance")
+	data, err := os.ReadFile(distancePath)
+	if err != nil {
+		// Distance file is optional - gracefully handle missing file
+		c.Logger().V(2).Info("Distance file not available", "node", node.NodeID, "path", distancePath)
+		return
+	}
+
+	distanceStr := strings.TrimSpace(string(data))
+	if distanceStr == "" {
+		return
+	}
+
+	// Parse space-separated distance values
+	parts := strings.Fields(distanceStr)
+	distances := make([]int32, 0, len(parts))
+
+	for _, part := range parts {
+		distance, err := strconv.ParseInt(part, 10, 32)
+		if err != nil {
+			c.Logger().V(2).Info("Skipping invalid distance value", "value", part, "node", node.NodeID)
+			continue
+		}
+		distances = append(distances, int32(distance))
+	}
+
+	node.Distances = distances
 }
 
 // getAllCPUs enumerates all available CPUs when NUMA information is unavailable.

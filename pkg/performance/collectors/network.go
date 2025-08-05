@@ -42,7 +42,7 @@ type NetworkCollector struct {
 var _ performance.Collector = (*NetworkCollector)(nil)
 
 func init() {
-	performance.Register(performance.MetricTypeNetwork, performance.PartialNewContinuousPointCollector(
+	performance.TryRegister(performance.MetricTypeNetwork, performance.PartialNewContinuousPointCollector(
 		func(logger logr.Logger, config performance.CollectionConfig) (performance.PointCollector, error) {
 			return NewNetworkCollector(logger, config)
 		},
@@ -55,11 +55,10 @@ func NewNetworkCollector(logger logr.Logger, config performance.CollectionConfig
 	}
 
 	capabilities := performance.CollectorCapabilities{
-		SupportsOneShot:    true,
-		SupportsContinuous: false,
-		RequiresRoot:       false,
-		RequiresEBPF:       false,
-		MinKernelVersion:   "2.6.0", // /proc/net/dev has been around forever
+		SupportsOneShot:      true,
+		SupportsContinuous:   false,
+		RequiredCapabilities: nil,     // No special capabilities required
+		MinKernelVersion:     "2.6.0", // /proc/net/dev has been around forever
 	}
 
 	return &NetworkCollector{

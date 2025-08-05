@@ -21,7 +21,7 @@ import (
 )
 
 func init() {
-	performance.Register(performance.MetricTypeLoad, performance.PartialNewContinuousPointCollector(
+	performance.TryRegister(performance.MetricTypeLoad, performance.PartialNewContinuousPointCollector(
 		func(logger logr.Logger, config performance.CollectionConfig) (performance.PointCollector, error) {
 			return NewLoadCollector(logger, config)
 		},
@@ -46,11 +46,10 @@ func NewLoadCollector(logger logr.Logger, config performance.CollectionConfig) (
 	}
 
 	capabilities := performance.CollectorCapabilities{
-		SupportsOneShot:    true,
-		SupportsContinuous: false,
-		RequiresRoot:       false,
-		RequiresEBPF:       false,
-		MinKernelVersion:   "2.6.0", // /proc/loadavg has been around forever
+		SupportsOneShot:      true,
+		SupportsContinuous:   false,
+		RequiredCapabilities: nil,     // No special capabilities required
+		MinKernelVersion:     "2.6.0", // /proc/loadavg has been around forever
 	}
 
 	return &LoadCollector{

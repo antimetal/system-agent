@@ -24,7 +24,7 @@ import (
 )
 
 func init() {
-	performance.Register(performance.MetricTypeProcess,
+	performance.TryRegister(performance.MetricTypeProcess,
 		func(logger logr.Logger, config performance.CollectionConfig) (performance.ContinuousCollector, error) {
 			return NewProcessCollector(logger, config)
 		},
@@ -90,11 +90,10 @@ func NewProcessCollector(logger logr.Logger, config performance.CollectionConfig
 	}
 
 	capabilities := performance.CollectorCapabilities{
-		SupportsOneShot:    false,
-		SupportsContinuous: true,
-		RequiresRoot:       false,
-		RequiresEBPF:       false,
-		MinKernelVersion:   "2.6.0",
+		SupportsOneShot:      false,
+		SupportsContinuous:   true,
+		RequiredCapabilities: nil, // No special capabilities required
+		MinKernelVersion:     "2.6.0",
 	}
 
 	// Use configured value or default

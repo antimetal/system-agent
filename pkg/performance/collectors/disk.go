@@ -20,7 +20,7 @@ import (
 )
 
 func init() {
-	performance.Register(
+	performance.TryRegister(
 		performance.MetricTypeDisk, performance.PartialNewContinuousPointCollector(
 			func(logger logr.Logger, config performance.CollectionConfig) (performance.PointCollector, error) {
 				return NewDiskCollector(logger, config)
@@ -58,11 +58,10 @@ func NewDiskCollector(logger logr.Logger, config performance.CollectionConfig) (
 	}
 
 	capabilities := performance.CollectorCapabilities{
-		SupportsOneShot:    true,
-		SupportsContinuous: false,
-		RequiresRoot:       false,
-		RequiresEBPF:       false,
-		MinKernelVersion:   "2.6.0", // /proc/diskstats has been around since 2.6
+		SupportsOneShot:      true,
+		SupportsContinuous:   false,
+		RequiredCapabilities: nil,     // No special capabilities required
+		MinKernelVersion:     "2.6.0", // /proc/diskstats has been around since 2.6
 	}
 
 	return &DiskCollector{
