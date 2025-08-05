@@ -24,7 +24,7 @@ import (
 )
 
 func init() {
-	performance.Register(performance.MetricTypeProcess,
+	performance.TryRegister(performance.MetricTypeProcess,
 		func(logger logr.Logger, config performance.CollectionConfig) (performance.ContinuousCollector, error) {
 			return NewProcessCollector(logger, config)
 		},
