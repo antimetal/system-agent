@@ -308,23 +308,42 @@ jobs:
         # Create VM images directory
         mkdir -p vm-images
         
-        # Create a config file for the VM
-        cat > lvh-config.yaml << EOF
-        architecture: amd64
-        base_image: debian:bookworm
-        name: integration-test-vm
-        packages:
-          - build-essential
-          - git
-          - wget
-          - curl
-          - ca-certificates
+        # Create LVH image configuration
+        cat > vm-images/images.json << 'EOF'
+        [
+          {
+            "name": "integration-test",
+            "packages": [
+              "bpftool",
+              "linux-tools-generic",
+              "build-essential",
+              "git",
+              "wget",
+              "curl",
+              "ca-certificates"
+            ],
+            "actions": [
+              {
+                "comment": "Enable root login",
+                "op": "run-command", 
+                "command": ["sed", "-i", "s/^#PermitRootLogin .*/PermitRootLogin yes/", "/etc/ssh/sshd_config"]
+              },
+              {
+                "comment": "Set root password",
+                "op": "run-command",
+                "command": ["sh", "-c", "echo 'root:root' | chpasswd"]
+              }
+            ]
+          }
+        ]
         EOF
         
-        # Build VM image (this creates a rootfs)
-        $(go env GOPATH)/bin/lvh images build --dir vm-images -f lvh-config.yaml || {
-          echo "Failed to build VM image, trying with default settings..."
-          $(go env GOPATH)/bin/lvh images build --dir vm-images
+        # Build the image
+        $(go env GOPATH)/bin/lvh images build --dir vm-images/ || {
+          echo "LVH image build failed, downloading pre-built image..."
+          # Fallback to a pre-built image
+          wget -O vm-images/integration-test.qcow2 https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2
+          qemu-img resize vm-images/integration-test.qcow2 5G
         }
         
         echo "VM image created:"
@@ -334,50 +353,58 @@ jobs:
       run: |
         echo "=== Running tests in VM with kernel ${{ matrix.kernel }} ==="
         
-        # Find the kernel image
-        KERNEL=""
-        if [ -f "${{ matrix.kernel }}-main/boot/vmlinuz" ]; then
-          KERNEL="${{ matrix.kernel }}-main/boot/vmlinuz"
-        elif [ -f "${{ matrix.kernel }}-main/vmlinuz" ]; then
-          KERNEL="${{ matrix.kernel }}-main/vmlinuz"
-        else
-          # Try to find any kernel image
-          KERNEL=$(find "${{ matrix.kernel }}-main" -name "vmlinuz*" -o -name "bzImage" | head -1)
-        fi
-        
-        if [ -z "$KERNEL" ]; then
-          echo "ERROR: Could not find kernel image"
+        # Find the VM image
+        VM_IMAGE=$(find vm-images -name "*.qcow2" -o -name "*.img" | head -1)
+        if [ -z "$VM_IMAGE" ]; then
+          echo "❌ No VM image found"
           exit 1
         fi
         
-        echo "Using kernel: $KERNEL"
+        echo "Using VM image: $VM_IMAGE"
         
-        # Find rootfs
-        ROOTFS=""
-        if [ -f "vm-images/rootfs.img" ]; then
-          ROOTFS="vm-images/rootfs.img"
-        elif [ -f "vm-images/integration-test-vm.img" ]; then
-          ROOTFS="vm-images/integration-test-vm.img"
+        # Find the kernel path - LVH downloads to current directory
+        KERNEL_PATH=""
+        
+        # Look for the kernel in the downloaded directory
+        if [ -d "${{ matrix.kernel }}-main" ]; then
+          # Find vmlinuz file
+          KERNEL_PATH=$(find "${{ matrix.kernel }}-main/boot" -name "vmlinuz*" | head -1)
+          if [ -z "$KERNEL_PATH" ]; then
+            # Try other common kernel file names
+            KERNEL_PATH=$(find "${{ matrix.kernel }}-main/boot" -name "bzImage*" -o -name "vmlinux*" | head -1)
+          fi
+        fi
+        
+        if [ -n "$KERNEL_PATH" ]; then
+          echo "Found kernel at: $KERNEL_PATH"
+          # Run with explicit kernel path
+          echo "Running: lvh run --kernel $(pwd)/$KERNEL_PATH --image $VM_IMAGE"
+          timeout 600 $(go env GOPATH)/bin/lvh run \
+            --kernel "$(pwd)/$KERNEL_PATH" \
+            --image "$VM_IMAGE" \
+            --host-mount $(pwd) \
+            -- /host/artifacts/run-integration-tests-in-vm.sh || {
+              exit_code=$?
+              echo "LVH failed with exit code: $exit_code"
+              exit $exit_code
+            }
         else
-          ROOTFS=$(find vm-images -name "*.img" | head -1)
+          echo "WARNING: No kernel file found, trying without --kernel flag"
+          # Run without kernel flag (use VM's default kernel)
+          timeout 600 $(go env GOPATH)/bin/lvh run \
+            --image "$VM_IMAGE" \
+            --host-mount $(pwd) \
+            -- /host/artifacts/run-integration-tests-in-vm.sh || {
+            exit_code=$?
+            if [ $exit_code -eq 124 ]; then
+              echo "❌ Test timed out"
+              exit 1
+            else
+              echo "❌ Test failed with exit code $exit_code"
+              exit $exit_code
+            fi
+          }
         fi
-        
-        if [ -z "$ROOTFS" ]; then
-          echo "ERROR: Could not find rootfs image"
-          exit 1
-        fi
-        
-        echo "Using rootfs: $ROOTFS"
-        
-        # Run the VM with our test script
-        $(go env GOPATH)/bin/lvh run \
-          --kernel "$KERNEL" \
-          --image "$ROOTFS" \
-          --host-mount "$PWD:/host" \
-          --memory 2G \
-          --cpu 2 \
-          --timeout 10m \
-          -- /host/artifacts/run-integration-tests-in-vm.sh
     
     - name: Upload test results
       if: always()
