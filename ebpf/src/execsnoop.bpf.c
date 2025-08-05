@@ -79,24 +79,22 @@ int tracepoint__syscalls__sys_enter_execve(
       break;
     }
 
-    // Calculate remaining space
-    int remaining_space = FULL_MAX_ARGS_ARR - event->base.args_size;
-    if (remaining_space <= 0) {
+    // Conservative check: stop if we can't fit a full ARGSIZE
+    // This ensures we never exceed array bounds
+    if (event->base.args_size > FULL_MAX_ARGS_ARR - ARGSIZE) {
       break;
     }
 
-    // Limit read size to available space
-    int read_size = remaining_space < ARGSIZE ? remaining_space : ARGSIZE;
-
     int ret = bpf_probe_read_user_str(&event->args[event->base.args_size],
-                                      read_size, argp);
-    if (ret > 0) {
-      // Additional safety check
-      if (event->base.args_size + ret > FULL_MAX_ARGS_ARR) {
+                                      ARGSIZE, argp);
+    if (ret > 0 && ret <= ARGSIZE) {
+      // Check again after reading to ensure we don't overflow
+      if (event->base.args_size + ret <= FULL_MAX_ARGS_ARR) {
+        event->base.args_count++;
+        event->base.args_size += ret;
+      } else {
         break;
       }
-      event->base.args_count++;
-      event->base.args_size += ret;
     } else {
       break;
     }
