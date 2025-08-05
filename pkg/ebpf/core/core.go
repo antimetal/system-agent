@@ -12,8 +12,8 @@ import (
 	"fmt"
 	"os"
 	"runtime"
-	"strings"
 
+	"github.com/antimetal/agent/pkg/kernel"
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
 	"github.com/go-logr/logr"
@@ -101,8 +101,13 @@ func (m *Manager) HasFullCORESupport() bool {
 
 // detectKernelFeatures checks the running kernel for CO-RE capabilities.
 func detectKernelFeatures() (*KernelFeatures, error) {
+	version, err := kernel.GetCurrentVersion()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get kernel version: %w", err)
+	}
+
 	features := &KernelFeatures{
-		KernelVersion: getKernelVersion(),
+		KernelVersion: version.Raw,
 	}
 
 	// Check for native BTF support
@@ -113,14 +118,12 @@ func detectKernelFeatures() (*KernelFeatures, error) {
 	}
 
 	// Determine CO-RE support level based on kernel version
-	major, minor, _ := parseKernelVersion(features.KernelVersion)
-
 	switch {
-	case major > 5 || (major == 5 && minor >= 2):
+	case version.IsAtLeast(5, 2):
 		// Kernel 5.2+ has full CO-RE support with native BTF
 		features.CORESupport = "full"
 		features.RequiredKernel = "5.2"
-	case major == 4 && minor >= 18:
+	case version.IsAtLeast(4, 18):
 		// Kernel 4.18-5.1 can use CO-RE with external BTF
 		features.CORESupport = "partial"
 		features.RequiredKernel = "4.18"
@@ -131,50 +134,4 @@ func detectKernelFeatures() (*KernelFeatures, error) {
 	}
 
 	return features, nil
-}
-
-func getKernelVersion() string {
-	// Try to read from /proc/version first
-	data, err := os.ReadFile("/proc/version")
-	if err == nil {
-		parts := strings.Fields(string(data))
-		if len(parts) >= 3 {
-			return parts[2]
-		}
-	}
-
-	// Fallback to unknown if /proc/version is not available
-	return "unknown"
-}
-
-func parseKernelVersion(version string) (major, minor, patch int) {
-	// Remove any suffix (e.g., "-generic")
-	parts := strings.Split(version, "-")
-	if len(parts) > 0 {
-		version = parts[0]
-	}
-
-	// Parse x.y.z format
-	var err error
-	nums := strings.Split(version, ".")
-	if len(nums) >= 1 {
-		_, err = fmt.Sscanf(nums[0], "%d", &major)
-		if err != nil {
-			major = 0
-		}
-	}
-	if len(nums) >= 2 {
-		_, err = fmt.Sscanf(nums[1], "%d", &minor)
-		if err != nil {
-			minor = 0
-		}
-	}
-	if len(nums) >= 3 {
-		_, err = fmt.Sscanf(nums[2], "%d", &patch)
-		if err != nil {
-			patch = 0
-		}
-	}
-
-	return major, minor, patch
 }
