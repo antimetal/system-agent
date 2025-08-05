@@ -46,13 +46,7 @@ all: build
 # http://linuxcommand.org/lc3_adv_awk.php
 .PHONY: help
 help: ## Display this help.
-	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
-
-##@ Development Setup
-
-.PHONY: install-hooks
-install-hooks: ## Install shared git hooks for development workflow.
-	@./.githooks/install.sh
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-].+:.*?##/ { printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
 .PHONY: clean
 clean: clean-ebpf ## Removes build artifacts.
@@ -104,8 +98,15 @@ manifests: controller-gen ## Generate K8s objects in config/ directory.
 	$(CONTROLLER_GEN) rbac:roleName=antimetal-agent-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
 .PHONY: fmt
-fmt: ## Run go fmt against code and clang-format for C/C++ files.
-	go fmt ./...
+fmt: fmt.go ## Run all formatters
+
+.PHONY: fmt.go
+fmt.go: ## Run go fmt
+	@echo "Running Go fmt..."
+	@go fmt ./...
+
+.PHONY: fmt.clang
+fmt.clang: ## Run clang format
 	@echo "Running clang-format on C/C++ files..."
 	@command -v clang-format >/dev/null 2>&1 || { echo "Error: clang-format is required but not installed. Please install clang-format."; exit 1; }
 	@find . -name "*.c" -o -name "*.h" | grep -E "(ebpf|bpf)" | while read -r file; do \
