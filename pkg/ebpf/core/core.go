@@ -157,17 +157,17 @@ func CheckRingBufferSupport() error {
 	if err != nil {
 		return fmt.Errorf("failed to get kernel version: %w", err)
 	}
-	
+
 	if !version.IsAtLeast(5, 8) {
 		return fmt.Errorf("ring buffer requires kernel 5.8+, current kernel is %s", version.Raw)
 	}
-	
+
 	// Additional runtime check via feature detection
 	// Ring buffer support is checked via map type availability
 	if err := features.HaveMapType(ebpf.RingBuf); err != nil {
 		return fmt.Errorf("ring buffer support check failed: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -179,21 +179,21 @@ func CheckCORESupport() error {
 	if err != nil {
 		return fmt.Errorf("failed to get kernel version: %w", err)
 	}
-	
+
 	if !version.IsAtLeast(4, 18) {
 		return fmt.Errorf("CO-RE requires kernel 4.18+, current kernel is %s", version.Raw)
 	}
-	
+
 	// Check if we have at least partial CO-RE support
 	features, err := detectKernelFeatures()
 	if err != nil {
 		return fmt.Errorf("detecting CO-RE support: %w", err)
 	}
-	
+
 	if features.CORESupport == "none" {
 		return fmt.Errorf("CO-RE not supported on kernel %s", version.Raw)
 	}
-	
+
 	return nil
 }
 
@@ -204,15 +204,15 @@ func CheckPerfBufferSupport() error {
 	if err != nil {
 		return fmt.Errorf("failed to get kernel version: %w", err)
 	}
-	
+
 	if !version.IsAtLeast(4, 4) {
 		return fmt.Errorf("perf buffer requires kernel 4.4+, current kernel is %s", version.Raw)
 	}
-	
+
 	// Additional runtime check via feature detection
 	if err := features.HaveProgramType(ebpf.Kprobe); err != nil {
 		return fmt.Errorf("perf buffer support check failed: %w", err)
 	}
-	
+
 	return nil
 }

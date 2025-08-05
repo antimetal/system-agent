@@ -117,11 +117,11 @@ func TestParseVersion(t *testing.T) {
 
 func TestVersion_IsAtLeast(t *testing.T) {
 	tests := []struct {
-		name        string
-		version     *Version
-		major       int
-		minor       int
-		want        bool
+		name    string
+		version *Version
+		major   int
+		minor   int
+		want    bool
 	}{
 		{
 			name:    "exact match",
@@ -170,10 +170,10 @@ func TestVersion_IsAtLeast(t *testing.T) {
 
 func TestVersion_Compare(t *testing.T) {
 	tests := []struct {
-		name  string
-		v1    *Version
-		v2    *Version
-		want  int
+		name string
+		v1   *Version
+		v2   *Version
+		want int
 	}{
 		{
 			name: "equal versions",
