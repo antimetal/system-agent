@@ -602,6 +602,205 @@ func (c *MyCollector) runCollection(ctx context.Context) {
 
 This pattern ensures collectors integrate well with Kubernetes controllers and other lifecycle management systems while providing fine-grained control when needed.
 
+## Testing Methodology
+
+### Overview
+
+The system agent follows a comprehensive testing strategy that distinguishes between unit tests (portable, mock-based) and integration tests (Linux-specific, real system interaction). This separation ensures developers can work effectively on any platform while maintaining thorough test coverage on target Linux systems.
+
+### Test Categories
+
+#### Unit Tests
+- **Purpose**: Test business logic, algorithms, and data structures in isolation
+- **Characteristics**:
+  - Run on any platform (macOS, Windows, Linux)
+  - Use mocked filesystems and dependencies
+  - Fast execution with no external dependencies
+  - Default test type (no build tags required)
+- **File naming**: `*_test.go`
+- **Example**: Testing parsing logic with mock /proc files
+
+#### Integration Tests
+- **Purpose**: Verify interaction with real Linux kernel features and filesystems
+- **Characteristics**:
+  - Require Linux system with actual /proc, /sys filesystems
+  - May require specific kernel versions or capabilities
+  - Test actual system behavior and edge cases
+  - Use `//go:build integration` build tag
+- **File naming**: `*_integration_test.go`
+- **Example**: Testing eBPF program loading on real kernel
+
+### Build Tags Convention
+
+#### Integration Test Files
+```go
+//go:build integration
+
+package collectors_test
+
+import (
+    "testing"
+    "github.com/antimetal/agent/pkg/testutil"
+)
+
+func TestRealProcFilesystem(t *testing.T) {
+    testutil.RequireLinux(t)
+    testutil.RequireLinuxFilesystem(t)
+    // Test with real /proc filesystem
+}
+```
+
+#### Unit Test Files (Optional Explicit Tag)
+```go
+//go:build !integration
+
+package collectors_test
+
+// Regular unit tests that work anywhere
+```
+
+### File Organization
+
+Tests should live alongside the code they test:
+```
+pkg/
+├── kernel/
+│   ├── version.go
+│   ├── version_test.go              # Unit tests
+│   └── version_integration_test.go   # Integration tests
+├── performance/collectors/
+│   ├── cpu_info.go
+│   ├── cpu_info_test.go             # Unit tests with mocked /proc
+│   └── cpu_info_integration_test.go  # Tests with real /proc
+└── ebpf/core/
+    ├── core.go
+    ├── core_test.go                  # Unit tests
+    └── core_integration_test.go      # Tests requiring BTF/BPF
+```
+
+### Running Tests
+
+#### Development Commands
+```bash
+# Run unit tests only (default, works on any platform)
+make test
+
+# Run unit tests with specific package
+go test ./pkg/kernel/...
+
+# Run integration tests (Linux only)
+make test-integration
+
+# Run both unit and integration tests
+make test-all
+
+# Run integration tests for specific package
+go test -tags integration ./pkg/performance/collectors/...
+```
+
+#### CI/CD Commands
+```bash
+# GitHub Actions for unit tests (all platforms)
+go test -v -race -coverprofile=coverage.out ./...
+
+# GitHub Actions for integration tests (Linux runners only)
+go test -v -tags integration -race ./...
+```
+
+### Test Helpers
+
+The `pkg/testutil` package provides helpers for integration tests:
+
+```go
+// Skip test if not on Linux
+testutil.RequireLinux(t)
+
+// Verify Linux filesystem availability
+testutil.RequireLinuxFilesystem(t)
+
+// Check for specific kernel capabilities
+testutil.RequireCapability(t, capabilities.CAP_BPF)
+
+// Check for minimum kernel version
+testutil.RequireKernelVersion(t, 5, 8, 0)
+
+// Check for BTF support
+testutil.RequireBTF(t)
+```
+
+### Migration Strategy
+
+For existing tests in `test/integration/`:
+1. Identify tests that can be converted to unit tests with mocking
+2. Move true integration tests to live alongside their code
+3. Add appropriate build tags
+4. Update import paths and test helpers
+5. Gradually phase out the `test/integration/` directory
+
+### Best Practices
+
+1. **Prefer Unit Tests**: Write unit tests whenever possible using mocks
+2. **Integration Tests for Verification**: Use integration tests to verify assumptions about system behavior
+3. **Clear Test Names**: Use descriptive names that explain what system feature is being tested
+4. **Document Requirements**: Clearly state what system features/kernel versions are required
+5. **Graceful Skipping**: Use test helpers to skip tests when requirements aren't met
+6. **Platform-Specific Behavior**: Document when behavior differs across kernel versions
+
+### Examples
+
+#### Unit Test Example
+```go
+// cpu_info_test.go
+//go:build !integration
+
+func TestCPUInfoCollector_ParsesCPUInfo(t *testing.T) {
+    // Create mock /proc/cpuinfo
+    tmpDir := t.TempDir()
+    procPath := filepath.Join(tmpDir, "proc")
+    require.NoError(t, os.MkdirAll(procPath, 0755))
+    require.NoError(t, os.WriteFile(
+        filepath.Join(procPath, "cpuinfo"),
+        []byte(mockCPUInfo),
+        0644,
+    ))
+    
+    // Test with mocked filesystem
+    collector, err := NewCPUInfoCollector(logr.Discard(), CollectionConfig{
+        HostProcPath: procPath,
+    })
+    require.NoError(t, err)
+    
+    result, err := collector.Collect(context.Background())
+    require.NoError(t, err)
+    // Assert on parsed result
+}
+```
+
+#### Integration Test Example
+```go
+// cpu_info_integration_test.go
+//go:build integration
+
+func TestCPUInfoCollector_RealProcFS(t *testing.T) {
+    testutil.RequireLinux(t)
+    testutil.RequireLinuxFilesystem(t)
+    
+    // Test with real /proc filesystem
+    collector, err := NewCPUInfoCollector(logr.Discard(), CollectionConfig{
+        HostProcPath: "/proc",
+    })
+    require.NoError(t, err)
+    
+    result, err := collector.Collect(context.Background())
+    require.NoError(t, err)
+    
+    cpuInfo := result.(*CPUInfo)
+    // Verify actual system CPU information
+    assert.Greater(t, len(cpuInfo.Processors), 0, "Should detect at least one CPU")
+    assert.NotEmpty(t, cpuInfo.Processors[0].VendorID, "Should have vendor ID")
+}
+```
+
 ## Container Resource Monitoring
 
 ### Overview
