@@ -14,3 +14,18 @@ InsertBraces: true
 
 # Never allow single-line blocks
 AllowShortBlocksOnASingleLine: Never
+
+# Include ordering configuration
+IncludeCategories:
+  # vmlinux.h must always be first (even before system headers)
+  - Regex: '"vmlinux\.h"'
+    Priority: -1
+  # System headers in angle brackets
+  - Regex: '^<.*>'
+    Priority: 1
+  # Local headers in quotes
+  - Regex: '^".*"'
+    Priority: 2
+  # Everything else
+  - Regex: '.*'
+    Priority: 3
