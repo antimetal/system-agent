@@ -12,8 +12,8 @@ import (
 	"fmt"
 	"os"
 	"runtime"
-	"strings"
 
+	"github.com/antimetal/agent/pkg/kernel"
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
 	"github.com/cilium/ebpf/features"
@@ -34,17 +34,6 @@ type Manager struct {
 	kernelFeatures *KernelFeatures
 }
 
-// kernelVersionRequirement defines a minimum kernel version for a feature
-type kernelVersionRequirement struct {
-	major, minor int
-	feature      string
-}
-
-var (
-	// Define all kernel version requirements in one place
-	requirementCORE     = kernelVersionRequirement{4, 18, "CO-RE"}
-	requirementFullCORE = kernelVersionRequirement{5, 2, "full CO-RE with BTF"}
-)
 
 func NewManager(logger logr.Logger) (*Manager, error) {
 	if runtime.GOOS != "linux" {
@@ -114,8 +103,13 @@ func (m *Manager) HasFullCORESupport() bool {
 
 // detectKernelFeatures checks the running kernel for CO-RE capabilities.
 func detectKernelFeatures() (*KernelFeatures, error) {
+	version, err := kernel.GetCurrentVersion()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get kernel version: %w", err)
+	}
+
 	features := &KernelFeatures{
-		KernelVersion: getKernelVersion(),
+		KernelVersion: version.Raw,
 	}
 
 	// Check for native BTF support
@@ -126,14 +120,12 @@ func detectKernelFeatures() (*KernelFeatures, error) {
 	}
 
 	// Determine CO-RE support level based on kernel version
-	major, minor, _ := parseKernelVersion(features.KernelVersion)
-
 	switch {
-	case meetsRequirement(major, minor, requirementFullCORE):
+	case version.IsAtLeast(5, 2):
 		// Kernel 5.2+ has full CO-RE support with native BTF
 		features.CORESupport = "full"
 		features.RequiredKernel = "5.2"
-	case meetsRequirement(major, minor, requirementCORE):
+	case version.IsAtLeast(4, 18):
 		// Kernel 4.18-5.1 can use CO-RE with external BTF
 		features.CORESupport = "partial"
 		features.RequiredKernel = "4.18"
@@ -144,51 +136,6 @@ func detectKernelFeatures() (*KernelFeatures, error) {
 	}
 
 	return features, nil
-}
-
-func getKernelVersion() string {
-	// Try to read from /proc/version first
-	data, err := os.ReadFile("/proc/version")
-	if err == nil {
-		parts := strings.Fields(string(data))
-		if len(parts) >= 3 {
-			return parts[2]
-		}
-	}
-
-	// Fallback to unknown if /proc/version is not available
-	return "unknown"
-}
-
-func parseKernelVersion(version string) (major, minor, patch int) {
-	// Remove any suffix (e.g., "-generic")
-	parts := strings.Split(version, "-")
-	if len(parts) > 0 {
-		version = parts[0]
-	}
-
-	// Parse x.y.z format using a simpler approach
-	nums := strings.Split(version, ".")
-	parseVersionNumber := func(idx int) int {
-		if idx < len(nums) {
-			var val int
-			if _, err := fmt.Sscanf(nums[idx], "%d", &val); err != nil {
-				return 0
-			}
-			return val
-		}
-		return 0
-	}
-
-	major = parseVersionNumber(0)
-	minor = parseVersionNumber(1)
-	patch = parseVersionNumber(2)
-
-	return major, minor, patch
-}
-
-func meetsRequirement(major, minor int, req kernelVersionRequirement) bool {
-	return major > req.major || (major == req.major && minor >= req.minor)
 }
 
 // CheckBTFSupport checks if the kernel has BTF support.
@@ -207,11 +154,13 @@ func CheckBTFSupport() error {
 // CheckRingBufferSupport checks if the kernel supports BPF ring buffer.
 // Ring buffer is available in kernel 5.8+.
 func CheckRingBufferSupport() error {
-	version := getKernelVersion()
-	major, minor, _ := parseKernelVersion(version)
+	version, err := kernel.GetCurrentVersion()
+	if err != nil {
+		return fmt.Errorf("failed to get kernel version: %w", err)
+	}
 	
-	if !meetsRequirement(major, minor, kernelVersionRequirement{5, 8, "Ring Buffer"}) {
-		return fmt.Errorf("ring buffer requires kernel 5.8+, current kernel is %s", version)
+	if !version.IsAtLeast(5, 8) {
+		return fmt.Errorf("ring buffer requires kernel 5.8+, current kernel is %s", version.Raw)
 	}
 	
 	// Additional runtime check via feature detection
@@ -227,11 +176,13 @@ func CheckRingBufferSupport() error {
 // CO-RE (Compile Once - Run Everywhere) requires kernel 4.18+ for basic support,
 // and 5.2+ for full support with native BTF.
 func CheckCORESupport() error {
-	version := getKernelVersion()
-	major, minor, _ := parseKernelVersion(version)
+	version, err := kernel.GetCurrentVersion()
+	if err != nil {
+		return fmt.Errorf("failed to get kernel version: %w", err)
+	}
 	
-	if !meetsRequirement(major, minor, requirementCORE) {
-		return fmt.Errorf("CO-RE requires kernel 4.18+, current kernel is %s", version)
+	if !version.IsAtLeast(4, 18) {
+		return fmt.Errorf("CO-RE requires kernel 4.18+, current kernel is %s", version.Raw)
 	}
 	
 	// Check if we have at least partial CO-RE support
@@ -241,7 +192,7 @@ func CheckCORESupport() error {
 	}
 	
 	if features.CORESupport == "none" {
-		return fmt.Errorf("CO-RE not supported on kernel %s", version)
+		return fmt.Errorf("CO-RE not supported on kernel %s", version.Raw)
 	}
 	
 	return nil
@@ -250,11 +201,13 @@ func CheckCORESupport() error {
 // CheckPerfBufferSupport checks if the kernel supports BPF perf buffer.
 // Perf buffer is available in kernel 4.4+.
 func CheckPerfBufferSupport() error {
-	version := getKernelVersion()
-	major, minor, _ := parseKernelVersion(version)
+	version, err := kernel.GetCurrentVersion()
+	if err != nil {
+		return fmt.Errorf("failed to get kernel version: %w", err)
+	}
 	
-	if !meetsRequirement(major, minor, kernelVersionRequirement{4, 4, "Perf Buffer"}) {
-		return fmt.Errorf("perf buffer requires kernel 4.4+, current kernel is %s", version)
+	if !version.IsAtLeast(4, 4) {
+		return fmt.Errorf("perf buffer requires kernel 4.4+, current kernel is %s", version.Raw)
 	}
 	
 	// Additional runtime check via feature detection
