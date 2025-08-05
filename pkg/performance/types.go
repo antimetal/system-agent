@@ -30,7 +30,7 @@ const (
 	MetricTypeMemoryInfo  MetricType = "memory_info"
 	MetricTypeDiskInfo    MetricType = "disk_info"
 	MetricTypeNetworkInfo MetricType = "network_info"
-	MetricTypeNUMA        MetricType = "numa"
+	MetricTypeNUMAStats   MetricType = "numa_stats"
 )
 
 // CollectorStatus represents the operational status of a collector
@@ -82,7 +82,7 @@ type Metrics struct {
 	MemoryInfo  *MemoryInfo
 	DiskInfo    []DiskInfo
 	NetworkInfo []NetworkInfo
-	NUMA        *NUMAStats
+	NUMAStats   *NUMAStatistics
 }
 
 // LoadStats represents system load information
@@ -357,7 +357,7 @@ func DefaultCollectionConfig() CollectionConfig {
 			MetricTypeMemoryInfo:  true,
 			MetricTypeDiskInfo:    true,
 			MetricTypeNetworkInfo: true,
-			MetricTypeNUMA:        true,
+			MetricTypeNUMAStats:   true,
 		},
 		HostProcPath: "/proc",
 		HostSysPath:  "/sys",
@@ -468,6 +468,10 @@ type CPUCore struct {
 type MemoryInfo struct {
 	// Total memory from /proc/meminfo
 	TotalBytes uint64
+	// Whether NUMA is enabled/available on this system
+	NUMAEnabled bool
+	// Whether automatic NUMA balancing is available (from /proc/sys/kernel/numa_balancing)
+	NUMABalancingAvailable bool
 	// NUMA configuration from /sys/devices/system/node/
 	NUMANodes []NUMANode
 }
@@ -477,6 +481,10 @@ type NUMANode struct {
 	NodeID     int32
 	TotalBytes uint64
 	CPUs       []int32 // CPU cores in this NUMA node
+	// Distance to other nodes (from /sys/devices/system/node/node*/distance)
+	// Index corresponds to target node ID, value is relative distance
+	// Lower is better, typically 10 for local, 20+ for remote nodes
+	Distances []int32
 }
 
 // DiskInfo represents disk hardware configuration
@@ -524,37 +532,34 @@ type NetworkInfo struct {
 	Carrier   bool   // From /sys/class/net/[interface]/carrier
 }
 
-// NUMAStats represents NUMA (Non-Uniform Memory Access) statistics
-type NUMAStats struct {
-	// Whether NUMA is enabled on this system
+// NUMAStatistics represents runtime NUMA performance statistics
+// This is collected continuously to monitor allocation patterns and performance
+type NUMAStatistics struct {
+	// Whether NUMA is enabled on this system (must match NUMAInfo.Enabled)
 	Enabled bool
-	// Number of NUMA nodes
+	// Number of NUMA nodes (must match NUMAInfo.NodeCount)
 	NodeCount int
-	// Per-node statistics
-	Nodes []NUMANodeStats
-	// Whether automatic NUMA balancing is enabled
-	AutoBalance bool
+	// Runtime statistics per node
+	Nodes []NUMANodeStatistics
+	// Whether automatic NUMA balancing is currently enabled (runtime state)
+	AutoBalanceEnabled bool
 }
 
-// NUMANodeStats represents statistics for a single NUMA node
-type NUMANodeStats struct {
-	// Node ID (0-based)
+// NUMANodeStatistics represents runtime statistics for a single NUMA node
+type NUMANodeStatistics struct {
+	// Node ID (0-based, must match NUMANodeInfo.ID)
 	ID int
-	// CPUs assigned to this node
-	CPUs []int
-	// Memory information (in bytes)
-	MemTotal  uint64 // Total memory on this node
-	MemFree   uint64 // Free memory on this node
-	MemUsed   uint64 // Used memory on this node
+	// Current memory usage in bytes (from /sys/devices/system/node/node*/meminfo)
+	MemFree   uint64 // Currently free
+	MemUsed   uint64 // Currently used
 	FilePages uint64 // File-backed pages (page cache)
 	AnonPages uint64 // Anonymous pages (process memory)
-	// NUMA allocation statistics (in pages)
+	// NUMA allocation statistics in pages (from /sys/devices/system/node/node*/numastat)
+	// These are monotonically increasing counters since boot
 	NumaHit       uint64 // Memory successfully allocated on intended node
 	NumaMiss      uint64 // Memory allocated here despite preferring different node
 	NumaForeign   uint64 // Memory intended for here but allocated elsewhere
 	InterleaveHit uint64 // Interleaved memory successfully allocated here
 	LocalNode     uint64 // Memory allocated here while process was running here
 	OtherNode     uint64 // Memory allocated here while process was on other node
-	// Distance to other nodes (lower is better, typically 10 for local, 20+ for remote)
-	Distances []int
 }
