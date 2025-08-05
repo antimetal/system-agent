@@ -1,8 +1,7 @@
-name: Integration Tests
+name: Tests
 
-# This workflow runs both unit and integration tests across multiple kernel versions
-# using VMs to ensure compatibility with different Linux environments. It consolidates
-# all testing into a single workflow.
+# This workflow runs unit tests on the main runner and integration tests across 
+# multiple kernel versions using VMs to ensure compatibility with different Linux environments.
 
 on:
   push:
@@ -28,6 +27,29 @@ on:
   workflow_dispatch:
 
 jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+    
+    - name: Run unit tests
+      run: |
+        echo "=== Running Unit Tests ==="
+        go test -tags unit ./... -v -coverprofile coverage.out -timeout 30s
+    
+    - name: Upload coverage
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: coverage.out
+        retention-days: 7
+
   build-artifacts:
     name: Build Test Artifacts
     runs-on: ubuntu-latest
@@ -72,9 +94,9 @@ jobs:
           fi
         fi
     
-    - name: Create test runner script
+    - name: Create integration test runner script
       run: |
-        cat > run-tests-in-vm.sh << 'EOF'
+        cat > run-integration-tests-in-vm.sh << 'EOF'
         #!/bin/bash
         set -e
         
@@ -124,23 +146,11 @@ jobs:
         cd /host
         
         # Initialize result counters
-        UNIT_PASS=0
-        UNIT_FAIL=0
-        UNIT_SKIP=0
         INT_PASS=0
         INT_FAIL=0
         INT_SKIP=0
         
-        # Run unit tests
-        echo -e "\n=== Running Unit Tests ==="
-        go test ./... -v 2>&1 | tee unit-test-results.txt || echo "Unit tests completed with errors"
-        
-        # Count unit test results
-        UNIT_PASS=$(grep -c "^--- PASS:" unit-test-results.txt 2>/dev/null || echo 0)
-        UNIT_FAIL=$(grep -c "^--- FAIL:" unit-test-results.txt 2>/dev/null || echo 0)
-        UNIT_SKIP=$(grep -c "^--- SKIP:" unit-test-results.txt 2>/dev/null || echo 0)
-        
-        # Run integration tests
+        # Run integration tests only
         echo -e "\n=== Running Integration Tests ==="
         go test -tags integration ./... -v 2>&1 | tee integration-test-results.txt || echo "Integration tests completed with errors"
         
@@ -174,7 +184,6 @@ jobs:
         
         # Generate summary
         echo -e "\n=== Test Summary ==="
-        echo "Unit tests: $UNIT_PASS passed, $UNIT_FAIL failed, $UNIT_SKIP skipped"
         echo "Integration tests: $INT_PASS passed, $INT_FAIL failed, $INT_SKIP skipped"
         
         # Create JSON summary
@@ -182,11 +191,6 @@ jobs:
         {
           "kernel": "$(uname -r)",
           "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-          "unit_tests": {
-            "passed": $UNIT_PASS,
-            "failed": $UNIT_FAIL,
-            "skipped": $UNIT_SKIP
-          },
           "integration_tests": {
             "passed": $INT_PASS,
             "failed": $INT_FAIL,
@@ -196,16 +200,16 @@ jobs:
         JSON
         
         # Exit with failure if any tests failed
-        if [ $UNIT_FAIL -gt 0 ] || [ $INT_FAIL -gt 0 ]; then
+        if [ $INT_FAIL -gt 0 ]; then
           exit 1
         fi
         EOF
-        chmod +x run-tests-in-vm.sh
+        chmod +x run-integration-tests-in-vm.sh
     
     - name: Package artifacts
       run: |
         mkdir -p artifacts
-        cp run-tests-in-vm.sh artifacts/
+        cp run-integration-tests-in-vm.sh artifacts/
         
         # Copy eBPF programs if they exist
         if ls internal/ebpf/*/*.bpf.o 2>/dev/null; then
@@ -224,8 +228,8 @@ jobs:
         path: artifacts/
         retention-days: 1
 
-  test-on-vms:
-    name: Test on kernel ${{ matrix.kernel }}
+  integration-tests:
+    name: Integration Tests - Kernel ${{ matrix.kernel }}
     needs: build-artifacts
     runs-on: ubuntu-latest
     strategy:
@@ -244,7 +248,7 @@ jobs:
     
     - name: Prepare test environment
       run: |
-        chmod +x artifacts/run-tests-in-vm.sh
+        chmod +x artifacts/run-integration-tests-in-vm.sh
         ls -la artifacts/
     
     - name: Setup Go
@@ -299,202 +303,111 @@ jobs:
     - name: Build VM image
       if: steps.vm-cache.outputs.cache-hit != 'true'
       run: |
+        echo "=== Building VM image ==="
+        
+        # Create VM images directory
         mkdir -p vm-images
         
-        # Create LVH image configuration
-        cat > vm-images/images.json << 'EOF'
-        [
-          {
-            "name": "integration-test",
-            "packages": [
-              "build-essential",
-              "linux-tools-generic",
-              "bpftool",
-              "procps",
-              "sysstat",
-              "iproute2",
-              "wget",
-              "curl"
-            ],
-            "actions": [
-              {
-                "comment": "Enable root login",
-                "op": "run-command", 
-                "command": ["sed", "-i", "s/^#PermitRootLogin .*/PermitRootLogin yes/", "/etc/ssh/sshd_config"]
-              },
-              {
-                "comment": "Set root password",
-                "op": "run-command",
-                "command": ["sh", "-c", "echo 'root:root' | chpasswd"]
-              }
-            ]
-          }
-        ]
+        # Create a config file for the VM
+        cat > lvh-config.yaml << EOF
+        architecture: amd64
+        base_image: debian:bookworm
+        name: integration-test-vm
+        packages:
+          - build-essential
+          - git
+          - wget
+          - curl
+          - ca-certificates
         EOF
         
-        # Build the image
-        $(go env GOPATH)/bin/lvh images build --dir vm-images/ || {
-          echo "LVH image build failed, downloading pre-built image..."
-          wget -O vm-images/integration-test.qcow2 https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2
-          qemu-img resize vm-images/integration-test.qcow2 10G
+        # Build VM image (this creates a rootfs)
+        $(go env GOPATH)/bin/lvh images build --dir vm-images -f lvh-config.yaml || {
+          echo "Failed to build VM image, trying with default settings..."
+          $(go env GOPATH)/bin/lvh images build --dir vm-images
         }
+        
+        echo "VM image created:"
+        ls -la vm-images/
     
     - name: Run tests in VM
       run: |
-        echo "Starting VM with kernel ${{ matrix.kernel }}..."
+        echo "=== Running tests in VM with kernel ${{ matrix.kernel }} ==="
         
-        # Find VM image
-        VM_IMAGE=$(find vm-images -name "*.qcow2" -o -name "*.img" 2>/dev/null | head -1)
-        if [ -z "$VM_IMAGE" ]; then
-          echo "No VM image found"
+        # Find the kernel image
+        KERNEL=""
+        if [ -f "${{ matrix.kernel }}-main/boot/vmlinuz" ]; then
+          KERNEL="${{ matrix.kernel }}-main/boot/vmlinuz"
+        elif [ -f "${{ matrix.kernel }}-main/vmlinuz" ]; then
+          KERNEL="${{ matrix.kernel }}-main/vmlinuz"
+        else
+          # Try to find any kernel image
+          KERNEL=$(find "${{ matrix.kernel }}-main" -name "vmlinuz*" -o -name "bzImage" | head -1)
+        fi
+        
+        if [ -z "$KERNEL" ]; then
+          echo "ERROR: Could not find kernel image"
           exit 1
         fi
         
-        echo "Using VM image: $VM_IMAGE"
+        echo "Using kernel: $KERNEL"
         
-        # Find kernel
-        KERNEL_PATH=""
-        if [ -d "${{ matrix.kernel }}-main" ]; then
-          KERNEL_PATH=$(find "${{ matrix.kernel }}-main/boot" -name "vmlinuz*" -o -name "bzImage*" -o -name "vmlinux*" | head -1)
-        fi
-        
-        # Run VM with tests
-        if [ -n "$KERNEL_PATH" ]; then
-          echo "Running with kernel: $KERNEL_PATH"
-          timeout 900 $(go env GOPATH)/bin/lvh run \
-            --kernel "$(pwd)/$KERNEL_PATH" \
-            --image "$VM_IMAGE" \
-            --host-mount $(pwd) \
-            -- /host/artifacts/run-tests-in-vm.sh || {
-              echo "VM test completed with exit code: $?"
-            }
+        # Find rootfs
+        ROOTFS=""
+        if [ -f "vm-images/rootfs.img" ]; then
+          ROOTFS="vm-images/rootfs.img"
+        elif [ -f "vm-images/integration-test-vm.img" ]; then
+          ROOTFS="vm-images/integration-test-vm.img"
         else
-          echo "Running with VM's default kernel"
-          timeout 900 $(go env GOPATH)/bin/lvh run \
-            --image "$VM_IMAGE" \
-            --host-mount $(pwd) \
-            -- /host/artifacts/run-tests-in-vm.sh || {
-              echo "VM test completed with exit code: $?"
-            }
+          ROOTFS=$(find vm-images -name "*.img" | head -1)
         fi
+        
+        if [ -z "$ROOTFS" ]; then
+          echo "ERROR: Could not find rootfs image"
+          exit 1
+        fi
+        
+        echo "Using rootfs: $ROOTFS"
+        
+        # Run the VM with our test script
+        $(go env GOPATH)/bin/lvh run \
+          --kernel "$KERNEL" \
+          --image "$ROOTFS" \
+          --host-mount "$PWD:/host" \
+          --memory 2G \
+          --cpu 2 \
+          --timeout 10m \
+          -- /host/artifacts/run-integration-tests-in-vm.sh
     
     - name: Upload test results
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: test-results-kernel-${{ matrix.kernel }}
+        name: test-results-${{ matrix.kernel }}
         path: |
-          *-test-results.txt
+          integration-test-results.txt
           test-summary.json
         retention-days: 7
-        if-no-files-found: ignore
 
   test-summary:
     name: Test Summary
+    needs: [unit-tests, integration-tests]
     runs-on: ubuntu-latest
-    needs: test-on-vms
     if: always()
-    
     steps:
-    - name: Download all test results
-      uses: actions/download-artifact@v4
-      with:
-        pattern: test-results-*
-        merge-multiple: true
-        path: all-results/
-    
-    - name: Generate test summary
+    - name: Summary
       run: |
-        echo "# Integration Test Results" >> $GITHUB_STEP_SUMMARY
+        echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         
-        echo "## Kernel Compatibility Matrix" >> $GITHUB_STEP_SUMMARY
-        echo "| Kernel Version | Unit Tests | Integration Tests | Overall |" >> $GITHUB_STEP_SUMMARY
-        echo "|----------------|------------|-------------------|---------|" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ needs.unit-tests.result }}" == "success" ]; then
+          echo "✅ Unit tests passed" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ Unit tests failed" >> $GITHUB_STEP_SUMMARY
+        fi
         
-        # Process results for each kernel
-        for kernel in 5.10 5.15 6.1 6.6; do
-          UNIT_STATUS="⏳"
-          INT_STATUS="⏳"
-          OVERALL="⏳"
-          
-          # Check if results exist for this kernel
-          if [ -f "all-results/test-summary.json" ]; then
-            # Parse JSON results (simplified - would use jq in real implementation)
-            if grep -q '"failed": 0' all-results/test-summary.json; then
-              UNIT_STATUS="✅"
-              INT_STATUS="✅"
-              OVERALL="✅"
-            else
-              UNIT_STATUS="❌"
-              INT_STATUS="❌"
-              OVERALL="❌"
-            fi
-          elif [ -f "all-results/unit-test-results.txt" ] || [ -f "all-results/integration-test-results.txt" ]; then
-            # Check text results as fallback
-            if [ -f "all-results/unit-test-results.txt" ]; then
-              if grep -q "FAIL" "all-results/unit-test-results.txt"; then
-                UNIT_STATUS="❌"
-              else
-                UNIT_STATUS="✅"
-              fi
-            fi
-            
-            if [ -f "all-results/integration-test-results.txt" ]; then
-              if grep -q "FAIL" "all-results/integration-test-results.txt"; then
-                INT_STATUS="❌"
-              else
-                INT_STATUS="✅"
-              fi
-            fi
-            
-            # Determine overall status
-            if [[ "$UNIT_STATUS" == "✅" && "$INT_STATUS" == "✅" ]]; then
-              OVERALL="✅"
-            elif [[ "$UNIT_STATUS" == "❌" || "$INT_STATUS" == "❌" ]]; then
-              OVERALL="❌"
-            else
-              OVERALL="⚠️"
-            fi
-          fi
-          
-          echo "| $kernel | $UNIT_STATUS | $INT_STATUS | $OVERALL |" >> $GITHUB_STEP_SUMMARY
-        done
-        
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "## Testing Strategy" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "✅ **Multiple Kernels**: Tests run across kernel versions 5.10 to 6.6" >> $GITHUB_STEP_SUMMARY
-        echo "✅ **Real Linux Features**: Tests interact with actual /proc, /sys filesystems" >> $GITHUB_STEP_SUMMARY
-        echo "✅ **Build Tags**: Integration tests use \`//go:build integration\` tag" >> $GITHUB_STEP_SUMMARY
-        echo "✅ **VM Isolation**: Each kernel version tested in isolated VM environment" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        echo "### Test Coverage" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Unit Tests:**" >> $GITHUB_STEP_SUMMARY
-        echo "- All performance collectors" >> $GITHUB_STEP_SUMMARY
-        echo "- Kubernetes agent components" >> $GITHUB_STEP_SUMMARY
-        echo "- Resource store and intake workers" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Integration Tests:**" >> $GITHUB_STEP_SUMMARY
-        echo "- Real /proc and /sys filesystem interaction" >> $GITHUB_STEP_SUMMARY
-        echo "- Hardware collector verification" >> $GITHUB_STEP_SUMMARY
-        echo "- Kernel compatibility checks" >> $GITHUB_STEP_SUMMARY
-        echo "- eBPF program loading and verification" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Kernel Features Tested:**" >> $GITHUB_STEP_SUMMARY
-        echo "- Process filesystem (/proc)" >> $GITHUB_STEP_SUMMARY
-        echo "- System filesystem (/sys)" >> $GITHUB_STEP_SUMMARY
-        echo "- Control groups (cgroups v1/v2)" >> $GITHUB_STEP_SUMMARY
-        echo "- BTF support (kernel 5.2+)" >> $GITHUB_STEP_SUMMARY
-        echo "- eBPF CO-RE (kernel 4.18+)" >> $GITHUB_STEP_SUMMARY
-        echo "- Ring buffer support (kernel 5.8+)" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        echo "### Test Commands" >> $GITHUB_STEP_SUMMARY
-        echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-        echo "make test           # Run unit tests locally" >> $GITHUB_STEP_SUMMARY
-        echo "make test-integration  # Run integration tests locally" >> $GITHUB_STEP_SUMMARY
-        echo "go test -tags integration ./...  # Run all integration tests" >> $GITHUB_STEP_SUMMARY
-        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ needs.integration-tests.result }}" == "success" ]; then
+          echo "✅ Integration tests passed on all kernel versions" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ Integration tests had failures" >> $GITHUB_STEP_SUMMARY
+        fi

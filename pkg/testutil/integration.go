@@ -50,13 +50,13 @@ func RequireCapability(t *testing.T, cap capabilities.Capability) {
 	t.Helper()
 	RequireLinux(t)
 
-	hasCapability, err := capabilities.HasCapability(cap)
+	hasAll, missing, err := capabilities.HasAllCapabilities([]capabilities.Capability{cap})
 	if err != nil {
 		t.Skipf("Failed to check capability %s: %v", cap, err)
 	}
 
-	if !hasCapability {
-		t.Skipf("Test requires capability %s", cap)
+	if !hasAll {
+		t.Skipf("Test requires capability %s (missing: %v)", cap, missing)
 	}
 }
 

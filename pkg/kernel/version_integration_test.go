@@ -19,10 +19,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCurrentVersion_RealKernel(t *testing.T) {
+func TestGetCurrentVersion_RealKernel(t *testing.T) {
 	testutil.RequireLinux(t)
 
-	version, err := CurrentVersion()
+	version, err := GetCurrentVersion()
 	require.NoError(t, err, "Should be able to get current kernel version")
 
 	// Verify we got reasonable values
@@ -37,7 +37,7 @@ func TestCurrentVersion_RealKernel(t *testing.T) {
 		"Raw version %q should start with %q", version.Raw, expectedPrefix)
 }
 
-func TestCurrentVersion_ProcVersion(t *testing.T) {
+func TestGetCurrentVersion_ProcVersion(t *testing.T) {
 	testutil.RequireLinux(t)
 	testutil.RequireLinuxFilesystem(t)
 
@@ -47,7 +47,7 @@ func TestCurrentVersion_ProcVersion(t *testing.T) {
 	procVersion := string(procVersionBytes)
 
 	// Get version through our API
-	version, err := CurrentVersion()
+	version, err := GetCurrentVersion()
 	require.NoError(t, err)
 
 	// The raw version from uname should be contained in /proc/version
@@ -59,7 +59,7 @@ func TestCurrentVersion_ProcVersion(t *testing.T) {
 func TestIsAtLeast_RealKernel(t *testing.T) {
 	testutil.RequireLinux(t)
 
-	version, err := CurrentVersion()
+	version, err := GetCurrentVersion()
 	require.NoError(t, err)
 
 	// Test with current version - should always be true
@@ -86,7 +86,7 @@ func TestIsAtLeast_RealKernel(t *testing.T) {
 func TestCompare_RealKernel(t *testing.T) {
 	testutil.RequireLinux(t)
 
-	current, err := CurrentVersion()
+	current, err := GetCurrentVersion()
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -145,7 +145,7 @@ func TestCompare_RealKernel(t *testing.T) {
 func TestFeatureChecks_RealKernel(t *testing.T) {
 	testutil.RequireLinux(t)
 
-	version, err := CurrentVersion()
+	version, err := GetCurrentVersion()
 	require.NoError(t, err)
 
 	// Test BTF support detection
@@ -194,7 +194,7 @@ func TestKernelVersionConsistency(t *testing.T) {
 	testutil.RequireLinuxFilesystem(t)
 
 	// Get version through our API
-	ourVersion, err := CurrentVersion()
+	ourVersion, err := GetCurrentVersion()
 	require.NoError(t, err)
 
 	// Get version through testutil
