@@ -20,7 +20,7 @@ import (
 )
 
 func init() {
-	performance.Register(
+	performance.TryRegister(
 		performance.MetricTypeDisk, performance.PartialNewContinuousPointCollector(
 			func(logger logr.Logger, config performance.CollectionConfig) (performance.PointCollector, error) {
 				return NewDiskCollector(logger, config)
