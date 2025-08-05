@@ -27,6 +27,7 @@ const (
 	MetricTypeKernel    MetricType = "kernel"
 	MetricTypeSystem    MetricType = "system"
 	MetricTypeNUMAStats MetricType = "numa_stats"
+	MetricTypeProfile   MetricType = "profile"
 	// Runtime Container Statistics
 	MetricTypeCgroupCPU     MetricType = "cgroup_cpu"
 	MetricTypeCgroupMemory  MetricType = "cgroup_memory"
@@ -83,6 +84,7 @@ type Metrics struct {
 	TCP       *TCPStats
 	System    *SystemStats
 	Kernel    []KernelMessage
+	Profile   *ProfileStats
 	// Hardware configuration
 	CPUInfo     *CPUInfo
 	MemoryInfo  *MemoryInfo
@@ -653,4 +655,51 @@ type ContainerInfo struct {
 	State     string // running, paused, stopped
 	StartedAt time.Time
 	Labels    map[string]string
+}
+
+// ProfileStats represents perf event-based profiling data collected via eBPF
+type ProfileStats struct {
+	// Collection metadata
+	CollectionTime time.Time     // When the profile collection started
+	Duration       time.Duration // How long the profile ran
+	// Perf event configuration
+	EventName    string // Human-readable name: "cpu-cycles", "cache-misses", etc.
+	EventType    uint32 // PERF_TYPE_* constant (HARDWARE, SOFTWARE, etc.)
+	EventConfig  uint64 // Event-specific config (PERF_COUNT_HW_*, PERF_COUNT_SW_*, etc.)
+	SamplePeriod uint64 // Sample every N events
+	// Collection statistics
+	SampleCount uint64 // Total number of samples collected
+	LostSamples uint64 // Samples lost due to ring buffer overflow
+	// Stack traces
+	Stacks []ProfileStack
+	// Process summary (command names and aggregated data)
+	Processes map[int32]ProfileProcess // Keyed by PID
+}
+
+// ProfileStack represents a unique stack trace
+type ProfileStack struct {
+	// Stack identification
+	ID          uint32   // Unique ID for this stack trace
+	UserStack   []uint64 // User space instruction addresses
+	KernelStack []uint64 // Kernel space instruction addresses
+	// Thread context
+	PID int32 // Process ID
+	TID int32 // Thread ID
+	CPU int32 // CPU where samples occurred (or -1 if multiple)
+	// Metrics
+	SampleCount uint64  // Number of times this exact stack was sampled
+	Percentage  float64 // Percentage of total samples
+	// Symbol resolution (optional, populated post-collection)
+	UserSymbols   []string // Resolved user space symbols
+	KernelSymbols []string // Resolved kernel symbols
+}
+
+// ProfileProcess contains process-level information and aggregated metrics
+type ProfileProcess struct {
+	PID         int32    // Process ID
+	Command     string   // Process command name (stored once per PID)
+	SampleCount uint64   // Total samples for this process
+	Percentage  float64  // Percentage of total samples
+	TopStacks   []uint32 // Stack IDs sorted by sample count (references ProfileStack.ID)
+	ThreadCount int32    // Number of unique threads sampled
 }
