@@ -146,6 +146,7 @@ func TestMemoryInfoCollector_Collect(t *testing.T) {
 			},
 			wantInfo: func(t *testing.T, info *performance.MemoryInfo) {
 				assert.Equal(t, uint64(16384000*1024), info.TotalBytes)
+				assert.False(t, info.NUMAEnabled) // Single node = not NUMA
 				assert.Len(t, info.NUMANodes, 1)
 				assert.Equal(t, int32(0), info.NUMANodes[0].NodeID)
 				assert.Equal(t, uint64(8192000*1024), info.NUMANodes[0].TotalBytes)
@@ -179,6 +180,7 @@ func TestMemoryInfoCollector_Collect(t *testing.T) {
 			},
 			wantInfo: func(t *testing.T, info *performance.MemoryInfo) {
 				assert.Equal(t, uint64(16384000*1024), info.TotalBytes)
+				assert.True(t, info.NUMAEnabled) // Multiple nodes = NUMA enabled
 				assert.Len(t, info.NUMANodes, 2)
 
 				// Node 0
@@ -193,6 +195,74 @@ func TestMemoryInfoCollector_Collect(t *testing.T) {
 			},
 		},
 		{
+			name:    "dual NUMA nodes with distances and balancing",
+			meminfo: testMeminfo,
+			setupSysfs: func(t *testing.T, sysPath string) {
+				// Create NUMA balancing file
+				kernelPath := filepath.Join(sysPath, "..", "proc", "sys", "kernel")
+				require.NoError(t, os.MkdirAll(kernelPath, 0755))
+				require.NoError(t, os.WriteFile(
+					filepath.Join(kernelPath, "numa_balancing"),
+					[]byte("1\n"),
+					0644,
+				))
+
+				// Create two NUMA nodes with distance information
+				for i := 0; i < 2; i++ {
+					nodePath := filepath.Join(sysPath, "devices", "system", "node", fmt.Sprintf("node%d", i))
+					require.NoError(t, os.MkdirAll(nodePath, 0755))
+
+					// Write node meminfo
+					require.NoError(t, os.WriteFile(
+						filepath.Join(nodePath, "meminfo"),
+						[]byte(fmt.Sprintf("Node %d MemTotal:       8192000 kB\n", i)),
+						0644,
+					))
+
+					// Write CPU list (4 CPUs per node)
+					cpuList := fmt.Sprintf("%d-%d\n", i*4, i*4+3)
+					require.NoError(t, os.WriteFile(
+						filepath.Join(nodePath, "cpulist"),
+						[]byte(cpuList),
+						0644,
+					))
+
+					// Write distance information
+					// Node 0: "10 21" (10 to self, 21 to node1)
+					// Node 1: "21 10" (21 to node0, 10 to self)
+					var distances string
+					if i == 0 {
+						distances = "10 21\n"
+					} else {
+						distances = "21 10\n"
+					}
+					require.NoError(t, os.WriteFile(
+						filepath.Join(nodePath, "distance"),
+						[]byte(distances),
+						0644,
+					))
+				}
+			},
+			wantInfo: func(t *testing.T, info *performance.MemoryInfo) {
+				assert.Equal(t, uint64(16384000*1024), info.TotalBytes)
+				assert.True(t, info.NUMAEnabled)
+				assert.True(t, info.NUMABalancingAvailable)
+				assert.Len(t, info.NUMANodes, 2)
+
+				// Node 0
+				assert.Equal(t, int32(0), info.NUMANodes[0].NodeID)
+				assert.Equal(t, uint64(8192000*1024), info.NUMANodes[0].TotalBytes)
+				assert.Equal(t, []int32{0, 1, 2, 3}, info.NUMANodes[0].CPUs)
+				assert.Equal(t, []int32{10, 21}, info.NUMANodes[0].Distances)
+
+				// Node 1
+				assert.Equal(t, int32(1), info.NUMANodes[1].NodeID)
+				assert.Equal(t, uint64(8192000*1024), info.NUMANodes[1].TotalBytes)
+				assert.Equal(t, []int32{4, 5, 6, 7}, info.NUMANodes[1].CPUs)
+				assert.Equal(t, []int32{21, 10}, info.NUMANodes[1].Distances)
+			},
+		},
+		{
 			name:    "no NUMA info",
 			meminfo: testMeminfo,
 			setupSysfs: func(t *testing.T, sysPath string) {
@@ -204,10 +274,12 @@ func TestMemoryInfoCollector_Collect(t *testing.T) {
 			},
 			wantInfo: func(t *testing.T, info *performance.MemoryInfo) {
 				assert.Equal(t, uint64(16384000*1024), info.TotalBytes)
-				assert.Len(t, info.NUMANodes, 1) // Assumed
+				assert.False(t, info.NUMAEnabled) // No NUMA nodes = not NUMA
+				assert.Len(t, info.NUMANodes, 1)  // Assumed
 				assert.Equal(t, int32(0), info.NUMANodes[0].NodeID)
 				assert.Equal(t, uint64(16384000*1024), info.NUMANodes[0].TotalBytes)
 				assert.Equal(t, []int32{0, 1, 2, 3}, info.NUMANodes[0].CPUs)
+				assert.Equal(t, []int32{10}, info.NUMANodes[0].Distances) // Default local distance
 			},
 		},
 		{

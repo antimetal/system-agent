@@ -1,0 +1,271 @@
+// Copyright Antimetal, Inc. All rights reserved.
+//
+// Use of this source code is governed by a source available license that can be found in the
+// LICENSE file or at:
+// https://polyformproject.org/wp-content/uploads/2020/06/PolyForm-Shield-1.0.0.txt
+
+package collectors
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+
+	"github.com/antimetal/agent/pkg/performance"
+	"github.com/go-logr/logr"
+)
+
+func init() {
+	performance.Register(performance.MetricTypeCgroupCPU, performance.PartialNewContinuousPointCollector(
+		func(logger logr.Logger, config performance.CollectionConfig) (performance.PointCollector, error) {
+			return NewCgroupCPUCollector(logger, config)
+		},
+	))
+}
+
+// Compile-time interface check
+var _ performance.PointCollector = (*CgroupCPUCollector)(nil)
+
+// CgroupCPUCollector collects CPU metrics from cgroup filesystems
+//
+// This collector reads CPU usage and throttling information from cgroup
+// controllers to monitor container resource consumption and contention.
+//
+// Supports both cgroup v1 and v2 hierarchies.
+type CgroupCPUCollector struct {
+	performance.BaseCollector
+	cgroupPath string
+	discovery  *ContainerDiscovery
+}
+
+// NewCgroupCPUCollector creates a new cgroup CPU collector
+func NewCgroupCPUCollector(logger logr.Logger, config performance.CollectionConfig) (*CgroupCPUCollector, error) {
+	if err := config.Validate(performance.ValidateOptions{RequireHostCgroupPath: true}); err != nil {
+		return nil, err
+	}
+
+	capabilities := performance.CollectorCapabilities{
+		SupportsOneShot:    true,
+		SupportsContinuous: false,
+		RequiresRoot:       false,
+		RequiresEBPF:       false,
+		MinKernelVersion:   "2.6.24", // When cgroups were introduced
+	}
+
+	return &CgroupCPUCollector{
+		BaseCollector: performance.NewBaseCollector(
+			performance.MetricTypeCgroupCPU,
+			"Cgroup CPU Statistics Collector",
+			logger,
+			config,
+			capabilities,
+		),
+		cgroupPath: config.HostCgroupPath,
+		discovery:  NewContainerDiscovery(config.HostCgroupPath),
+	}, nil
+}
+
+// Collect performs a one-shot collection of cgroup CPU statistics
+func (c *CgroupCPUCollector) Collect(ctx context.Context) (any, error) {
+	// Detect cgroup version
+	version, err := c.discovery.DetectCgroupVersion()
+	if err != nil {
+		return nil, fmt.Errorf("failed to detect cgroup version: %w", err)
+	}
+
+	c.Logger().V(2).Info("Detected cgroup version", "version", version)
+
+	// Discover containers
+	containers, err := c.discovery.DiscoverContainers("cpu", version)
+	if err != nil {
+		return nil, fmt.Errorf("failed to discover containers: %w", err)
+	}
+
+	// Collect stats for each container
+	var stats []performance.CgroupCPUStats
+	for _, container := range containers {
+		stat, err := c.collectContainerStats(container, version)
+		if err != nil {
+			// Log error but continue with other containers
+			c.Logger().V(1).Info("Failed to collect stats for container",
+				"containerID", container.ID,
+				"error", err)
+			continue
+		}
+		stats = append(stats, stat)
+	}
+
+	return stats, nil
+}
+
+// collectContainerStats collects CPU stats for a single container
+func (c *CgroupCPUCollector) collectContainerStats(container ContainerPath, version int) (performance.CgroupCPUStats, error) {
+	stats := performance.CgroupCPUStats{
+		ContainerID: container.ID,
+		CgroupPath:  container.CgroupPath,
+	}
+
+	if version == 1 {
+		// Cgroup v1: Read from separate cpu and cpuacct controllers
+		if err := c.readCgroupV1Stats(&stats, container); err != nil {
+			return stats, err
+		}
+	} else {
+		// Cgroup v2: Read from unified hierarchy
+		if err := c.readCgroupV2Stats(&stats, container); err != nil {
+			return stats, err
+		}
+	}
+
+	// Calculate derived metrics
+	if stats.NrPeriods > 0 {
+		stats.ThrottlePercent = float64(stats.NrThrottled) / float64(stats.NrPeriods) * 100
+	}
+
+	return stats, nil
+}
+
+// readCgroupV1Stats reads CPU stats from cgroup v1 files
+func (c *CgroupCPUCollector) readCgroupV1Stats(stats *performance.CgroupCPUStats, container ContainerPath) error {
+	// Read CPU throttling stats
+	cpuStatPath := filepath.Join(container.CgroupPath, "cpu.stat")
+	if data, err := os.ReadFile(cpuStatPath); err == nil {
+		c.parseCPUStat(string(data), stats)
+	}
+
+	// Read CPU usage
+	// Note: In v1, we need to use the cpuacct controller path
+	cpuacctPath := strings.Replace(container.CgroupPath, "/cpu/", "/cpuacct/", 1)
+	usagePath := filepath.Join(cpuacctPath, "cpuacct.usage")
+	if data, err := os.ReadFile(usagePath); err == nil {
+		if usage, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); err == nil {
+			stats.UsageNanos = usage
+		}
+	}
+
+	// Read CPU shares
+	sharesPath := filepath.Join(container.CgroupPath, "cpu.shares")
+	if data, err := os.ReadFile(sharesPath); err == nil {
+		if shares, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); err == nil {
+			stats.CpuShares = shares
+		}
+	}
+
+	// Read CPU quota and period
+	quotaPath := filepath.Join(container.CgroupPath, "cpu.cfs_quota_us")
+	if data, err := os.ReadFile(quotaPath); err == nil {
+		if quota, err := strconv.ParseInt(strings.TrimSpace(string(data)), 10, 64); err == nil {
+			stats.CpuQuotaUs = quota
+		}
+	}
+
+	periodPath := filepath.Join(container.CgroupPath, "cpu.cfs_period_us")
+	if data, err := os.ReadFile(periodPath); err == nil {
+		if period, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); err == nil {
+			stats.CpuPeriodUs = period
+		}
+	}
+
+	return nil
+}
+
+// readCgroupV2Stats reads CPU stats from cgroup v2 files
+func (c *CgroupCPUCollector) readCgroupV2Stats(stats *performance.CgroupCPUStats, container ContainerPath) error {
+	// Read cpu.stat which contains usage and throttling info
+	cpuStatPath := filepath.Join(container.CgroupPath, "cpu.stat")
+	if data, err := os.ReadFile(cpuStatPath); err == nil {
+		c.parseCgroupV2CPUStat(string(data), stats)
+	} else {
+		return fmt.Errorf("failed to read cpu.stat: %w", err)
+	}
+
+	// Read cpu.max for quota and period
+	cpuMaxPath := filepath.Join(container.CgroupPath, "cpu.max")
+	if data, err := os.ReadFile(cpuMaxPath); err == nil {
+		parts := strings.Fields(string(data))
+		if len(parts) == 2 {
+			if parts[0] != "max" {
+				if quota, err := strconv.ParseInt(parts[0], 10, 64); err == nil {
+					stats.CpuQuotaUs = quota
+				}
+			} else {
+				stats.CpuQuotaUs = -1 // Unlimited
+			}
+			if period, err := strconv.ParseUint(parts[1], 10, 64); err == nil {
+				stats.CpuPeriodUs = period
+			}
+		}
+	}
+
+	// Read cpu.weight (v2 equivalent of shares)
+	// Note: v2 uses weights 1-10000, v1 uses shares 2-262144
+	// We'll store as v1-style shares for consistency
+	cpuWeightPath := filepath.Join(container.CgroupPath, "cpu.weight")
+	if data, err := os.ReadFile(cpuWeightPath); err == nil {
+		if weight, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); err == nil {
+			// Convert weight to shares: shares = (weight * 1024) / 100
+			stats.CpuShares = (weight * 1024) / 100
+		}
+	}
+
+	return nil
+}
+
+// parseCPUStat parses cgroup v1 cpu.stat file
+func (c *CgroupCPUCollector) parseCPUStat(data string, stats *performance.CgroupCPUStats) {
+	lines := strings.Split(strings.TrimSpace(data), "\n")
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			continue
+		}
+
+		value, err := strconv.ParseUint(fields[1], 10, 64)
+		if err != nil {
+			continue
+		}
+
+		switch fields[0] {
+		case "nr_periods":
+			stats.NrPeriods = value
+		case "nr_throttled":
+			stats.NrThrottled = value
+		case "throttled_time":
+			stats.ThrottledTime = value
+		}
+	}
+}
+
+// parseCgroupV2CPUStat parses cgroup v2 cpu.stat file
+func (c *CgroupCPUCollector) parseCgroupV2CPUStat(data string, stats *performance.CgroupCPUStats) {
+	lines := strings.Split(strings.TrimSpace(data), "\n")
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			continue
+		}
+
+		value, err := strconv.ParseUint(fields[1], 10, 64)
+		if err != nil {
+			continue
+		}
+
+		switch fields[0] {
+		case "usage_usec":
+			// Convert microseconds to nanoseconds
+			stats.UsageNanos = value * 1000
+		case "nr_periods":
+			stats.NrPeriods = value
+		case "nr_throttled":
+			stats.NrThrottled = value
+		case "throttled_usec":
+			// Convert microseconds to nanoseconds
+			stats.ThrottledTime = value * 1000
+		}
+	}
+}
+
+// Helper functions

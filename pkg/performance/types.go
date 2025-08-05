@@ -16,22 +16,28 @@ import (
 type MetricType string
 
 const (
-	MetricTypeLoad    MetricType = "load"
-	MetricTypeMemory  MetricType = "memory"
-	MetricTypeCPU     MetricType = "cpu"
-	MetricTypeProcess MetricType = "process"
-	MetricTypeDisk    MetricType = "disk"
-	MetricTypeNetwork MetricType = "network"
-	MetricTypeTCP     MetricType = "tcp"
-	MetricTypeKernel  MetricType = "kernel"
-	MetricTypeSystem  MetricType = "system"
-	MetricTypeProfile MetricType = "profile"
+	// Runtime System Statistics
+	MetricTypeLoad      MetricType = "load"
+	MetricTypeMemory    MetricType = "memory"
+	MetricTypeCPU       MetricType = "cpu"
+	MetricTypeProcess   MetricType = "process"
+	MetricTypeDisk      MetricType = "disk"
+	MetricTypeNetwork   MetricType = "network"
+	MetricTypeTCP       MetricType = "tcp"
+	MetricTypeKernel    MetricType = "kernel"
+	MetricTypeSystem    MetricType = "system"
+	MetricTypeProfile   MetricType = "profile"
+	MetricTypeNUMAStats MetricType = "numa_stats"
+	// Runtime Container Statistics
+	MetricTypeCgroupCPU     MetricType = "cgroup_cpu"
+	MetricTypeCgroupMemory  MetricType = "cgroup_memory"
+	MetricTypeCgroupIO      MetricType = "cgroup_io"      // Future
+	MetricTypeCgroupNetwork MetricType = "cgroup_network" // Future
 	// Hardware configuration collectors
 	MetricTypeCPUInfo     MetricType = "cpu_info"
 	MetricTypeMemoryInfo  MetricType = "memory_info"
 	MetricTypeDiskInfo    MetricType = "disk_info"
 	MetricTypeNetworkInfo MetricType = "network_info"
-	MetricTypeNUMA        MetricType = "numa"
 )
 
 // CollectorStatus represents the operational status of a collector
@@ -84,7 +90,7 @@ type Metrics struct {
 	MemoryInfo  *MemoryInfo
 	DiskInfo    []DiskInfo
 	NetworkInfo []NetworkInfo
-	NUMA        *NUMAStats
+	NUMAStats   *NUMAStatistics
 }
 
 // LoadStats represents system load information
@@ -337,6 +343,7 @@ type CollectionConfig struct {
 	HostProcPath      string // Path to /proc (useful for containers)
 	HostSysPath       string // Path to /sys (useful for containers)
 	HostDevPath       string // Path to /dev (useful for containers)
+	HostCgroupPath    string // Path to /sys/fs/cgroup (useful for containers)
 	TopProcessCount   int    // Number of top processes to collect (by CPU usage)
 }
 
@@ -345,6 +352,7 @@ func DefaultCollectionConfig() CollectionConfig {
 	return CollectionConfig{
 		Interval: time.Second,
 		EnabledCollectors: map[MetricType]bool{
+			// Runtime system resource collectors
 			MetricTypeLoad:    true,
 			MetricTypeMemory:  true,
 			MetricTypeCPU:     true,
@@ -354,16 +362,20 @@ func DefaultCollectionConfig() CollectionConfig {
 			MetricTypeTCP:     true,
 			MetricTypeSystem:  true,
 			MetricTypeKernel:  true,
+			// Runtime container resource collectors
+			MetricTypeCgroupCPU:    true,
+			MetricTypeCgroupMemory: true,
 			// Hardware configuration collectors
 			MetricTypeCPUInfo:     true,
 			MetricTypeMemoryInfo:  true,
 			MetricTypeDiskInfo:    true,
 			MetricTypeNetworkInfo: true,
-			MetricTypeNUMA:        true,
+			MetricTypeNUMAStats:   true,
 		},
-		HostProcPath: "/proc",
-		HostSysPath:  "/sys",
-		HostDevPath:  "/dev",
+		HostProcPath:   "/proc",
+		HostSysPath:    "/sys",
+		HostDevPath:    "/dev",
+		HostCgroupPath: "/sys/fs/cgroup",
 	}
 }
 
@@ -386,13 +398,17 @@ func (c *CollectionConfig) ApplyDefaults() {
 	if c.HostDevPath == "" {
 		c.HostDevPath = defaults.HostDevPath
 	}
+	if c.HostCgroupPath == "" {
+		c.HostCgroupPath = defaults.HostCgroupPath
+	}
 }
 
 // ValidateOptions specifies validation requirements for CollectionConfig
 type ValidateOptions struct {
-	RequireHostProcPath bool
-	RequireHostSysPath  bool
-	RequireHostDevPath  bool
+	RequireHostProcPath   bool
+	RequireHostSysPath    bool
+	RequireHostDevPath    bool
+	RequireHostCgroupPath bool
 }
 
 // Validate ensures that all configured paths are absolute paths and that required paths are non-empty.
@@ -409,6 +425,9 @@ func (c *CollectionConfig) Validate(opt ValidateOptions) error {
 	if opt.RequireHostDevPath && c.HostDevPath == "" {
 		return fmt.Errorf("HostDevPath is required but not provided")
 	}
+	if opt.RequireHostCgroupPath && c.HostCgroupPath == "" {
+		return fmt.Errorf("HostCgroupPath is required but not provided")
+	}
 
 	// Check all non-empty paths are absolute
 	if c.HostProcPath != "" && !filepath.IsAbs(c.HostProcPath) {
@@ -419,6 +438,9 @@ func (c *CollectionConfig) Validate(opt ValidateOptions) error {
 	}
 	if c.HostDevPath != "" && !filepath.IsAbs(c.HostDevPath) {
 		return fmt.Errorf("HostDevPath must be an absolute path, got: %q", c.HostDevPath)
+	}
+	if c.HostCgroupPath != "" && !filepath.IsAbs(c.HostCgroupPath) {
+		return fmt.Errorf("HostCgroupPath must be an absolute path, got: %q", c.HostCgroupPath)
 	}
 	return nil
 }
@@ -470,6 +492,10 @@ type CPUCore struct {
 type MemoryInfo struct {
 	// Total memory from /proc/meminfo
 	TotalBytes uint64
+	// Whether NUMA is enabled/available on this system
+	NUMAEnabled bool
+	// Whether automatic NUMA balancing is available (from /proc/sys/kernel/numa_balancing)
+	NUMABalancingAvailable bool
 	// NUMA configuration from /sys/devices/system/node/
 	NUMANodes []NUMANode
 }
@@ -479,6 +505,10 @@ type NUMANode struct {
 	NodeID     int32
 	TotalBytes uint64
 	CPUs       []int32 // CPU cores in this NUMA node
+	// Distance to other nodes (from /sys/devices/system/node/node*/distance)
+	// Index corresponds to target node ID, value is relative distance
+	// Lower is better, typically 10 for local, 20+ for remote nodes
+	Distances []int32
 }
 
 // DiskInfo represents disk hardware configuration
@@ -526,39 +556,105 @@ type NetworkInfo struct {
 	Carrier   bool   // From /sys/class/net/[interface]/carrier
 }
 
-// NUMAStats represents NUMA (Non-Uniform Memory Access) statistics
-type NUMAStats struct {
-	// Whether NUMA is enabled on this system
+// NUMAStatistics represents runtime NUMA performance statistics
+// This is collected continuously to monitor allocation patterns and performance
+type NUMAStatistics struct {
+	// Whether NUMA is enabled on this system (must match NUMAInfo.Enabled)
 	Enabled bool
-	// Number of NUMA nodes
+	// Number of NUMA nodes (must match NUMAInfo.NodeCount)
 	NodeCount int
-	// Per-node statistics
-	Nodes []NUMANodeStats
-	// Whether automatic NUMA balancing is enabled
-	AutoBalance bool
+	// Runtime statistics per node
+	Nodes []NUMANodeStatistics
+	// Whether automatic NUMA balancing is currently enabled (runtime state)
+	AutoBalanceEnabled bool
 }
 
-// NUMANodeStats represents statistics for a single NUMA node
-type NUMANodeStats struct {
-	// Node ID (0-based)
+// NUMANodeStatistics represents runtime statistics for a single NUMA node
+type NUMANodeStatistics struct {
+	// Node ID (0-based, must match NUMANodeInfo.ID)
 	ID int
-	// CPUs assigned to this node
-	CPUs []int
-	// Memory information (in bytes)
-	MemTotal  uint64 // Total memory on this node
-	MemFree   uint64 // Free memory on this node
-	MemUsed   uint64 // Used memory on this node
+	// Current memory usage in bytes (from /sys/devices/system/node/node*/meminfo)
+	MemFree   uint64 // Currently free
+	MemUsed   uint64 // Currently used
 	FilePages uint64 // File-backed pages (page cache)
 	AnonPages uint64 // Anonymous pages (process memory)
-	// NUMA allocation statistics (in pages)
+	// NUMA allocation statistics in pages (from /sys/devices/system/node/node*/numastat)
+	// These are monotonically increasing counters since boot
 	NumaHit       uint64 // Memory successfully allocated on intended node
 	NumaMiss      uint64 // Memory allocated here despite preferring different node
 	NumaForeign   uint64 // Memory intended for here but allocated elsewhere
 	InterleaveHit uint64 // Interleaved memory successfully allocated here
 	LocalNode     uint64 // Memory allocated here while process was running here
 	OtherNode     uint64 // Memory allocated here while process was on other node
-	// Distance to other nodes (lower is better, typically 10 for local, 20+ for remote)
-	Distances []int
+}
+
+// CgroupCPUStats represents CPU resource usage and throttling for a container
+type CgroupCPUStats struct {
+	// Container identification
+	ContainerID   string
+	ContainerName string // If available from runtime
+	CgroupPath    string
+
+	// CPU usage
+	UsageNanos   uint64  // Total CPU time consumed in nanoseconds
+	UsagePercent float64 // Calculated CPU usage percentage
+
+	// CPU throttling (from cpu.stat)
+	NrPeriods     uint64 // Number of enforcement periods
+	NrThrottled   uint64 // Number of times throttled
+	ThrottledTime uint64 // Total time throttled in nanoseconds
+
+	// CPU limits
+	CpuShares   uint64 // Relative weight (cpu.shares)
+	CpuQuotaUs  int64  // Quota in microseconds per period (-1 if unlimited)
+	CpuPeriodUs uint64 // Period length in microseconds
+
+	// Calculated metrics
+	ThrottlePercent float64 // Percentage of periods throttled
+}
+
+// CgroupMemoryStats represents memory usage and pressure for a container
+type CgroupMemoryStats struct {
+	// Container identification
+	ContainerID   string
+	ContainerName string
+	CgroupPath    string
+
+	// Memory usage (from memory.stat)
+	RSS        uint64 // Resident set size
+	Cache      uint64 // Page cache memory
+	MappedFile uint64 // Memory mapped files
+	Swap       uint64 // Swap usage
+
+	// Detailed breakdown
+	ActiveAnon   uint64 // Active anonymous pages
+	InactiveAnon uint64 // Inactive anonymous pages
+	ActiveFile   uint64 // Active file cache
+	InactiveFile uint64 // Inactive file cache
+
+	// Memory limits
+	LimitBytes    uint64 // Memory limit (memory.limit_in_bytes)
+	UsageBytes    uint64 // Current usage (memory.usage_in_bytes)
+	MaxUsageBytes uint64 // Peak usage (memory.max_usage_in_bytes)
+
+	// Memory pressure
+	FailCount    uint64 // Number of times limit was hit
+	OOMKillCount uint64 // Number of OOM kills
+	UnderOOM     bool   // Currently under OOM
+
+	// Calculated metrics
+	UsagePercent float64 // Usage as percentage of limit
+	CachePercent float64 // Cache as percentage of total usage
+}
+
+// ContainerInfo provides container runtime metadata
+type ContainerInfo struct {
+	ID        string
+	Name      string
+	Runtime   string // docker, containerd, cri-o
+	State     string // running, paused, stopped
+	StartedAt time.Time
+	Labels    map[string]string
 }
 
 // ProfileStats represents perf event-based profiling data collected via eBPF
