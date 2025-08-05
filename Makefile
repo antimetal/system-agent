@@ -62,6 +62,10 @@ clean: clean-ebpf ## Removes build artifacts.
 
 ##@ Development
 
+.PHONY: install-hooks
+install-hooks: ## Install shared git hooks for development workflow.
+	@./.githooks/install.sh
+
 .PHONY: generate
 generate: ## Generate all artifacts
 generate: manifests generate-ebpf-types generate-ebpf-bindings proto
@@ -114,7 +118,7 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests fmt vet ## Run tests.
+test: manifests ## Run tests.
 	go test ./... -v -coverprofile $(TESTCOVERAGE_OUT) -timeout 30s
 
 .PHONY: lint
@@ -195,11 +199,11 @@ clean-ebpf: ## Clean eBPF build artifacts
 ##@ Build
 
 build: ## Build agent binary for current GOOS and GOARCH.
-build: goreleaser manifests fmt vet build-ebpf generate	
+build: goreleaser manifests generate build-ebpf
 	GOOS=$(GO_OS) $(GORELEASER) build --snapshot --clean --single-target
 
 .PHONY: build-all
-build-all: goreleaser manifests fmt vet build-ebpf ## Build agent binary for all platforms.
+build-all: goreleaser manifests build-ebpf ## Build agent binary for all platforms.
 	$(GORELEASER) build --snapshot --clean
 
 .PHONY: docker.builder
