@@ -1,0 +1,16 @@
+---
+# Use Google C++ style
+BasedOnStyle: Google
+
+# Additional customizations for eBPF code if needed
+IndentWidth: 2
+ColumnLimit: 80
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+
+# Force braces on all control statements
+InsertBraces: true
+
+# Never allow single-line blocks
+AllowShortBlocksOnASingleLine: Never
