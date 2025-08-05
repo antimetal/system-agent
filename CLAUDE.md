@@ -72,7 +72,7 @@ The Antimetal Agent is a sophisticated Kubernetes controller written in Go that 
 ## Platform Limitations
 
 ### Platform Support
-- **system-agent is designed only to run on linux, even though we are able to build on other platforms**
+- **system-agent is designed only to run on linux, even though we are able to build and perhaps even test on other platforms**
 
 ## Architecture Overview
 
