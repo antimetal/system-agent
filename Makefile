@@ -108,8 +108,20 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests fmt vet ## Run tests.
+test: manifests fmt vet ## Run unit tests (default, works on any platform).
 	go test ./... -v -coverprofile $(TESTCOVERAGE_OUT) -timeout 30s
+
+.PHONY: test-unit
+test-unit: manifests fmt vet ## Run unit tests only (same as 'make test').
+	go test ./... -v -coverprofile $(TESTCOVERAGE_OUT) -timeout 30s
+
+.PHONY: test-integration
+test-integration: manifests fmt vet ## Run integration tests (requires Linux with /proc, /sys).
+	go test -tags integration ./... -v -timeout 2m
+
+.PHONY: test-all
+test-all: manifests fmt vet ## Run both unit and integration tests.
+	go test -tags integration ./... -v -coverprofile $(TESTCOVERAGE_OUT) -timeout 2m
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter & yamllint.
