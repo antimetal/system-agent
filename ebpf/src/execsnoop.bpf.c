@@ -138,8 +138,9 @@ int tracepoint__syscalls__sys_exit_execve(
   // execve
   bpf_get_current_comm(&e->base.comm, sizeof(e->base.comm));
 
-  if (event->base.args_size > 0 && event->base.args_size <= FULL_MAX_ARGS_ARR) {
-    bpf_probe_read_kernel(e->args, event->base.args_size, event->args);
+  __u32 args_size = e->base.args_size &= FULL_MAX_ARGS_ARR;
+  if (args_size > 0) {
+    bpf_probe_read_kernel(e->args, args_size, event->args);
   }
 
   bpf_ringbuf_submit(e, 0);
