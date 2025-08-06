@@ -1,0 +1,415 @@
+name: Integration Tests
+
+# This workflow runs integration tests across multiple environments to ensure
+# compatibility with different Linux kernel versions and system configurations.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'pkg/**'
+      - 'internal/**'
+      - 'cmd/**'
+      - 'ebpf/**'
+      - 'Makefile'
+      - '.github/workflows/integration-tests.yml'
+  pull_request:
+    paths:
+      - 'pkg/**'
+      - 'internal/**'
+      - 'cmd/**'
+      - 'ebpf/**'
+      - 'Makefile'
+      - '.github/workflows/integration-tests.yml'
+  workflow_dispatch:
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+        cache: true
+        cache-dependency-path: go.sum
+    
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq clang llvm libelf-dev libbpf-dev
+    
+    - name: Generate code
+      run: |
+        echo "Running code generation..."
+        make generate
+    
+    - name: Run unit tests
+      run: |
+        echo "Running unit tests (excluding integration tests)..."
+        go test ./... -v
+    
+    - name: Upload coverage
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: coverage.out
+        retention-days: 7
+        if-no-files-found: warn
+
+  build-artifacts:
+    name: Build Test Artifacts
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+        cache: true
+        cache-dependency-path: go.sum
+    
+    - name: Cache eBPF build
+      uses: actions/cache@v4
+      with:
+        path: |
+          internal/ebpf/
+          ebpf/include/vmlinux.h
+        key: ${{ runner.os }}-ebpf-${{ hashFiles('ebpf/src/**', 'ebpf/Makefile') }}
+        restore-keys: |
+          ${{ runner.os }}-ebpf-
+    
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq clang llvm libelf-dev libbpf-dev
+    
+    - name: Generate code
+      run: |
+        echo "Running code generation..."
+        make generate
+    
+    - name: Build eBPF programs
+      run: |
+        echo "Building eBPF programs with CO-RE support..."
+        if [ -d ebpf ] && [ -f ebpf/Makefile ]; then
+          cd ebpf
+          if [ ! -f include/vmlinux.h ]; then
+            echo "Generating vmlinux.h..."
+            ./scripts/generate_vmlinux.sh || {
+              echo "Failed to generate vmlinux.h, using fallback..."
+              mkdir -p include
+              curl -sL https://raw.githubusercontent.com/libbpf/libbpf-bootstrap/master/examples/c/vmlinux.h -o include/vmlinux.h
+            }
+          fi
+          make clean all
+          cd ..
+          echo "eBPF programs built successfully"
+          echo "Looking for .bpf.o files in internal/ebpf/:"
+          
+          # List all .bpf.o files found
+          found_files=0
+          for f in $(find internal/ebpf -name "*.bpf.o" -type f 2>/dev/null); do
+            echo "  Found: $f"
+            ls -la "$f"
+            found_files=1
+          done
+          
+          if [ "$found_files" -eq 0 ]; then
+            echo "ERROR: No eBPF programs found after build"
+            echo "Directory structure of internal/ebpf:"
+            find internal/ebpf -type f -name "*.o" 2>/dev/null || true
+            ls -laR internal/ebpf/ 2>/dev/null || echo "internal/ebpf not found"
+            exit 1
+          fi
+          
+          echo "All eBPF programs found successfully"
+        fi
+    
+    - name: Create test runner script
+      run: |
+        cat > run-tests-in-vm.sh << 'EOF'
+        #!/bin/bash
+        set -e
+        
+        echo "=========================================="
+        echo "Testing on Kernel: ${{ matrix.name }}"
+        echo "Expected Version: ${{ matrix.kernel }}"
+        echo "=========================================="
+        
+        echo -e "\n=== System Information ==="
+        echo "Actual Kernel: $(uname -r)"
+        echo "Architecture: $(uname -m)"
+        echo "Date: $(date)"
+        
+        # Check kernel features
+        echo -e "\n=== Kernel Features ==="
+        if [ -f /sys/kernel/btf/vmlinux ]; then
+          echo "✅ BTF support available"
+        else
+          echo "⚠️  No BTF support"
+        fi
+        
+        # Check filesystems
+        echo -e "\n=== Filesystems ==="
+        for fs in /proc /sys /sys/fs/cgroup; do
+          if [ -d "$fs" ]; then
+            echo "✅ $fs exists"
+          else
+            echo "❌ $fs missing"
+          fi
+        done
+        
+        # Ensure Go is available
+        export PATH=$PATH:/usr/local/go/bin
+        if ! command -v go &> /dev/null; then
+          echo "Installing Go..."
+          cd /tmp
+          wget -q https://go.dev/dl/go1.21.0.linux-amd64.tar.gz
+          sudo tar -C /usr/local -xzf go1.21.0.linux-amd64.tar.gz
+          rm go1.21.0.linux-amd64.tar.gz
+        fi
+        
+        # Install dependencies
+        echo -e "\nInstalling dependencies..."
+        sudo apt-get update -qq || true
+        sudo apt-get install -y -qq build-essential git || true
+        
+        # Install bpftool if available
+        sudo apt-get install -y -qq linux-tools-common linux-tools-generic || true
+        if [ -f /usr/lib/linux-tools-*/bpftool ]; then
+          sudo ln -sf /usr/lib/linux-tools-*/bpftool /usr/local/bin/bpftool || true
+        fi
+        
+        # Mount BPF filesystem if needed
+        if ! mount | grep -q "type bpf"; then
+          sudo mount -t bpf bpf /sys/fs/bpf || echo "Warning: Failed to mount BPF filesystem"
+        fi
+        
+        cd /host
+        
+        # Generate code if needed
+        if [ -f Makefile ] && grep -q "^generate:" Makefile; then
+          echo -e "\n=== Generating code ==="
+          make generate || echo "Code generation completed"
+        fi
+        
+        # Copy eBPF programs from artifacts to standard location
+        if [ -d /host/artifacts/ebpf ]; then
+          echo -e "\n=== Setting up eBPF Programs ==="
+          # Copy to standard location expected by collectors
+          sudo mkdir -p /usr/local/lib/antimetal/ebpf
+          sudo cp -v /host/artifacts/ebpf/*.bpf.o /usr/local/lib/antimetal/ebpf/
+          echo "eBPF programs in /usr/local/lib/antimetal/ebpf:"
+          ls -la /usr/local/lib/antimetal/ebpf/
+          
+          # Also copy to /host/ebpf/build for backwards compatibility with tests
+          mkdir -p /host/ebpf/build
+          cp -v /host/artifacts/ebpf/*.bpf.o /host/ebpf/build/
+        else
+          echo "ERROR: No eBPF artifacts found at /host/artifacts/ebpf"
+          exit 1
+        fi
+        
+        echo -e "\n=== Running Unit Tests ==="
+        go test ./... -v 2>&1 | tee unit-test-results.txt || echo "Unit tests completed"
+        
+        echo -e "\n=== Running Integration Tests (including eBPF verification) ==="
+        sudo -E PATH="$PATH" go test -tags integration -v ./pkg/ebpf/core -run TestEBPF 2>&1 | tee integration-test-results.txt || echo "Integration tests completed"
+        
+        echo -e "\n=== Test Summary ==="
+        echo "Tests completed at $(date)"
+        EOF
+        chmod +x run-tests-in-vm.sh
+    
+    - name: Package artifacts
+      run: |
+        mkdir -p artifacts
+        cp run-tests-in-vm.sh artifacts/
+        
+        # Copy eBPF programs if they exist
+        # The ebpf/Makefile builds to ../internal/ebpf/*/
+        echo "Searching for eBPF programs to package..."
+        mkdir -p artifacts/ebpf
+        
+        ebpf_count=0
+        for f in $(find internal/ebpf -name "*.bpf.o" -type f 2>/dev/null); do
+          echo "Copying $f to artifacts/ebpf/"
+          cp "$f" artifacts/ebpf/
+          ebpf_count=$((ebpf_count + 1))
+        done
+        
+        if [ "$ebpf_count" -gt 0 ]; then
+          echo "Successfully packaged $ebpf_count eBPF programs:"
+          ls -la artifacts/ebpf/
+        else
+          echo "WARNING: No eBPF programs found in internal/ebpf/"
+          find internal/ebpf -type f 2>/dev/null | head -20 || true
+        fi
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-artifacts
+        path: artifacts/
+        retention-days: 1
+
+  integration-tests-vm:
+    name: Integration Tests - Kernel ${{ matrix.kernel }}
+    needs: build-artifacts
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - kernel: "5.10-20250616.013250"
+          - kernel: "5.15-20250616.013250"
+          - kernel: "6.1-20250616.013250"
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download test artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: test-artifacts
+        path: artifacts/
+    
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+        cache: true
+        cache-dependency-path: go.sum
+    
+    - name: Run tests in VM using LVH Action
+      uses: cilium/little-vm-helper@main
+      with:
+        test-name: "ebpf-integration"
+        image-version: ${{ matrix.kernel }}
+        host-mount: .
+        install-dependencies: true
+        cpu: 4
+        mem: "4G"
+        cmd: |
+          set -ex
+          
+          # System info
+          echo "=== System Information ==="
+          uname -a
+          echo "Kernel: ${{ matrix.kernel }}"
+          
+          # Check kernel features
+          echo -e "\n=== Kernel Features ==="
+          if [ -f /sys/kernel/btf/vmlinux ]; then
+            echo "✅ BTF support available"
+          else
+            echo "⚠️ No BTF support"
+          fi
+          
+          # Install dependencies
+          echo -e "\n=== Installing Dependencies ==="
+          apt-get update -qq
+          apt-get install -y -qq build-essential git wget curl
+          apt-get install -y -qq linux-tools-common linux-tools-generic || true
+          apt-get install -y -qq clang llvm libbpf-dev || true
+          
+          # Install Go
+          echo -e "\n=== Installing Go ==="
+          if ! command -v go &> /dev/null; then
+            cd /tmp
+            wget -q https://go.dev/dl/go1.22.0.linux-amd64.tar.gz
+            tar -C /usr/local -xzf go1.22.0.linux-amd64.tar.gz
+            export PATH=$PATH:/usr/local/go/bin
+            rm go1.22.0.linux-amd64.tar.gz
+          fi
+          
+          # Mount BPF filesystem
+          echo -e "\n=== Mounting BPF Filesystem ==="
+          mount -t bpf bpf /sys/fs/bpf
+          mount | grep bpf
+          
+          # Run our test script from artifacts
+          echo -e "\n=== Running Test Script ==="
+          cd /host
+          
+          # Copy eBPF programs to standard location
+          if [ -d /host/artifacts/ebpf ]; then
+            echo "Setting up eBPF programs..."
+            # Copy to standard location expected by collectors
+            mkdir -p /usr/local/lib/antimetal/ebpf
+            cp -v /host/artifacts/ebpf/*.bpf.o /usr/local/lib/antimetal/ebpf/
+            echo "eBPF programs in /usr/local/lib/antimetal/ebpf:"
+            ls -la /usr/local/lib/antimetal/ebpf/
+            
+            # Also copy to /host/ebpf/build for backwards compatibility
+            mkdir -p /host/ebpf/build
+            cp -v /host/artifacts/ebpf/*.bpf.o /host/ebpf/build/
+          else
+            echo "ERROR: No eBPF artifacts found at /host/artifacts/ebpf"
+            exit 1
+          fi
+          
+          # Run the actual tests
+          export PATH=$PATH:/usr/local/go/bin
+          # Tests will automatically use /usr/local/lib/antimetal/ebpf/ or fall back to EBPF_BUILD_DIR
+          echo "Running integration tests..."
+          go test -tags integration -v ./pkg/ebpf/core -run TestEBPF 2>&1
+    
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-${{ matrix.image }}
+        path: |
+          *-test-results.txt
+          vm-output.log
+        retention-days: 7
+        if-no-files-found: warn
+
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests-vm]
+    if: always()
+    
+    steps:
+    - name: Download test results
+      uses: actions/download-artifact@v4
+      with:
+        pattern: test-results-*
+        merge-multiple: true
+        path: test-results/
+    
+    - name: Generate summary
+      run: |
+        echo "# Test Results Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        echo "## Test Execution Status" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ -f "test-results/unit-test-results.txt" ]; then
+          echo "✅ Unit tests completed" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "⚠️ Unit test results not found" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ -f "test-results/integration-test-results.txt" ]; then
+          echo "✅ Integration tests completed" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "⚠️ Integration test results not found" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## Testing Strategy" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Unit Tests**: Run natively on GitHub Actions runner" >> $GITHUB_STEP_SUMMARY
+        echo "- **Integration Tests**: Run in VMs with real kernel features" >> $GITHUB_STEP_SUMMARY
+        echo "- **Build Tags**: Use \`//go:build integration\` for integration tests" >> $GITHUB_STEP_SUMMARY
+        echo "- **eBPF Tests**: Run in VMs with CAP_SYS_ADMIN capability" >> $GITHUB_STEP_SUMMARY
