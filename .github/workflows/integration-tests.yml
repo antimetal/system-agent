@@ -70,7 +70,29 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update -qq
-        sudo apt-get install -y -qq clang llvm libelf-dev libbpf-dev bpftool linux-tools-generic
+        # Install base dependencies
+        sudo apt-get install -y -qq clang llvm libelf-dev libbpf-dev
+        
+        # Install kernel-specific tools if available
+        KERNEL_VERSION=$(uname -r)
+        echo "Current kernel: $KERNEL_VERSION"
+        
+        # Try different package names for bpftool (varies by Ubuntu version)
+        if ! command -v bpftool &> /dev/null; then
+          # Try linux-tools packages
+          sudo apt-get install -y -qq linux-tools-common || true
+          sudo apt-get install -y -qq linux-tools-${KERNEL_VERSION} || true
+          sudo apt-get install -y -qq linux-tools-generic || true
+          
+          # On newer Ubuntu, bpftool might be in linux-tools-common
+          if [ -f /usr/lib/linux-tools-*/bpftool ]; then
+            sudo ln -sf /usr/lib/linux-tools-*/bpftool /usr/local/bin/bpftool || true
+          fi
+        fi
+        
+        # Verify what we have
+        echo "Checking for bpftool..."
+        which bpftool || echo "bpftool not found, tests requiring it will be skipped"
     
     - name: System info
       run: |
