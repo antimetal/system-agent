@@ -38,7 +38,7 @@ jobs:
       with:
         go-version: '1.21'
     
-    - name: Install dependencies
+    - name: Install build dependencies
       run: |
         sudo apt-get update -qq
         sudo apt-get install -y -qq clang llvm libelf-dev libbpf-dev
@@ -56,8 +56,8 @@ jobs:
         retention-days: 7
         if-no-files-found: ignore
 
-  integration-tests-native:
-    name: Integration Tests (Native)
+  build-artifacts:
+    name: Build Test Artifacts
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -67,85 +67,270 @@ jobs:
       with:
         go-version: '1.21'
     
-    - name: Install dependencies
+    - name: Install build dependencies
       run: |
         sudo apt-get update -qq
-        # Install base dependencies
         sudo apt-get install -y -qq clang llvm libelf-dev libbpf-dev
-        
-        # Install kernel-specific tools if available
-        KERNEL_VERSION=$(uname -r)
-        echo "Current kernel: $KERNEL_VERSION"
-        
-        # Try different package names for bpftool (varies by Ubuntu version)
-        if ! command -v bpftool &> /dev/null; then
-          # Try linux-tools packages
-          sudo apt-get install -y -qq linux-tools-common || true
-          sudo apt-get install -y -qq linux-tools-${KERNEL_VERSION} || true
-          sudo apt-get install -y -qq linux-tools-generic || true
-          
-          # On newer Ubuntu, bpftool might be in linux-tools-common
-          if [ -f /usr/lib/linux-tools-*/bpftool ]; then
-            sudo ln -sf /usr/lib/linux-tools-*/bpftool /usr/local/bin/bpftool || true
-          fi
-        fi
-        
-        # Verify what we have
-        echo "Checking for bpftool..."
-        which bpftool || echo "bpftool not found, tests requiring it will be skipped"
-    
-    - name: System info
-      run: |
-        echo "=== System Information ==="
-        uname -a
-        echo ""
-        echo "=== Kernel Version ==="
-        uname -r
-        echo ""
-        echo "=== BTF Support ==="
-        ls -la /sys/kernel/btf/vmlinux || echo "No BTF support"
-        echo ""
-        echo "=== BPF Filesystem ==="
-        mount | grep bpf || echo "BPF filesystem not mounted"
     
     - name: Build eBPF programs
       run: |
+        echo "Building eBPF programs with CO-RE support..."
         if [ -d ebpf ] && [ -f ebpf/Makefile ]; then
-          echo "Building eBPF programs..."
           cd ebpf
+          if [ ! -f include/vmlinux.h ]; then
+            echo "Generating vmlinux.h..."
+            ./scripts/generate_vmlinux.sh || {
+              echo "Failed to generate vmlinux.h, using fallback..."
+              mkdir -p include
+              curl -sL https://raw.githubusercontent.com/libbpf/libbpf-bootstrap/master/examples/c/vmlinux.h -o include/vmlinux.h
+            }
+          fi
           make clean all || echo "eBPF build completed (some programs may have failed)"
           cd ..
         fi
     
-    - name: Run integration tests
+    - name: Create test runner script
       run: |
-        echo "Running integration tests..."
-        sudo -E PATH="$PATH" go test -tags integration -v ./test/integration/... || {
-          echo "Integration tests completed with exit code: $?"
-          echo "Note: Some tests may fail on GitHub Actions runners due to kernel limitations"
-        }
+        cat > run-tests-in-vm.sh << 'EOF'
+        #!/bin/bash
+        set -e
+        
+        echo "=== System Information ==="
+        echo "Kernel: $(uname -r)"
+        echo "Architecture: $(uname -m)"
+        echo "Date: $(date)"
+        
+        # Check kernel features
+        echo -e "\n=== Kernel Features ==="
+        if [ -f /sys/kernel/btf/vmlinux ]; then
+          echo "✅ BTF support available"
+        else
+          echo "⚠️  No BTF support"
+        fi
+        
+        # Check filesystems
+        echo -e "\n=== Filesystems ==="
+        for fs in /proc /sys /sys/fs/cgroup; do
+          if [ -d "$fs" ]; then
+            echo "✅ $fs exists"
+          else
+            echo "❌ $fs missing"
+          fi
+        done
+        
+        # Wait for cloud-init to complete if marker exists
+        if [ -f /tmp/cloud-init-wait ]; then
+          echo "Waiting for cloud-init to complete..."
+          timeout 60 bash -c 'while [ ! -f /tmp/cloud-init-done ]; do sleep 1; done' || true
+        fi
+        
+        # Ensure Go is available
+        export PATH=$PATH:/usr/local/go/bin
+        if ! command -v go &> /dev/null; then
+          echo "Installing Go..."
+          cd /tmp
+          wget -q https://go.dev/dl/go1.21.0.linux-amd64.tar.gz
+          sudo tar -C /usr/local -xzf go1.21.0.linux-amd64.tar.gz
+          rm go1.21.0.linux-amd64.tar.gz
+        fi
+        
+        # Install dependencies
+        echo -e "\nInstalling dependencies..."
+        sudo apt-get update -qq || true
+        sudo apt-get install -y -qq build-essential git || true
+        
+        # Install bpftool if available
+        sudo apt-get install -y -qq linux-tools-common linux-tools-generic || true
+        if [ -f /usr/lib/linux-tools-*/bpftool ]; then
+          sudo ln -sf /usr/lib/linux-tools-*/bpftool /usr/local/bin/bpftool || true
+        fi
+        
+        # Mount BPF filesystem if needed
+        if ! mount | grep -q "type bpf"; then
+          sudo mount -t bpf bpf /sys/fs/bpf 2>/dev/null || true
+        fi
+        
+        cd /host
+        
+        echo -e "\n=== Running Unit Tests ==="
+        go test ./... -v 2>&1 | tee unit-test-results.txt || echo "Unit tests completed"
+        
+        echo -e "\n=== Running Integration Tests ==="
+        sudo -E PATH="$PATH" go test -tags integration -v ./test/integration/... 2>&1 | tee integration-test-results.txt || echo "Integration tests completed"
+        
+        # Test eBPF programs if they exist
+        if ls /host/artifacts/ebpf/*.bpf.o 2>/dev/null; then
+          echo -e "\n=== Testing eBPF Programs ==="
+          for prog in /host/artifacts/ebpf/*.bpf.o; do
+            echo "Loading $(basename $prog)..."
+            sudo bpftool prog load "$prog" /sys/fs/bpf/test_prog 2>&1 && {
+              echo "✅ $(basename $prog) loaded successfully"
+              sudo rm -f /sys/fs/bpf/test_prog
+            } || {
+              echo "❌ $(basename $prog) failed to load"
+            }
+          done
+        fi
+        
+        echo -e "\n=== Test Summary ==="
+        echo "Tests completed at $(date)"
+        EOF
+        chmod +x run-tests-in-vm.sh
+    
+    - name: Package artifacts
+      run: |
+        mkdir -p artifacts
+        cp run-tests-in-vm.sh artifacts/
+        
+        # Copy eBPF programs if they exist
+        if ls internal/ebpf/*/*.bpf.o 2>/dev/null; then
+          mkdir -p artifacts/ebpf
+          find internal/ebpf -name "*.bpf.o" -exec cp {} artifacts/ebpf/ \;
+        fi
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-artifacts
+        path: artifacts/
+        retention-days: 1
+
+  integration-tests-vm:
+    name: Integration Tests (VM)
+    needs: build-artifacts
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # For now just test on the default Ubuntu kernel
+        # Can expand to multiple kernels with LVH later
+        test_env: ["ubuntu-default"]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download test artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: test-artifacts
+        path: artifacts/
+    
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+    
+    - name: Install LVH
+      run: |
+        go install github.com/cilium/little-vm-helper/cmd/lvh@latest
+        echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+    
+    - name: Install VM dependencies
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq qemu-system-x86 cpu-checker mmdebstrap debian-archive-keyring
+        
+        # Check virtualization support
+        if kvm-ok; then
+          echo "KVM acceleration available"
+        else
+          echo "No KVM - will use software emulation (slower)"
+        fi
+    
+    - name: Create cloud-init config
+      run: |
+        cat > user-data << 'EOF'
+        #cloud-config
+        users:
+          - name: root
+            lock_passwd: false
+            
+        package_update: true
+        package_upgrade: false
+        
+        packages:
+          - build-essential
+          - git
+          - wget
+          - curl
+          - linux-tools-common
+          - linux-tools-generic
+          - ca-certificates
+          
+        runcmd:
+          # Mount BPF filesystem
+          - mkdir -p /sys/fs/bpf
+          - mount -t bpf bpf /sys/fs/bpf || true
+          
+          # Install Go
+          - |
+            if ! command -v go &> /dev/null; then
+              cd /tmp
+              wget -q https://go.dev/dl/go1.21.0.linux-amd64.tar.gz
+              tar -C /usr/local -xzf go1.21.0.linux-amd64.tar.gz
+              echo 'export PATH=$PATH:/usr/local/go/bin' >> /etc/profile
+              ln -sf /usr/local/go/bin/go /usr/bin/go
+            fi
+          
+          # Setup bpftool if available
+          - |
+            if [ -f /usr/lib/linux-tools-*/bpftool ]; then
+              ln -sf /usr/lib/linux-tools-*/bpftool /usr/local/bin/bpftool
+            fi
+          
+          # Mark completion
+          - touch /tmp/cloud-init-done
+        EOF
+    
+    - name: Download VM image
+      run: |
+        # Use Ubuntu 22.04 cloud image
+        wget -O ubuntu.img https://cloud-images.ubuntu.com/releases/22.04/release/ubuntu-22.04-server-cloudimg-amd64.img
+        # Resize for more space
+        qemu-img resize ubuntu.img 10G
+    
+    - name: Run tests in VM
+      run: |
+        echo "Starting VM tests..."
+        
+        # Create marker for cloud-init wait
+        touch /tmp/cloud-init-wait
+        
+        # Run VM with LVH
+        timeout 600 $(go env GOPATH)/bin/lvh run \
+          --image ubuntu.img \
+          --host-mount $(pwd) \
+          --user-data user-data \
+          -- /host/artifacts/run-tests-in-vm.sh 2>&1 | tee vm-output.log || {
+            echo "VM tests completed with exit code: $?"
+          }
+        
+        # Show summary
+        echo "=== Test Output Summary ==="
+        tail -50 vm-output.log || true
     
     - name: Upload test results
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: integration-test-results
+        name: test-results-${{ matrix.test_env }}
         path: |
           *-test-results.txt
-          test-summary.json
+          vm-output.log
         retention-days: 7
         if-no-files-found: ignore
 
   test-summary:
     name: Test Summary
     runs-on: ubuntu-latest
-    needs: [unit-tests, integration-tests-native]
+    needs: [unit-tests, integration-tests-vm]
     if: always()
     
     steps:
     - name: Download test results
       uses: actions/download-artifact@v4
       with:
+        pattern: test-results-*
         merge-multiple: true
         path: test-results/
     
@@ -157,13 +342,13 @@ jobs:
         echo "## Test Execution Status" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         
-        if [ -f "test-results/coverage.out" ]; then
+        if [ -f "test-results/unit-test-results.txt" ]; then
           echo "✅ Unit tests completed" >> $GITHUB_STEP_SUMMARY
         else
           echo "⚠️ Unit test results not found" >> $GITHUB_STEP_SUMMARY
         fi
         
-        if [ -f "test-results/test-summary.json" ]; then
+        if [ -f "test-results/integration-test-results.txt" ]; then
           echo "✅ Integration tests completed" >> $GITHUB_STEP_SUMMARY
         else
           echo "⚠️ Integration test results not found" >> $GITHUB_STEP_SUMMARY
@@ -172,22 +357,7 @@ jobs:
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "## Testing Strategy" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "- **Unit Tests**: Run on every push and PR" >> $GITHUB_STEP_SUMMARY
-        echo "- **Integration Tests**: Test with real kernel features" >> $GITHUB_STEP_SUMMARY
+        echo "- **Unit Tests**: Run natively on GitHub Actions runner" >> $GITHUB_STEP_SUMMARY
+        echo "- **Integration Tests**: Run in VMs with real kernel features" >> $GITHUB_STEP_SUMMARY
         echo "- **Build Tags**: Use \`//go:build integration\` for integration tests" >> $GITHUB_STEP_SUMMARY
-        echo "- **eBPF Tests**: Require CAP_SYS_ADMIN capability" >> $GITHUB_STEP_SUMMARY
-        
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "## Local Testing" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "Run tests locally with:" >> $GITHUB_STEP_SUMMARY
-        echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-        echo "# Unit tests only" >> $GITHUB_STEP_SUMMARY
-        echo "go test ./..." >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "# Integration tests" >> $GITHUB_STEP_SUMMARY
-        echo "sudo go test -tags integration ./test/integration/..." >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "# Test eBPF programs across kernels" >> $GITHUB_STEP_SUMMARY
-        echo "./scripts/test-ebpf-locally.sh" >> $GITHUB_STEP_SUMMARY
-        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **eBPF Tests**: Run in VMs with CAP_SYS_ADMIN capability" >> $GITHUB_STEP_SUMMARY
