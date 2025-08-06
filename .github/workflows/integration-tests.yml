@@ -43,6 +43,11 @@ jobs:
         sudo apt-get update -qq
         sudo apt-get install -y -qq clang llvm libelf-dev libbpf-dev
     
+    - name: Generate code
+      run: |
+        echo "Running code generation..."
+        make generate
+    
     - name: Run unit tests
       run: |
         echo "Running unit tests (excluding integration tests)..."
@@ -71,6 +76,11 @@ jobs:
       run: |
         sudo apt-get update -qq
         sudo apt-get install -y -qq clang llvm libelf-dev libbpf-dev
+    
+    - name: Generate code
+      run: |
+        echo "Running code generation..."
+        make generate
     
     - name: Build eBPF programs
       run: |
@@ -151,6 +161,12 @@ jobs:
         fi
         
         cd /host
+        
+        # Generate code if needed
+        if [ -f Makefile ] && grep -q "^generate:" Makefile; then
+          echo -e "\n=== Generating code ==="
+          make generate || echo "Code generation completed"
+        fi
         
         echo -e "\n=== Running Unit Tests ==="
         go test ./... -v 2>&1 | tee unit-test-results.txt || echo "Unit tests completed"
