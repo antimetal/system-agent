@@ -1,0 +1,175 @@
+name: Integration Tests
+
+# This workflow runs integration tests across multiple environments to ensure
+# compatibility with different Linux kernel versions and system configurations.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'pkg/**'
+      - 'internal/**'
+      - 'cmd/**'
+      - 'ebpf/**'
+      - 'Makefile'
+      - '.github/workflows/integration-tests.yml'
+      - '.github/workflows/scripts/**'
+  pull_request:
+    paths:
+      - 'pkg/**'
+      - 'internal/**'
+      - 'cmd/**'
+      - 'ebpf/**'
+      - 'Makefile'
+      - '.github/workflows/integration-tests.yml'
+      - '.github/workflows/scripts/**'
+  workflow_dispatch:
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+        cache: true
+        cache-dependency-path: go.sum
+    
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq clang llvm libelf-dev libbpf-dev
+    
+    - name: Generate code
+      run: |
+        echo "Running code generation..."
+        make generate
+    
+    - name: Run unit tests
+      run: |
+        echo "Running unit tests (excluding integration tests)..."
+        go test ./... -v
+    
+    - name: Upload coverage
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: coverage.out
+        retention-days: 7
+        if-no-files-found: warn
+
+  build-artifacts:
+    name: Build Test Artifacts
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+        cache: true
+        cache-dependency-path: go.sum
+    
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq clang llvm libelf-dev libbpf-dev
+    
+    - name: Generate code
+      run: |
+        echo "Running code generation..."
+        make generate
+    
+    - name: Build eBPF programs
+      run: .github/workflows/scripts/build-ebpf.sh
+    
+    - name: Package artifacts
+      run: .github/workflows/scripts/package-artifacts.sh
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-artifacts
+        path: artifacts/
+        retention-days: 7
+
+  integration-tests-vm:
+    name: Integration Tests - Kernel ${{ matrix.kernel }}
+    needs: build-artifacts
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - kernel: "5.4-20250616.013250"   # Ubuntu 20.04 LTS
+          - kernel: "5.10-20250616.013250"
+          - kernel: "5.15-20250616.013250"  # Ubuntu 22.04 LTS
+          - kernel: "6.1-20250616.013250"   # LTS kernel
+          - kernel: "6.6-20250616.013250"   # Latest LTS kernel
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download test artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: test-artifacts
+        path: artifacts/
+    
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+        cache: true
+        cache-dependency-path: go.sum
+    
+    - name: Run tests in VM using LVH Action
+      uses: cilium/little-vm-helper@main
+      with:
+        test-name: "ebpf-integration"
+        image-version: ${{ matrix.kernel }}
+        host-mount: .
+        install-dependencies: true
+        cpu: 4
+        mem: "4G"
+        cmd: |
+          # Make script executable and run it from the mounted host directory
+          cd /host
+          chmod +x .github/workflows/scripts/run-lvh-tests.sh
+          GO_VERSION=1.24.0 KERNEL_VERSION="${{ matrix.kernel }}" .github/workflows/scripts/run-lvh-tests.sh
+    
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-${{ matrix.kernel }}
+        path: |
+          *-test-results.txt
+          vm-output.log
+        retention-days: 7
+        if-no-files-found: warn
+
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests-vm]
+    if: always()
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download test results
+      uses: actions/download-artifact@v4
+      with:
+        pattern: test-results-*
+        merge-multiple: true
+        path: test-results/
+    
+    - name: Generate summary
+      run: .github/workflows/scripts/generate-test-summary.sh test-results
