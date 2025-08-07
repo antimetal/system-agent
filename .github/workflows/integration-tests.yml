@@ -149,7 +149,8 @@ jobs:
         cpu: 4
         mem: "4G"
         cmd: |
-          # Make script executable and run it
+          # Make script executable and run it from the mounted host directory
+          cd /host
           chmod +x .github/workflows/scripts/run-lvh-tests.sh
           GO_VERSION=1.24.0 KERNEL_VERSION="${{ matrix.kernel }}" .github/workflows/scripts/run-lvh-tests.sh
     
