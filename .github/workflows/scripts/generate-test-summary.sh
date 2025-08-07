@@ -76,5 +76,15 @@ echo "- **Unit Tests**: Run natively on GitHub Actions runner" >> $GITHUB_STEP_S
 echo "- **Integration Tests**: Run in VMs with real kernel features" >> $GITHUB_STEP_SUMMARY
 echo "- **Build Tags**: Use \`//go:build integration\` for integration tests" >> $GITHUB_STEP_SUMMARY
 echo "- **eBPF Tests**: Run in VMs with CAP_SYS_ADMIN capability" >> $GITHUB_STEP_SUMMARY
+echo "" >> $GITHUB_STEP_SUMMARY
+
+# Check if coverage report exists
+COVERAGE_FILE=$(find "${TEST_RESULTS_DIR}" -name "coverage.out" -type f | head -1)
+if [ -n "$COVERAGE_FILE" ] && [ -f "$COVERAGE_FILE" ]; then
+    echo "## Coverage Report" >> $GITHUB_STEP_SUMMARY
+    echo "" >> $GITHUB_STEP_SUMMARY
+    echo "✅ Coverage report generated - Download artifacts to view detailed coverage" >> $GITHUB_STEP_SUMMARY
+    echo "" >> $GITHUB_STEP_SUMMARY
+fi
 
 echo "Test summary generated successfully"
