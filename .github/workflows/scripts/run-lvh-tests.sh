@@ -169,6 +169,7 @@ fi
     echo "Status: $TEST_STATUS"
     echo "Kernel: $(uname -r)"
     echo "Time: $(date)"
+    echo "Go: $(go version)"
 } >> "$TEST_RESULTS_FILE"
 
 echo -e "\n=== Test Completed ==="

@@ -35,11 +35,21 @@ if [ -n "$INTEGRATION_TEST_FILES" ]; then
     echo "" >> $GITHUB_STEP_SUMMARY
     echo "### Integration Test Results by Kernel" >> $GITHUB_STEP_SUMMARY
     for file in $INTEGRATION_TEST_FILES; do
-        # Extract kernel version from path or file content
-        kernel_info=$(grep "Kernel:" "$file" | head -1 | cut -d: -f2 | tr -d ' ')
-        status=$(grep "Status:" "$file" | head -1 | cut -d: -f2 | tr -d ' ')
+        # Extract kernel version from the Test Summary section at the end of the file
+        # Look for lines that start with "Kernel:" (not indented)
+        kernel_info=$(grep "^Kernel:" "$file" | tail -1 | cut -d: -f2 | tr -d ' ')
+        status=$(grep "^Status:" "$file" | tail -1 | cut -d: -f2 | tr -d ' ')
+        
+        # If we found a kernel version, display it
         if [ -n "$kernel_info" ]; then
             echo "  - Kernel $kernel_info: ${status:-UNKNOWN}" >> $GITHUB_STEP_SUMMARY
+        else
+            # Fallback: try to extract from parent directory name (artifact name)
+            parent_dir=$(basename $(dirname "$file"))
+            if [[ "$parent_dir" =~ test-results-(.+) ]]; then
+                kernel_from_dir="${BASH_REMATCH[1]}"
+                echo "  - Kernel $kernel_from_dir: ${status:-UNKNOWN}" >> $GITHUB_STEP_SUMMARY
+            fi
         fi
     done
 else

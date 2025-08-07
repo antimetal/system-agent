@@ -1,0 +1,57 @@
+go: downloading github.com/cilium/ebpf v0.19.0
+go: downloading github.com/go-logr/logr v1.4.2
+go: downloading github.com/stretchr/testify v1.10.0
+go: downloading github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
+go: downloading github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
+go: downloading golang.org/x/sys v0.31.0
+go: downloading gopkg.in/yaml.v3 v3.0.1
+=== RUN   TestEBPFProgramLoading
+    ebpf_integration_test.go:46: Testing eBPF on kernel 6.12.41
+=== RUN   TestEBPFProgramLoading/CO-RE_Manager
+    ebpf_integration_test.go:56: Kernel features: &{KernelVersion:6.12.41 HasBTF:true BTFPath:/sys/kernel/btf/vmlinux CORESupport:full RequiredKernel:5.2}
+=== RUN   TestEBPFProgramLoading/Basic_Program_Loading
+    ebpf_integration_test.go:94: ✓ Successfully loaded basic eBPF program
+=== RUN   TestEBPFProgramLoading/Map_Type_Support
+=== RUN   TestEBPFProgramLoading/Map_Type_Support/Hash_Map
+    ebpf_integration_test.go:163: ✓ Hash Map supported
+=== RUN   TestEBPFProgramLoading/Map_Type_Support/Array_Map
+    ebpf_integration_test.go:163: ✓ Array Map supported
+=== RUN   TestEBPFProgramLoading/Map_Type_Support/Perf_Event_Array
+    ebpf_integration_test.go:163: ✓ Perf Event Array supported
+=== RUN   TestEBPFProgramLoading/Map_Type_Support/Ring_Buffer
+    ebpf_integration_test.go:163: ✓ Ring Buffer supported
+--- PASS: TestEBPFProgramLoading (0.02s)
+    --- PASS: TestEBPFProgramLoading/CO-RE_Manager (0.02s)
+    --- PASS: TestEBPFProgramLoading/Basic_Program_Loading (0.00s)
+    --- PASS: TestEBPFProgramLoading/Map_Type_Support (0.00s)
+        --- PASS: TestEBPFProgramLoading/Map_Type_Support/Hash_Map (0.00s)
+        --- PASS: TestEBPFProgramLoading/Map_Type_Support/Array_Map (0.00s)
+        --- PASS: TestEBPFProgramLoading/Map_Type_Support/Perf_Event_Array (0.00s)
+        --- PASS: TestEBPFProgramLoading/Map_Type_Support/Ring_Buffer (0.00s)
+=== RUN   TestEBPFCollectorPrograms
+=== RUN   TestEBPFCollectorPrograms/execsnoop.bpf.o
+    ebpf_integration_test.go:224: Found 2 programs in execsnoop.bpf.o
+    ebpf_integration_test.go:226:   - Program: tracepoint__syscalls__sys_enter_execve
+    ebpf_integration_test.go:226:   - Program: tracepoint__syscalls__sys_exit_execve
+    ebpf_integration_test.go:229: Found 4 maps in execsnoop.bpf.o
+    ebpf_integration_test.go:231:   - Map: heap (type: PerCPUArray)
+    ebpf_integration_test.go:231:   - Map: execs (type: Hash)
+    ebpf_integration_test.go:231:   - Map: events (type: RingBuf)
+    ebpf_integration_test.go:231:   - Map: .rodata (type: Array)
+    ebpf_integration_test.go:242: ✓ Successfully loaded execsnoop.bpf.o
+--- PASS: TestEBPFCollectorPrograms (0.03s)
+    --- PASS: TestEBPFCollectorPrograms/execsnoop.bpf.o (0.03s)
+=== RUN   TestEBPFWithContext
+=== RUN   TestEBPFWithContext/Context_Cancellation
+    ebpf_integration_test.go:306: ✓ Context cancellation works correctly
+=== RUN   TestEBPFWithContext/Timeout_Handling
+--- PASS: TestEBPFWithContext (0.10s)
+    --- PASS: TestEBPFWithContext/Context_Cancellation (0.00s)
+    --- PASS: TestEBPFWithContext/Timeout_Handling (0.10s)
+PASS
+ok  	github.com/antimetal/agent/pkg/ebpf/core	0.162s
+
+=== Test Summary ===
+Status: PASS
+Kernel: 6.12.41
+Time: Thu Aug  7 18:12:52 UTC 2025
