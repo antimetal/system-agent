@@ -58,10 +58,21 @@ fi
 echo "Successfully packaged $ebpf_count eBPF programs:"
 ls -la artifacts/ebpf/
 
+# Verify artifacts were created
+if [ ! -f "artifacts/run-tests-in-vm.sh" ]; then
+    echo "ERROR: Failed to package run-tests-in-vm.sh"
+    exit 1
+fi
+
+if [ ! -d "artifacts/ebpf" ] || [ -z "$(ls -A artifacts/ebpf)" ]; then
+    echo "ERROR: Failed to package eBPF programs"
+    exit 1
+fi
+
 # Summary
 echo -e "\n=== Packaging Summary ==="
 echo "Artifacts directory contents:"
-find artifacts -type f -exec ls -la {} \; 2>/dev/null || echo "No files found"
+find artifacts -type f -exec ls -la {} \;
 echo ""
 echo "Total: $ebpf_count eBPF programs packaged"
 echo "Packaging completed successfully"
