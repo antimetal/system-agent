@@ -53,7 +53,22 @@ jobs:
     - name: Run unit tests
       run: |
         echo "Running unit tests (excluding integration tests)..."
-        go test ./... -v
+        # Run tests and save results
+        go test ./... -v 2>&1 | tee unit-test-results.txt
+        
+        # Create summary for upload
+        echo "" >> unit-test-results.txt
+        echo "=== Test Summary ===" >> unit-test-results.txt
+        echo "Time: $(date)" >> unit-test-results.txt
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: unit-test-results
+        path: unit-test-results.txt
+        retention-days: 7
+        if-no-files-found: warn
     
     - name: Upload coverage
       uses: actions/upload-artifact@v4
@@ -165,12 +180,15 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Download test results
+    - name: Download all test results
       uses: actions/download-artifact@v4
       with:
-        pattern: test-results-*
-        merge-multiple: true
         path: test-results/
+    
+    - name: List downloaded artifacts
+      run: |
+        echo "Downloaded artifacts:"
+        find test-results -type f -name "*.txt" -o -name "*.log" | sort
     
     - name: Generate summary
       run: .github/workflows/scripts/generate-test-summary.sh test-results

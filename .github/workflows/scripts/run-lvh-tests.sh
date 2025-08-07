@@ -135,13 +135,49 @@ export PATH=$PATH:/usr/local/go/bin
 # Set environment variable for eBPF program location
 export EBPF_BUILD_DIR=/usr/local/lib/antimetal/ebpf
 
-# Run integration tests with verbose output
+# Run integration tests with verbose output and save results
 echo "Running eBPF integration tests..."
-if ! go test -tags integration -v ./pkg/ebpf/core -run TestEBPF 2>&1; then
-    echo "ERROR: Integration tests failed"
-    exit 1
+
+# Create test results file
+TEST_RESULTS_FILE="/host/integration-test-results.txt"
+VM_OUTPUT_FILE="/host/vm-output.log"
+
+# Save VM output
+{
+    echo "=== VM Output Log ==="
+    echo "Kernel: $(uname -r)"
+    echo "Time: $(date)"
+    echo "Go Version: $(go version)"
+    echo ""
+} > "$VM_OUTPUT_FILE"
+
+# Run tests and capture output
+echo "Running integration tests and saving results..."
+if go test -tags integration -v ./pkg/ebpf/core -run TestEBPF 2>&1 | tee -a "$VM_OUTPUT_FILE" > "$TEST_RESULTS_FILE"; then
+    TEST_STATUS="PASS"
+    echo -e "\n✅ Integration tests PASSED"
+else
+    TEST_STATUS="FAIL"
+    echo -e "\n❌ Integration tests FAILED"
+    # Don't exit immediately - save results first
 fi
 
-echo -e "\n=== Test Completed Successfully ==="
+# Append summary to results file
+{
+    echo ""
+    echo "=== Test Summary ==="
+    echo "Status: $TEST_STATUS"
+    echo "Kernel: $(uname -r)"
+    echo "Time: $(date)"
+} >> "$TEST_RESULTS_FILE"
+
+echo -e "\n=== Test Completed ==="
+echo "Results saved to: $TEST_RESULTS_FILE"
+echo "VM output saved to: $VM_OUTPUT_FILE"
 echo "Kernel: $(uname -r)"
 echo "Time: $(date)"
+
+# Exit with appropriate status
+if [ "$TEST_STATUS" = "FAIL" ]; then
+    exit 1
+fi

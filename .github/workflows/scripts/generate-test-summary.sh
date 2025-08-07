@@ -13,16 +13,38 @@ echo "" >> $GITHUB_STEP_SUMMARY
 echo "## Test Execution Status" >> $GITHUB_STEP_SUMMARY
 echo "" >> $GITHUB_STEP_SUMMARY
 
-if [ -f "${TEST_RESULTS_DIR}/unit-test-results.txt" ]; then
+# Check for unit test results (could be in subdirectory due to artifact download)
+UNIT_TEST_FILE=$(find "${TEST_RESULTS_DIR}" -name "unit-test-results.txt" -type f | head -1)
+if [ -n "$UNIT_TEST_FILE" ] && [ -f "$UNIT_TEST_FILE" ]; then
     echo "✅ Unit tests completed" >> $GITHUB_STEP_SUMMARY
+    # Extract test summary
+    if grep -q "PASS" "$UNIT_TEST_FILE" || grep -q "ok" "$UNIT_TEST_FILE"; then
+        echo "  - Status: PASSED" >> $GITHUB_STEP_SUMMARY
+    elif grep -q "FAIL" "$UNIT_TEST_FILE"; then
+        echo "  - Status: FAILED" >> $GITHUB_STEP_SUMMARY
+    fi
 else
     echo "⚠️ Unit test results not found" >> $GITHUB_STEP_SUMMARY
+    echo "  - Searched in: ${TEST_RESULTS_DIR}" >> $GITHUB_STEP_SUMMARY
 fi
 
-if [ -f "${TEST_RESULTS_DIR}/integration-test-results.txt" ]; then
+# Check for integration test results (multiple kernel versions)
+INTEGRATION_TEST_FILES=$(find "${TEST_RESULTS_DIR}" -name "integration-test-results.txt" -type f)
+if [ -n "$INTEGRATION_TEST_FILES" ]; then
     echo "✅ Integration tests completed" >> $GITHUB_STEP_SUMMARY
+    echo "" >> $GITHUB_STEP_SUMMARY
+    echo "### Integration Test Results by Kernel" >> $GITHUB_STEP_SUMMARY
+    for file in $INTEGRATION_TEST_FILES; do
+        # Extract kernel version from path or file content
+        kernel_info=$(grep "Kernel:" "$file" | head -1 | cut -d: -f2 | tr -d ' ')
+        status=$(grep "Status:" "$file" | head -1 | cut -d: -f2 | tr -d ' ')
+        if [ -n "$kernel_info" ]; then
+            echo "  - Kernel $kernel_info: ${status:-UNKNOWN}" >> $GITHUB_STEP_SUMMARY
+        fi
+    done
 else
     echo "⚠️ Integration test results not found" >> $GITHUB_STEP_SUMMARY
+    echo "  - Searched in: ${TEST_RESULTS_DIR}" >> $GITHUB_STEP_SUMMARY
 fi
 
 echo "" >> $GITHUB_STEP_SUMMARY
@@ -34,7 +56,8 @@ echo "| 5.4 | Ubuntu 20.04 LTS |" >> $GITHUB_STEP_SUMMARY
 echo "| 5.10 | Stable kernel |" >> $GITHUB_STEP_SUMMARY
 echo "| 5.15 | Ubuntu 22.04 LTS |" >> $GITHUB_STEP_SUMMARY
 echo "| 6.1 | LTS kernel |" >> $GITHUB_STEP_SUMMARY
-echo "| 6.6 | Latest LTS kernel |" >> $GITHUB_STEP_SUMMARY
+echo "| 6.6 | Current LTS kernel |" >> $GITHUB_STEP_SUMMARY
+echo "| 6.12 | Next LTS kernel |" >> $GITHUB_STEP_SUMMARY
 echo "" >> $GITHUB_STEP_SUMMARY
 
 echo "## Testing Strategy" >> $GITHUB_STEP_SUMMARY
