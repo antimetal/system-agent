@@ -46,6 +46,30 @@ The `integration-tests.yml` workflow consists of three main jobs:
 2. **build-artifacts**: Builds eBPF programs and packages test artifacts
 3. **integration-tests-vm**: Runs tests in VMs with different kernel versions
 
+#### Architecture Decision: Multiple Jobs vs Single Job
+
+The workflow uses **multiple parallel jobs** instead of a single sequential job. Here's why:
+
+**Pros of Multiple Jobs (Current Approach):**
+- **Parallelization**: Tests run simultaneously, reducing total CI time from ~30 minutes to ~10 minutes
+- **Fail-fast**: If one kernel version fails, others continue, providing complete test results
+- **Resource isolation**: Each job gets fresh resources, preventing cross-contamination
+- **Better debugging**: Failures are isolated to specific kernel versions with dedicated logs
+- **Scalability**: Easy to add/remove kernel versions without affecting others
+- **GitHub UI**: Clear visual separation of test results per kernel in the UI
+
+**Cons of Multiple Jobs:**
+- **Setup overhead**: Each job needs to download artifacts and set up environment (~30s per job)
+- **Artifact management**: Requires uploading/downloading artifacts between jobs
+- **Complexity**: More moving parts in the workflow configuration
+
+**Alternative: Single Job Approach**
+- Would run all kernel tests sequentially in one job
+- Pros: Simpler workflow, no artifact passing, single log file
+- Cons: 3x slower (sequential), harder to debug failures, one failure could block all tests
+
+**Decision**: We use multiple jobs for the significant performance benefit (3x faster) and better debugging experience, accepting the minor complexity overhead
+
 ### Workflow Scripts
 
 The workflow uses external scripts located in `.github/workflows/scripts/`:
