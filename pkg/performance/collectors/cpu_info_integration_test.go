@@ -16,15 +16,12 @@ import (
 
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/antimetal/agent/pkg/performance/collectors"
-	"github.com/antimetal/agent/pkg/testutil"
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestCPUInfoCollector_RealProcFS(t *testing.T) {
-	testutil.RequireLinux(t)
-	testutil.RequireLinuxFilesystem(t)
 
 	// Test with real /proc filesystem
 	config := performance.CollectionConfig{
@@ -57,8 +54,6 @@ func TestCPUInfoCollector_RealProcFS(t *testing.T) {
 }
 
 func TestCPUInfoCollector_Topology(t *testing.T) {
-	testutil.RequireLinux(t)
-	testutil.RequireLinuxFilesystem(t)
 
 	config := performance.CollectionConfig{
 		HostProcPath: "/proc",
@@ -114,8 +109,6 @@ func TestCPUInfoCollector_Topology(t *testing.T) {
 }
 
 func TestCPUInfoCollector_Virtualization(t *testing.T) {
-	testutil.RequireLinux(t)
-	testutil.RequireLinuxFilesystem(t)
 
 	config := performance.CollectionConfig{
 		HostProcPath: "/proc",
@@ -192,8 +185,6 @@ func TestCPUInfoCollector_Virtualization(t *testing.T) {
 }
 
 func TestCPUInfoCollector_CPUFrequency(t *testing.T) {
-	testutil.RequireLinux(t)
-	testutil.RequireLinuxFilesystem(t)
 
 	config := performance.CollectionConfig{
 		HostProcPath: "/proc",
