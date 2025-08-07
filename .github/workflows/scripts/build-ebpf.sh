@@ -21,6 +21,10 @@ fi
 
 echo "Found $ebpf_count eBPF source files to build"
 
+# Clean any stale build artifacts first
+echo "Cleaning stale eBPF build artifacts..."
+make clean-ebpf
+
 # Use the main Makefile to build eBPF programs
 echo "Building eBPF programs using main Makefile..."
 make build-ebpf
