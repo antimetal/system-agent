@@ -10,19 +10,16 @@ echo "=== Packaging Test Artifacts ==="
 rm -rf artifacts
 mkdir -p artifacts
 
-# Copy test runner script if it exists
-if [ -f .github/workflows/scripts/run-tests-in-vm.sh ]; then
-    echo "Copying run-tests-in-vm.sh to artifacts..."
-    cp .github/workflows/scripts/run-tests-in-vm.sh artifacts/
-    chmod +x artifacts/run-tests-in-vm.sh
-elif [ -f run-tests-in-vm.sh ]; then
-    # Fallback for locally generated script
-    echo "Copying locally generated run-tests-in-vm.sh to artifacts..."
-    cp run-tests-in-vm.sh artifacts/
-    chmod +x artifacts/run-tests-in-vm.sh
-else
-    echo "WARNING: run-tests-in-vm.sh not found"
+# Copy test runner script (required)
+SCRIPT_PATH=".github/workflows/scripts/run-tests-in-vm.sh"
+if [ ! -f "$SCRIPT_PATH" ]; then
+    echo "ERROR: Required script not found: $SCRIPT_PATH"
+    exit 1
 fi
+
+echo "Copying run-tests-in-vm.sh to artifacts..."
+cp "$SCRIPT_PATH" artifacts/
+chmod +x artifacts/run-tests-in-vm.sh
 
 # Copy eBPF programs if they exist
 # The main Makefile builds to ebpf/build/
@@ -85,20 +82,9 @@ echo -e "\n=== Packaging Summary ==="
 echo "Artifacts directory contents:"
 find artifacts -type f -exec ls -la {} \; 2>/dev/null || echo "No files found"
 
-# Verify critical files
-critical_missing=0
-if [ ! -f artifacts/run-tests-in-vm.sh ]; then
-    echo "ERROR: Missing critical file: run-tests-in-vm.sh"
-    critical_missing=$((critical_missing + 1))
-fi
-
+# Verify eBPF programs
 if [ "$ebpf_count" -eq 0 ]; then
     echo "WARNING: No eBPF programs packaged (tests may be limited)"
-fi
-
-if [ "$critical_missing" -gt 0 ]; then
-    echo "ERROR: $critical_missing critical files missing"
-    exit 1
 fi
 
 echo "Packaging completed successfully"
