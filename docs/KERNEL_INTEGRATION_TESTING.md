@@ -13,73 +13,98 @@ The kernel integration testing framework uses [LVH (Little VM Helper)](https://g
 While the full kernel integration tests require GitHub Actions, you can run the test suite on your current kernel:
 
 ```bash
-# Run all integration tests
-cd test/integration
-go test -v ./...
+# Run unit tests (excluding integration tests)
+go test ./... -v
 
-# Run specific test suites
-go test -v -run TestKernelCompatibility
-go test -v -run TestEBPFProgramLoading
-go test -v -run TestCollectorCompatibility
+# Run integration tests with the integration build tag
+go test -tags integration -v ./pkg/ebpf/core
+go test -tags integration -v ./pkg/kernel
+go test -tags integration -v ./pkg/performance/collectors
 ```
 
-**Note**: These tests are Linux-specific and will skip on macOS or Windows systems. To run the full test suite across multiple kernel versions, use the GitHub Actions workflow or the local VM testing scripts.
+**Note**: Integration tests are Linux-specific and require root privileges for eBPF tests. To run the full test suite across multiple kernel versions, use the GitHub Actions workflow or the local VM testing scripts.
 
 ### Triggering GitHub Actions
 
 The kernel integration tests run automatically on:
-- Pull requests that modify collectors or eBPF code
+- Pull requests that modify code in `pkg/**`, `internal/**`, `cmd/**`, `ebpf/**`, or workflows
 - Pushes to main branch
 - Manual workflow dispatch
 
 To manually trigger:
 ```bash
-gh workflow run ebpf-vm-verifier-tests.yml
+gh workflow run integration-tests.yml
+```
+
+## Workflow Structure
+
+### GitHub Actions Workflow
+
+The `integration-tests.yml` workflow consists of three main jobs:
+
+1. **unit-tests**: Runs unit tests on Ubuntu latest
+2. **build-artifacts**: Builds eBPF programs and packages test artifacts
+3. **integration-tests-vm**: Runs tests in VMs with different kernel versions
+
+### Workflow Scripts
+
+The workflow uses external scripts located in `.github/workflows/scripts/`:
+
+```
+.github/workflows/scripts/
+├── build-ebpf.sh           # Builds eBPF programs with CO-RE support
+├── package-artifacts.sh    # Packages eBPF programs and test scripts
+├── run-tests-in-vm.sh     # Runs tests in VM environment (generic)
+└── run-lvh-tests.sh        # Runs tests in LVH environment
 ```
 
 ## Test Structure
 
-### Directory Layout
+### Integration Test Files
+
+Integration tests use the `//go:build integration` build tag to separate them from unit tests:
+
 ```
-test/integration/
-├── kernel_compat_test.go    # Kernel feature detection tests
-├── ebpf_test.go            # eBPF-specific tests
-├── collectors_test.go      # Performance collector tests
-├── config.yaml             # Test configuration
-├── scripts/
-│   ├── run-integration-tests.sh    # Main test runner
-│   ├── setup-test-env.sh          # VM environment setup
-│   └── test-workflow-locally.sh   # Local validation script
-└── testdata/               # Test fixtures (if needed)
+pkg/
+├── ebpf/
+│   └── core/
+│       ├── core_test.go              # Unit tests
+│       └── ebpf_integration_test.go  # Integration tests
+├── kernel/
+│   ├── version_test.go               # Unit tests
+│   ├── version_integration_test.go   # Integration tests
+│   └── kernel_compat_integration_test.go
+└── performance/
+    └── collectors/
+        ├── *_test.go                  # Unit tests
+        └── *_integration_test.go      # Integration tests
 ```
 
 ### Test Categories
 
-1. **Kernel Feature Detection** (`kernel_compat_test.go`)
+1. **Kernel Feature Detection** (`pkg/kernel/kernel_compat_integration_test.go`)
    - BTF support verification
    - CO-RE compatibility checks
    - BPF helper availability
    - Ring buffer vs perf buffer support
 
-2. **eBPF Tests** (`ebpf_test.go`)
+2. **eBPF Tests** (`pkg/ebpf/core/ebpf_integration_test.go`)
    - Program loading on different kernels
    - Map type support
    - CO-RE relocation testing
    - Verifier compatibility
 
-3. **Collector Tests** (`collectors_test.go`)
-   - Collector initialization
+3. **Collector Tests** (`pkg/performance/collectors/*_integration_test.go`)
+   - Collector initialization with real filesystems
    - Data collection integrity
    - Error handling
    - Kernel version-specific features
 
 ## Supported Kernel Versions
 
-The test matrix includes:
-- **4.18**: Minimum for CO-RE support (partial)
-- **5.2**: First kernel with native BTF support
+The current test matrix includes:
 - **5.4**: Ubuntu 20.04 LTS
-- **5.8**: First kernel with BPF ring buffer support
+- **5.10**: Stable kernel with good eBPF support
 - **5.15**: Ubuntu 22.04 LTS, excellent eBPF support
 - **6.1**: LTS kernel with advanced eBPF features
 - **6.6**: Latest LTS kernel with cutting-edge eBPF features
@@ -88,105 +113,96 @@ The test matrix includes:
 
 ### 1. Adding a New Kernel Version
 
-Edit `.github/workflows/ebpf-vm-verifier-tests.yml`:
+Edit `.github/workflows/integration-tests.yml`:
 ```yaml
 matrix:
-  kernel:
-    - '4.18'
-    - '5.2'
-    - '5.4'
-    - '5.8'
-    - '5.15'
-    - '6.1'
-    - '6.6'  # Add new version
+  include:
+    - kernel: "5.4-20250616.013250"   # Ubuntu 20.04 LTS
+    - kernel: "5.10-20250616.013250"
+    - kernel: "5.15-20250616.013250"  # Ubuntu 22.04 LTS
+    - kernel: "6.1-20250616.013250"   # LTS kernel
+    - kernel: "6.6-20250616.013250"   # Latest LTS kernel
+    - kernel: "6.8-20250616.013250"   # Add new version
 ```
 
-Update `test/integration/config.yaml` with expected features:
-```yaml
-- version: "6.8"
-  expected_features:
-    co_re: full
-    btf: native
-    ring_buffer: true
-    perf_buffer: true
-    psi: true
-    cgroup_v2: true
-    btf_func: true
-    bpf_cookie: true
-    multi_attach: true
-    collectors:
-      all_basic: true
-      ebpf_based: true
-  notes: "Description of this kernel version"
-```
+### 2. Adding Integration Tests
 
-### 2. Adding Collector Tests
-
-Add test cases to `collectors_test.go`:
+Create a new integration test file with the build tag:
 ```go
-func TestNewCollectorType(t *testing.T) {
+//go:build integration
+
+package collectors_test
+
+import (
+    "testing"
+    "runtime"
+)
+
+func TestNewCollectorIntegration(t *testing.T) {
     if runtime.GOOS != "linux" {
         t.Skip("Linux-specific test")
     }
     
-    // Test implementation
+    // Test implementation using real filesystem
 }
 ```
 
 ### 3. Adding eBPF Tests
 
-For new eBPF programs, add tests to `ebpf_test.go`:
+For new eBPF programs, add tests to `pkg/ebpf/core/ebpf_integration_test.go`:
 ```go
-t.Run("NewProgram", func(t *testing.T) {
+func TestNewEBPFProgram(t *testing.T) {
     // Check kernel requirements
-    if currentKernel.Compare(KernelVersion{5, 8, 0}) < 0 {
+    currentKernel, _ := kernel.GetCurrentVersion()
+    if currentKernel.Compare(kernel.KernelVersion{5, 8, 0}) < 0 {
         t.Skip("Requires kernel 5.8+")
     }
     
     // Test eBPF program loading
-})
+}
 ```
 
 ## Configuration
 
-### Test Configuration (`config.yaml`)
-
-The configuration file defines:
-- Expected features per kernel version
-- Collector requirements
-- Test parameters
-- eBPF program specifications
-
 ### Environment Variables
 
-Tests respect these environment variables:
+The test scripts respect these environment variables:
+- `GO_VERSION`: Go version to install (default: 1.24.0)
+- `KERNEL_VERSION`: Expected kernel version for validation
+- `EBPF_BUILD_DIR`: Directory containing eBPF programs
 - `HOST_PROC`: Override `/proc` path (default: `/proc`)
 - `HOST_SYS`: Override `/sys` path (default: `/sys`)
-- `HOST_DEV`: Override `/dev` path (default: `/dev`)
+
+### Script Configuration
+
+The workflow scripts include built-in configuration:
+- **build-ebpf.sh**: Automatically handles vmlinux.h generation with fallback
+- **run-tests-in-vm.sh**: Validates kernel version, installs dependencies, runs tests
+- **run-lvh-tests.sh**: Optimized for LVH environment with proper mounts
+- **package-artifacts.sh**: Searches multiple locations for eBPF programs
 
 ## Debugging Failed Tests
 
 ### 1. Check Test Artifacts
 
-GitHub Actions uploads test results:
+GitHub Actions uploads test results with 7-day retention:
 ```bash
 # Download artifacts
 gh run download <run-id>
+
+# View test results
+cat test-results-5.15-20250616.013250/integration-test-results.txt
 ```
 
-Artifacts include:
-- `test-results/`: Test output files
-- `test-logs/`: Detailed logs
+### 2. Run Tests Locally
 
-### 2. Run Specific Tests
-
-To debug a specific test:
+Use the local testing scripts:
 ```bash
-# Run with verbose output
-go test -v -run TestName ./test/integration
+# Test eBPF programs locally
+./scripts/test-ebpf-locally.sh --kernel 5.15-main
 
-# Run with race detector
-go test -race -run TestName ./test/integration
+# Debug LVH setup
+./scripts/debug-lvh-locally.sh --kernel 6.1-main
 ```
 
 ### 3. Check Kernel Requirements
@@ -212,65 +228,72 @@ zgrep CONFIG_BPF /proc/config.gz
 
 The workflow runs on:
 - Pull requests modifying:
-  - `pkg/performance/collectors/**`
+  - `pkg/**`
+  - `internal/**`
+  - `cmd/**`
   - `ebpf/**`
-  - Test files themselves
+  - `Makefile`
+  - `.github/workflows/integration-tests.yml`
+  - `.github/workflows/scripts/**`
 - Pushes to main
 - Manual dispatch
 
-### Local Testing Scripts
+### Job Dependencies
 
-For local development and testing, use these scripts:
+```
+unit-tests ──────────┐
+                     ├──> test-summary
+build-artifacts ──┐  │
+                  ↓  │
+integration-tests-vm ┘
+```
 
-1. **`scripts/debug-lvh-locally.sh`** - Debug LVH installation and VM functionality
-   ```bash
-   ./scripts/debug-lvh-locally.sh --help  # See all options
-   ./scripts/debug-lvh-locally.sh --kernel 5.15-main
-   ```
+### Artifact Flow
 
-2. **`scripts/test-ebpf-locally.sh`** - Test eBPF programs across multiple kernels locally
-   ```bash
-   ./scripts/test-ebpf-locally.sh --help  # See all options
-   ./scripts/test-ebpf-locally.sh --kernel 6.1-main --kernel 6.6-main
-   ```
+1. **build-artifacts** job:
+   - Builds eBPF programs using `build-ebpf.sh`
+   - Packages artifacts using `package-artifacts.sh`
+   - Uploads as `test-artifacts`
 
-Both scripts require Linux with KVM support and LVH installed.
+2. **integration-tests-vm** job:
+   - Downloads `test-artifacts`
+   - Runs tests in VMs using `run-lvh-tests.sh`
+   - Uploads test results per kernel version
 
-### Failure Handling
-
-Tests use a non-fail-fast strategy:
-- All kernel versions are tested even if one fails
-- Results are collected for analysis
-- Clear error messages indicate kernel-specific issues
+3. **test-summary** job:
+   - Downloads all test results
+   - Generates summary report
 
 ## Best Practices
 
-### 1. Kernel Version Checks
+### 1. Use Build Tags
 
-Always check kernel version before using features:
+Always use the `//go:build integration` tag for integration tests:
 ```go
-if currentKernel.Compare(KernelVersion{5, 8, 0}) < 0 {
+//go:build integration
+
+package mypackage_test
+```
+
+### 2. Check Kernel Version
+
+Check kernel requirements before running tests:
+```go
+currentKernel, err := kernel.GetCurrentVersion()
+require.NoError(t, err)
+
+if currentKernel.Compare(kernel.KernelVersion{5, 8, 0}) < 0 {
     t.Skip("Feature requires kernel 5.8+")
 }
 ```
 
-### 2. Root Privilege Handling
+### 3. Root Privilege Handling
 
 Check for root when needed:
 ```go
 if os.Geteuid() != 0 {
     t.Skip("Test requires root privileges")
 }
-```
-
-### 3. Graceful Degradation
-
-Test that collectors handle missing features:
-```go
-// Collector should work but with reduced functionality
-result, err := collector.Collect(ctx)
-assert.NoError(t, err)
-assert.NotNil(t, result)
 ```
 
 ### 4. Resource Cleanup
@@ -282,39 +305,45 @@ require.NoError(t, err)
 defer collector.Stop()
 ```
 
+### 5. Proper Error Handling
+
+The workflow scripts use `set -euo pipefail` for strict error handling. Follow this pattern in custom scripts.
+
 ## Troubleshooting
 
 ### Common Issues
 
 1. **"eBPF tests require root"**
-   - Run tests with sudo: `sudo go test -v`
-   - Or skip eBPF tests: `go test -v -run "^Test[^E]"`
+   - Run tests with sudo: `sudo go test -tags integration -v`
+   - Or use the VM-based testing scripts
 
 2. **"BTF not available"**
    - Normal on kernels < 5.2
    - Check `/sys/kernel/btf/vmlinux` exists
+   - Some tests may skip on older kernels
 
-3. **"Collector not registered"**
-   - Ensure collector has init() function
-   - Check registry registration
+3. **"No eBPF programs found"**
+   - Run `make build-ebpf` first
+   - Check `internal/ebpf/` for `.bpf.o` files
+   - Verify clang/llvm installation
 
 4. **GitHub Actions timeout**
    - Check for infinite loops in tests
-   - Reduce collection intervals
    - Add context timeouts
+   - Consider splitting large test suites
 
 ### Getting Help
 
 1. Check test output for specific error messages
-2. Review kernel version requirements in `config.yaml`
+2. Review the workflow scripts in `.github/workflows/scripts/`
 3. Consult the [kernel documentation](https://www.kernel.org/doc/html/latest/)
 4. Open an issue with test logs attached
 
 ## Future Enhancements
 
 Planned improvements:
-- Distribution-specific kernel testing (RHEL, SUSE)
+- Additional kernel versions (4.19, 5.2, 5.8)
+- ARM64 architecture support
 - Performance benchmarking across kernels
 - Stress testing under load
-- Custom kernel configuration testing
 - Integration with kernel CI systems
