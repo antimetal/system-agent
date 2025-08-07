@@ -107,7 +107,8 @@ The current test matrix includes:
 - **5.10**: Stable kernel with good eBPF support
 - **5.15**: Ubuntu 22.04 LTS, excellent eBPF support
 - **6.1**: LTS kernel with advanced eBPF features
-- **6.6**: Latest LTS kernel with cutting-edge eBPF features
+- **6.6**: Current LTS kernel with cutting-edge eBPF features
+- **6.12**: Next LTS kernel with latest eBPF and performance features
 
 ## Adding New Tests
 
@@ -121,8 +122,8 @@ matrix:
     - kernel: "5.10-20250616.013250"
     - kernel: "5.15-20250616.013250"  # Ubuntu 22.04 LTS
     - kernel: "6.1-20250616.013250"   # LTS kernel
-    - kernel: "6.6-20250616.013250"   # Latest LTS kernel
-    - kernel: "6.8-20250616.013250"   # Add new version
+    - kernel: "6.6-20250616.013250"   # Current LTS kernel
+    - kernel: "6.12-20250805.082402"  # Next LTS kernel (6.12)
 ```
 
 ### 2. Adding Integration Tests

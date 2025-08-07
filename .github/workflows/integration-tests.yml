@@ -111,7 +111,8 @@ jobs:
           - kernel: "5.10-20250616.013250"
           - kernel: "5.15-20250616.013250"  # Ubuntu 22.04 LTS
           - kernel: "6.1-20250616.013250"   # LTS kernel
-          - kernel: "6.6-20250616.013250"   # Latest LTS kernel
+          - kernel: "6.6-20250616.013250"   # Current LTS kernel
+          - kernel: "6.12-20250805.082402"  # Next LTS kernel (6.12)
     
     steps:
     - uses: actions/checkout@v4
