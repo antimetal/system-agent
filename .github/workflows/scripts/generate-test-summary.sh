@@ -7,6 +7,12 @@ set -euo pipefail
 # Configuration
 TEST_RESULTS_DIR="${1:-test-results}"
 
+# Validate that the test results directory exists
+if [ ! -d "${TEST_RESULTS_DIR}" ]; then
+    echo "ERROR: Test results directory not found: ${TEST_RESULTS_DIR}"
+    exit 1
+fi
+
 echo "# Test Results Summary" >> $GITHUB_STEP_SUMMARY
 echo "" >> $GITHUB_STEP_SUMMARY
 
@@ -79,7 +85,7 @@ echo "- **eBPF Tests**: Run in VMs with CAP_SYS_ADMIN capability" >> $GITHUB_STE
 echo "" >> $GITHUB_STEP_SUMMARY
 
 # Check if coverage report exists
-COVERAGE_FILE=$(find "${TEST_RESULTS_DIR}" -name "coverage.out" -type f | head -1)
+COVERAGE_FILE=$(find "${TEST_RESULTS_DIR}" -name "coverage.out" -type f | head -1 || true)
 if [ -n "$COVERAGE_FILE" ] && [ -f "$COVERAGE_FILE" ]; then
     echo "## Coverage Report" >> $GITHUB_STEP_SUMMARY
     echo "" >> $GITHUB_STEP_SUMMARY
@@ -87,4 +93,4 @@ if [ -n "$COVERAGE_FILE" ] && [ -f "$COVERAGE_FILE" ]; then
     echo "" >> $GITHUB_STEP_SUMMARY
 fi
 
-echo "Test summary generated successfully"
+echo "✅ Test summary generated successfully"

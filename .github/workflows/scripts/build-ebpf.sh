@@ -8,15 +8,17 @@ echo "Building eBPF programs with CO-RE support..."
 
 # Check if we have eBPF source files
 if [ ! -d ebpf/src ]; then
-    echo "Warning: ebpf/src directory not found, skipping eBPF build"
-    exit 0
+    echo "ERROR: ebpf/src directory not found"
+    echo "Expected eBPF source files in ebpf/src/"
+    exit 1
 fi
 
 # Count eBPF source files
-ebpf_count=$(find ebpf/src -name "*.bpf.c" -type f 2>/dev/null | wc -l)
+ebpf_count=$(find ebpf/src -name "*.bpf.c" -type f | wc -l)
 if [ "$ebpf_count" -eq 0 ]; then
-    echo "Warning: No eBPF source files found in ebpf/src"
-    exit 0
+    echo "ERROR: No eBPF source files found in ebpf/src"
+    echo "Expected .bpf.c files in ebpf/src/"
+    exit 1
 fi
 
 echo "Found $ebpf_count eBPF source files to build"
@@ -35,7 +37,7 @@ echo "Looking for .bpf.o files in ebpf/build/:"
 
 # Verify that eBPF programs were built
 found_files=0
-for f in $(find ebpf/build -name "*.bpf.o" -type f 2>/dev/null); do
+for f in $(find ebpf/build -name "*.bpf.o" -type f); do
     echo "  Found: $f"
     ls -la "$f"
     found_files=$((found_files + 1))
@@ -44,8 +46,8 @@ done
 if [ "$found_files" -eq 0 ]; then
     echo "ERROR: No eBPF programs found after build"
     echo "Directory structure of ebpf/build:"
-    find ebpf/build -type f -name "*.o" 2>/dev/null | head -20 || echo "No .o files found"
-    ls -laR ebpf/build/ 2>/dev/null || echo "ebpf/build not found"
+    find ebpf/build -type f -name "*.o" | head -20
+    ls -laR ebpf/build/
     exit 1
 fi
 

@@ -22,10 +22,10 @@ if [ -n "${KERNEL_VERSION}" ]; then
     EXPECTED_VERSION=$(echo "${KERNEL_VERSION}" | grep -oE '^[0-9]+\.[0-9]+')
     
     if [ "${ACTUAL_VERSION}" != "${EXPECTED_VERSION}" ]; then
-        echo "WARNING: Kernel version mismatch!"
+        echo "ERROR: Kernel version mismatch!"
         echo "  Expected: ${EXPECTED_VERSION}"
         echo "  Actual: ${ACTUAL_VERSION}"
-        # Don't fail, just warn - LVH might use slightly different kernel builds
+        exit 1
     else
         echo "✅ Kernel version matches expected: ${EXPECTED_VERSION}"
     fi
@@ -37,14 +37,16 @@ if [ -f /sys/kernel/btf/vmlinux ]; then
     echo "✅ BTF support available"
     ls -la /sys/kernel/btf/vmlinux
 else
-    echo "⚠️ No BTF support"
+    echo "ERROR: No BTF support - required for CO-RE eBPF"
+    exit 1
 fi
 
 # Check BPF filesystem
 if mount | grep -q "type bpf"; then
     echo "✅ BPF filesystem mounted"
 else
-    echo "⚠️ BPF filesystem not mounted"
+    echo "ERROR: BPF filesystem not mounted"
+    exit 1
 fi
 
 # Install dependencies
@@ -52,9 +54,8 @@ echo -e "\n=== Installing Dependencies ==="
 apt-get update -qq
 apt-get install -y -qq build-essential git wget curl
 
-# Install additional tools if available
-apt-get install -y -qq linux-tools-common linux-tools-generic 2>/dev/null || true
-apt-get install -y -qq clang llvm libbpf-dev 2>/dev/null || true
+# Install additional tools (required for eBPF)
+apt-get install -y -qq clang llvm libbpf-dev
 
 # Install Go
 echo -e "\n=== Installing Go ==="
@@ -91,7 +92,7 @@ if [ -d /host/artifacts/ebpf ]; then
     echo "Setting up eBPF programs..."
     
     # Count eBPF programs
-    ebpf_count=$(find /host/artifacts/ebpf -name "*.bpf.o" -type f 2>/dev/null | wc -l)
+    ebpf_count=$(find /host/artifacts/ebpf -name "*.bpf.o" -type f | wc -l)
     if [ "$ebpf_count" -eq 0 ]; then
         echo "ERROR: No eBPF programs found in /host/artifacts/ebpf"
         exit 1

@@ -43,7 +43,8 @@ if [ -f /sys/kernel/btf/vmlinux ]; then
     echo "✅ BTF support available"
     ls -la /sys/kernel/btf/vmlinux
 else
-    echo "⚠️  No BTF support (kernel $(uname -r))"
+    echo "ERROR: No BTF support (kernel $(uname -r)) - required for CO-RE eBPF"
+    exit 1
 fi
 
 # Check filesystems
@@ -56,7 +57,7 @@ for fs in /proc /sys /sys/fs/cgroup /sys/fs/bpf; do
         if [ "$fs" = "/sys/fs/bpf" ]; then
             echo "  Attempting to mount BPF filesystem..."
             sudo mkdir -p /sys/fs/bpf
-            sudo mount -t bpf bpf /sys/fs/bpf || echo "  Warning: Failed to mount BPF filesystem"
+            sudo mount -t bpf bpf /sys/fs/bpf || { echo "ERROR: Failed to mount BPF filesystem"; exit 1; }
         fi
     fi
 done
@@ -89,21 +90,19 @@ if command -v apt-get &> /dev/null; then
     sudo apt-get update -qq
     sudo apt-get install -y -qq build-essential git
     
-    # Install bpftool if available
-    sudo apt-get install -y -qq linux-tools-common linux-tools-generic 2>/dev/null || true
-    if ls /usr/lib/linux-tools-*/bpftool 2>/dev/null; then
-        sudo ln -sf /usr/lib/linux-tools-*/bpftool /usr/local/bin/bpftool 2>/dev/null || true
-    fi
+    # Install bpftool (required)
+    sudo apt-get install -y -qq linux-tools-common linux-tools-generic
 else
-    echo "Warning: apt-get not available, skipping dependency installation"
+    echo "ERROR: apt-get not available - cannot install dependencies"
+    exit 1
 fi
 
 # Mount BPF filesystem if needed
 if ! mount | grep -q "type bpf"; then
     echo -e "\n=== Mounting BPF Filesystem ==="
     sudo mount -t bpf bpf /sys/fs/bpf || {
-        echo "Warning: Failed to mount BPF filesystem"
-        echo "Some eBPF tests may fail"
+        echo "ERROR: Failed to mount BPF filesystem"
+        exit 1
     }
 fi
 
@@ -123,7 +122,7 @@ if [ -d /host/artifacts/ebpf ]; then
     echo -e "\n=== Setting up eBPF Programs ==="
     
     # Count eBPF programs
-    ebpf_count=$(find /host/artifacts/ebpf -name "*.bpf.o" -type f 2>/dev/null | wc -l)
+    ebpf_count=$(find /host/artifacts/ebpf -name "*.bpf.o" -type f | wc -l)
     if [ "$ebpf_count" -eq 0 ]; then
         echo "ERROR: No eBPF programs found in /host/artifacts/ebpf"
         exit 1
@@ -141,40 +140,27 @@ if [ -d /host/artifacts/ebpf ]; then
     mkdir -p /host/ebpf/build
     cp -v /host/artifacts/ebpf/*.bpf.o /host/ebpf/build/
 else
-    echo "WARNING: No eBPF artifacts found at /host/artifacts/ebpf"
-    echo "eBPF tests may be skipped"
+    echo "ERROR: No eBPF artifacts found at /host/artifacts/ebpf"
+    exit 1
 fi
 
 # Run unit tests
 echo -e "\n=== Running Unit Tests ==="
 if ! go test ./... -v 2>&1 | tee unit-test-results.txt; then
-    echo "WARNING: Some unit tests failed"
-    # Don't exit on unit test failures, continue to integration tests
+    echo "ERROR: Unit tests failed"
+    exit 1
 fi
 
 # Run integration tests
 echo -e "\n=== Running Integration Tests (including eBPF verification) ==="
 if ! sudo -E PATH="$PATH" go test -tags integration -v ./pkg/ebpf/core -run TestEBPF 2>&1 | tee integration-test-results.txt; then
-    echo "WARNING: Some integration tests failed"
-    # Don't exit on integration test failures, let CI determine overall status
+    echo "ERROR: Integration tests failed"
+    exit 1
 fi
 
 echo -e "\n=== Test Summary ==="
 echo "Tests completed at $(date)"
 echo "Kernel: ${ACTUAL_KERNEL}"
 
-# Count test results
-if [ -f unit-test-results.txt ]; then
-    unit_pass=$(grep -c "PASS:" unit-test-results.txt || echo "0")
-    unit_fail=$(grep -c "FAIL:" unit-test-results.txt || echo "0")
-    echo "Unit Tests: ${unit_pass} passed, ${unit_fail} failed"
-fi
-
-if [ -f integration-test-results.txt ]; then
-    int_pass=$(grep -c "PASS:" integration-test-results.txt || echo "0")
-    int_fail=$(grep -c "FAIL:" integration-test-results.txt || echo "0")
-    echo "Integration Tests: ${int_pass} passed, ${int_fail} failed"
-fi
-
-# Exit with success - let CI determine overall status based on test output
-exit 0
+# All tests passed if we got here
+echo "All tests completed successfully"
