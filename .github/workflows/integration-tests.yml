@@ -52,14 +52,22 @@ jobs:
     
     - name: Run unit tests
       run: |
-        echo "Running unit tests (excluding integration tests)..."
-        # Run tests and save results
-        go test ./... -v 2>&1 | tee unit-test-results.txt
+        echo "Running unit tests with coverage (excluding integration tests)..."
+        # Run tests with coverage and save results
+        go test ./... -v -coverprofile=coverage.out -covermode=atomic 2>&1 | tee unit-test-results.txt
         
-        # Create summary for upload
+        # Generate coverage summary
         echo "" >> unit-test-results.txt
         echo "=== Test Summary ===" >> unit-test-results.txt
         echo "Time: $(date)" >> unit-test-results.txt
+        
+        # Show coverage summary
+        if [ -f coverage.out ]; then
+          echo "Coverage report generated successfully"
+          go tool cover -func=coverage.out | tail -5
+        else
+          echo "Warning: No coverage report generated"
+        fi
     
     - name: Upload test results
       uses: actions/upload-artifact@v4
@@ -70,11 +78,23 @@ jobs:
         retention-days: 7
         if-no-files-found: warn
     
+    - name: Generate coverage HTML
+      if: always()
+      run: |
+        if [ -f coverage.out ]; then
+          echo "Generating HTML coverage report..."
+          go tool cover -html=coverage.out -o coverage.html
+          echo "HTML coverage report generated"
+        fi
+    
     - name: Upload coverage
       uses: actions/upload-artifact@v4
+      if: always()
       with:
         name: coverage-report
-        path: coverage.out
+        path: |
+          coverage.out
+          coverage.html
         retention-days: 7
         if-no-files-found: warn
 
