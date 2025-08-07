@@ -4,7 +4,7 @@ Component that connects your infrastructure to the [Antimetal](https://antimetal
 
 ## Contributing
 
-If you want to contribute, refer to our [DEVELOPING](./DEVELOPING.md) docs.
+If you want to contribute, refer to our [DEVELOPING](./docs/DEVELOPING.md) docs.
 
 ## Helm chart
 
