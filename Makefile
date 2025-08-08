@@ -131,10 +131,7 @@ test-unit: generate manifests ## Run unit tests only.
 
 .PHONY: test-integration
 test-integration: generate manifests build-ebpf ## Run integration tests.
-	EBPF_BUILD_DIR=$(EBPF_BUILD_DIR) ANTIMETAL_BPF_PATH=$(EBPF_BUILD_DIR) go test -tags integration \
-		./pkg/kernel \
-		./pkg/ebpf/core \
-		-v -timeout 60s
+	EBPF_BUILD_DIR=$(EBPF_BUILD_DIR) ANTIMETAL_BPF_PATH=$(EBPF_BUILD_DIR) go test -tags integration ./... -v -timeout 60s
 
 .PHONY: lint
 lint: golangci-lint generate ## Run golangci-lint linter & yamllint.
