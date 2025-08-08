@@ -119,19 +119,19 @@ fmt.clang: ## Run clang format
 	done
 
 .PHONY: vet
-vet: ## Run go vet against code.
+vet: generate ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests ## Run tests.
+test: generate manifests ## Run tests.
 	go test ./... -v -coverprofile $(TESTCOVERAGE_OUT) -timeout 30s
 
 .PHONY: lint
-lint: golangci-lint ## Run golangci-lint linter & yamllint.
+lint: golangci-lint generate ## Run golangci-lint linter & yamllint.
 	$(GOLANGCI_LINT) run
 
 .PHONY: lint-fix
-lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes.
+lint-fix: golangci-lint generate ## Run golangci-lint linter and perform fixes.
 	$(GOLANGCI_LINT) run --fix
 
 ##@ eBPF
