@@ -13,13 +13,14 @@ The kernel integration testing framework uses [LVH (Little VM Helper)](https://g
 While the full kernel integration tests require GitHub Actions, you can run the test suite on your current kernel:
 
 ```bash
-# Run unit tests (excluding integration tests)
-go test ./... -v
+# Run unit tests only (excluding integration tests)
+make test-unit
 
-# Run integration tests with the integration build tag
-go test -tags integration -v ./pkg/ebpf/core
-go test -tags integration -v ./pkg/kernel
-go test -tags integration -v ./pkg/performance/collectors
+# Run integration tests only
+make test-integration
+
+# Run all tests (unit and integration)
+make test
 ```
 
 **Note**: Integration tests are Linux-specific and require root privileges for eBPF tests. To run the full test suite across multiple kernel versions, use the GitHub Actions workflow or the local VM testing scripts.
@@ -40,11 +41,12 @@ gh workflow run integration-tests.yml
 
 ### GitHub Actions Workflow
 
-The `integration-tests.yml` workflow consists of three main jobs:
+The `integration-tests.yml` workflow consists of these main jobs:
 
-1. **unit-tests**: Runs unit tests on Ubuntu latest
+1. **unit-tests**: Runs unit tests on Ubuntu latest using `make test-unit`
 2. **build-artifacts**: Builds eBPF programs and packages test artifacts
-3. **integration-tests-vm**: Runs tests in VMs with different kernel versions
+3. **integration-tests-vm**: Matrix job that runs tests in parallel VMs with different kernel versions (displays as "Integration Tests - Kernel X.Y")
+4. **test-summary**: Aggregates results from all test jobs
 
 #### Architecture Decision: Multiple Jobs vs Single Job
 
@@ -76,10 +78,11 @@ The workflow uses external scripts located in `.github/workflows/scripts/`:
 
 ```
 .github/workflows/scripts/
-├── build-ebpf.sh           # Builds eBPF programs with CO-RE support
-├── package-artifacts.sh    # Packages eBPF programs and test scripts
-├── run-tests-in-vm.sh     # Runs tests in VM environment (generic)
-└── run-lvh-tests.sh        # Runs tests in LVH environment
+├── build-ebpf.sh              # Builds eBPF programs with CO-RE support
+├── package-artifacts.sh       # Packages eBPF programs and test scripts
+├── run-tests-in-vm.sh        # Runs tests in VM environment (generic)
+├── run-lvh-tests.sh          # Runs tests in LVH environment
+└── generate-test-summary.sh  # Generates GitHub Actions summary from results
 ```
 
 ## Test Structure
@@ -192,19 +195,20 @@ func TestNewEBPFProgram(t *testing.T) {
 ### Environment Variables
 
 The test scripts respect these environment variables:
-- `GO_VERSION`: Go version to install (default: 1.24.0)
+- `GO_VERSION`: Go version to install (default: matches go.mod)
 - `KERNEL_VERSION`: Expected kernel version for validation
-- `EBPF_BUILD_DIR`: Directory containing eBPF programs
+- `EBPF_BUILD_DIR`: Directory containing eBPF programs (default: `ebpf/build`)
 - `HOST_PROC`: Override `/proc` path (default: `/proc`)
 - `HOST_SYS`: Override `/sys` path (default: `/sys`)
 
 ### Script Configuration
 
 The workflow scripts include built-in configuration:
-- **build-ebpf.sh**: Automatically handles vmlinux.h generation with fallback
+- **build-ebpf.sh**: Uses `make build-ebpf` to compile eBPF programs with CO-RE support
 - **run-tests-in-vm.sh**: Validates kernel version, installs dependencies, runs tests
 - **run-lvh-tests.sh**: Optimized for LVH environment with proper mounts
-- **package-artifacts.sh**: Searches multiple locations for eBPF programs
+- **package-artifacts.sh**: Packages eBPF programs from `ebpf/build`, filtering out test programs
+- **generate-test-summary.sh**: Creates GitHub Actions summary with test results
 
 ## Debugging Failed Tests
 
@@ -221,13 +225,13 @@ cat test-results-5.15-20250616.013250/integration-test-results.txt
 
 ### 2. Run Tests Locally
 
-Use the local testing scripts:
+Build and test eBPF programs locally:
 ```bash
-# Test eBPF programs locally
-./scripts/test-ebpf-locally.sh --kernel 5.15-main
+# Build eBPF programs
+make build-ebpf
 
-# Debug LVH setup
-./scripts/debug-lvh-locally.sh --kernel 6.1-main
+# Run integration tests on current kernel
+sudo make test-integration
 ```
 
 ### 3. Check Kernel Requirements
@@ -252,16 +256,13 @@ zgrep CONFIG_BPF /proc/config.gz
 ### Workflow Triggers
 
 The workflow runs on:
-- Pull requests modifying:
-  - `pkg/**`
-  - `internal/**`
-  - `cmd/**`
-  - `ebpf/**`
-  - `Makefile`
-  - `.github/workflows/integration-tests.yml`
-  - `.github/workflows/scripts/**`
-- Pushes to main
+- All pull requests (except documentation-only changes)
+- All pushes to main (except documentation-only changes)
 - Manual dispatch
+
+Workflow is skipped only when changes are exclusively to:
+- Markdown files (`**.md`)
+- Documentation directory (`docs/**`)
 
 ### Job Dependencies
 
@@ -349,7 +350,7 @@ The workflow scripts use `set -euo pipefail` for strict error handling. Follow t
 
 3. **"No eBPF programs found"**
    - Run `make build-ebpf` first
-   - Check `internal/ebpf/` for `.bpf.o` files
+   - Check `ebpf/build/` for `.bpf.o` files
    - Verify clang/llvm installation
 
 4. **GitHub Actions timeout**
@@ -364,11 +365,3 @@ The workflow scripts use `set -euo pipefail` for strict error handling. Follow t
 3. Consult the [kernel documentation](https://www.kernel.org/doc/html/latest/)
 4. Open an issue with test logs attached
 
-## Future Enhancements
-
-Planned improvements:
-- Additional kernel versions (4.19, 5.2, 5.8)
-- ARM64 architecture support
-- Performance benchmarking across kernels
-- Stress testing under load
-- Integration with kernel CI systems

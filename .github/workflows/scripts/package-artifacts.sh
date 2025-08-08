@@ -7,7 +7,7 @@ set -euo pipefail
 echo "=== Packaging Test Artifacts ==="
 
 # Create artifacts directory (clean first to avoid stale artifacts)
-rm -rf artifacts
+rm -r artifacts || true
 mkdir -p artifacts
 
 # Copy test runner script (required)

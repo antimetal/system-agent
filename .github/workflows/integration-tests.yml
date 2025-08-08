@@ -7,23 +7,13 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'pkg/**'
-      - 'internal/**'
-      - 'cmd/**'
-      - 'ebpf/**'
-      - 'Makefile'
-      - '.github/workflows/integration-tests.yml'
-      - '.github/workflows/scripts/**'
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
   pull_request:
-    paths:
-      - 'pkg/**'
-      - 'internal/**'
-      - 'cmd/**'
-      - 'ebpf/**'
-      - 'Makefile'
-      - '.github/workflows/integration-tests.yml'
-      - '.github/workflows/scripts/**'
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
   workflow_dispatch:
 
 jobs:
@@ -36,7 +26,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.24'
+        go-version-file: 'go.mod'
         cache: true
         cache-dependency-path: go.sum
     
@@ -53,16 +43,11 @@ jobs:
         sudo apt-get update -qq
         sudo apt-get install -y -qq clang llvm libelf-dev libbpf-dev
     
-    - name: Generate code
-      run: |
-        echo "Running code generation..."
-        make generate
-    
     - name: Run unit tests
       run: |
         echo "Running unit tests with coverage (excluding integration tests)..."
-        # Run tests with coverage and save results
-        go test ./... -v -coverprofile=coverage.out -covermode=atomic 2>&1 | tee unit-test-results.txt
+        # Run tests with coverage and save results (generate is a dependency of test-unit)
+        make test-unit 2>&1 | tee unit-test-results.txt
         
         # Generate coverage summary
         echo "" >> unit-test-results.txt
@@ -118,7 +103,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.24'
+        go-version-file: 'go.mod'
         cache: true
         cache-dependency-path: go.sum
     

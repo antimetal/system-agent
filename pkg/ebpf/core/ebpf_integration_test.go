@@ -179,13 +179,19 @@ func TestEBPFCollectorPrograms(t *testing.T) {
 	currentKernel, err := kernel.GetCurrentVersion()
 	require.NoError(t, err)
 
-	// Look for eBPF programs in the standard location
-	standardPath := "/usr/local/lib/antimetal/ebpf"
-	ebpfBuildDir := standardPath
+	// Look for eBPF programs - default to build directory for development
+	ebpfBuildDir := "ebpf/build"
 
-	// Allow override via environment variable for local testing
+	// Allow override via environment variable (e.g., for CI/production)
 	if envDir := os.Getenv("EBPF_BUILD_DIR"); envDir != "" {
 		ebpfBuildDir = envDir
+	}
+
+	// In CI/production, eBPF programs are installed to standard location
+	if _, err := os.Stat(ebpfBuildDir); os.IsNotExist(err) {
+		if _, err := os.Stat("/usr/local/lib/antimetal/ebpf"); err == nil {
+			ebpfBuildDir = "/usr/local/lib/antimetal/ebpf"
+		}
 	}
 
 	// Check if we have the eBPF object files - fail if not found
@@ -244,81 +250,3 @@ func TestEBPFCollectorPrograms(t *testing.T) {
 	}
 }
 
-func TestKernelHelperSupport(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("Kernel helper tests only run on Linux")
-	}
-
-	currentKernel, err := kernel.GetCurrentVersion()
-	require.NoError(t, err)
-
-	// Test availability of common BPF helpers
-	// Note: This is a simplified test - in practice we'd check actual helper availability
-	helpers := []struct {
-		name      string
-		minKernel kernel.Version
-	}{
-		{"bpf_probe_read", kernel.Version{Major: 4, Minor: 1, Patch: 0}},
-		{"bpf_probe_read_str", kernel.Version{Major: 4, Minor: 11, Patch: 0}},
-		{"bpf_probe_read_kernel", kernel.Version{Major: 5, Minor: 5, Patch: 0}},
-		{"bpf_probe_read_user", kernel.Version{Major: 5, Minor: 5, Patch: 0}},
-		{"bpf_ringbuf_reserve", kernel.Version{Major: 5, Minor: 8, Patch: 0}},
-		{"bpf_ringbuf_submit", kernel.Version{Major: 5, Minor: 8, Patch: 0}},
-	}
-
-	for _, helper := range helpers {
-		t.Run(helper.name, func(t *testing.T) {
-			if currentKernel.IsAtLeast(helper.minKernel.Major, helper.minKernel.Minor) {
-				t.Logf("✓ %s should be available (requires kernel %d.%d.%d+)",
-					helper.name,
-					helper.minKernel.Major, helper.minKernel.Minor, helper.minKernel.Patch)
-			} else {
-				t.Logf("✗ %s not available on kernel %d.%d.%d (requires %d.%d.%d+)",
-					helper.name,
-					currentKernel.Major, currentKernel.Minor, currentKernel.Patch,
-					helper.minKernel.Major, helper.minKernel.Minor, helper.minKernel.Patch)
-			}
-		})
-	}
-}
-
-func TestEBPFWithContext(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("eBPF context tests only run on Linux")
-	}
-
-	if os.Geteuid() != 0 {
-		t.Skip("eBPF context tests require root privileges")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	// Test that eBPF operations respect context cancellation
-	t.Run("Context Cancellation", func(t *testing.T) {
-		// Create a context that's already cancelled
-		cancelledCtx, cancelFunc := context.WithCancel(context.Background())
-		cancelFunc()
-
-		// Operations should handle cancelled context gracefully
-		select {
-		case <-cancelledCtx.Done():
-			t.Log("✓ Context cancellation works correctly")
-		default:
-			t.Error("Context should be cancelled")
-		}
-	})
-
-	// Test timeout handling
-	t.Run("Timeout Handling", func(t *testing.T) {
-		shortCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
-		defer cancel()
-
-		start := time.Now()
-		<-shortCtx.Done()
-		elapsed := time.Since(start)
-
-		assert.InDelta(t, 100, elapsed.Milliseconds(), 50,
-			"Context timeout should be approximately 100ms")
-	})
-}

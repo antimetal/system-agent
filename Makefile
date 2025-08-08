@@ -123,8 +123,15 @@ vet: generate ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: generate manifests ## Run tests.
+test: test-unit test-integration ## Run all tests (unit and integration).
+
+.PHONY: test-unit
+test-unit: generate manifests ## Run unit tests only.
 	go test ./... -v -coverprofile $(TESTCOVERAGE_OUT) -timeout 30s
+
+.PHONY: test-integration
+test-integration: generate manifests ## Run integration tests.
+	go test -tags integration ./... -v -timeout 60s
 
 .PHONY: lint
 lint: golangci-lint generate ## Run golangci-lint linter & yamllint.

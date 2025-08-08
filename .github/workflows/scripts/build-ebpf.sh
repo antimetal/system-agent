@@ -25,7 +25,6 @@ echo "Found $ebpf_count eBPF source files to build"
 
 # Always clean build directory completely to ensure fresh builds
 echo "Cleaning all eBPF build artifacts for fresh build..."
-rm -rf ebpf/build
 make clean-ebpf
 
 # Use the main Makefile to build eBPF programs
