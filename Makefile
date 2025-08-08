@@ -82,7 +82,7 @@ generate-ebpf-types: ebpf-typegen ## Generate Go types from eBPF header files
 .PHONY: generate-ebpf-bindings
 generate-ebpf-bindings: ## Generate Go bindings from eBPF C code
 	@echo "Generating Go bindings from eBPF C code..."
-	go generate $(ROOT)/pkg/ebpf/...
+	go generate $(ROOT)/pkg/...
 
 .PHONY: gen-check
 gen-check: generate ## Check if generated files are up to date.
