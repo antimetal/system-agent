@@ -53,13 +53,7 @@ While not critical, you might consider:
 
 ## Project Overview
 
-The Antimetal Agent is a sophisticated Kubernetes controller written in Go that connects infrastructure to the Antimetal platform for cloud resource management. It's designed as a cloud-native agent that:
-
-- **Collects Kubernetes resources** via controller-runtime patterns
-- **Monitors system performance** through /proc and /sys filesystem collectors
-- **Uploads data to Antimetal** via gRPC streaming to the intake service
-- **Stores resource state** using BadgerDB for efficient tracking
-- **Supports multi-cloud environments** with provider abstractions (AWS/EKS, KIND)
+The Antimetal Agent is a Kubernetes controller that connects infrastructure to the Antimetal platform for cloud resource management. It collects K8s resources, monitors system performance, and streams data via gRPC.
 
 ### Key Technologies
 - **Go 1.24** with controller-runtime framework
@@ -73,53 +67,20 @@ The Antimetal Agent is a sophisticated Kubernetes controller written in Go that 
 
 ### Core Components
 
-1. **Kubernetes Controller** (`internal/kubernetes/agent/`)
-   - Watches K8s resources using controller-runtime
-   - Implements event-driven reconciliation
-   - Handles resource indexing and storage
-   - Supports leader election for HA
-
-2. **Intake Worker** (`internal/intake/`)
-   - gRPC streaming client for data upload
-   - Batches deltas for efficient transmission
-   - Handles retry logic and stream recovery
-   - Implements heartbeat mechanism
-
-3. **Performance Monitoring** (`pkg/performance/`)
-   - Collector architecture for system metrics
-   - Supports both one-shot and continuous collection
-   - Reads from /proc and /sys filesystems
-   - Provides LoadStats, MemoryStats, CPUStats, etc.
-
-4. **Resource Store** (`pkg/resource/store/`)
-   - BadgerDB-backed storage for resource state
-   - Supports resources and relationships (RDF triplets)
-   - Event-driven subscription model
-   - Efficient indexing and querying
-
-5. **Cloud Provider Abstractions** (`internal/kubernetes/cluster/`)
-   - Interface for different cloud providers
-   - EKS implementation with auto-discovery
-   - KIND support for local development
-   - Extensible for GKE, AKS future support
+| Component | Path | Purpose |
+|-----------|------|---------|
+| **Kubernetes Controller** | `internal/kubernetes/agent/` | Watches resources, reconciliation, leader election |
+| **Intake Worker** | `internal/intake/` | gRPC streaming, batching, retry logic |
+| **Performance Monitoring** | `pkg/performance/` | System metrics from /proc and /sys |
+| **Resource Store** | `pkg/resource/store/` | BadgerDB storage, RDF triplets, event subscriptions |
+| **Cloud Providers** | `internal/kubernetes/cluster/` | EKS, KIND, extensible provider interface |
 
 ### Directory Structure
-```
-├── cmd/main.go                    # Application entry point
-├── internal/                      # Private application code
-│   ├── intake/                    # gRPC intake worker
-│   └── kubernetes/
-│       ├── agent/                 # K8s controller logic
-│       ├── cluster/               # Cloud provider abstractions
-│       └── scheme/                # K8s scheme setup
-├── pkg/                           # Public/reusable packages
-│   ├── aws/                       # AWS client utilities
-│   ├── performance/               # Performance monitoring system
-│   │   └── collectors/            # System metric collectors
-│   └── resource/                  # Resource management
-│       └── store/                 # BadgerDB storage layer
-└── config/                        # K8s manifests and Kustomize
-```
+- `cmd/` - Application entry points
+- `internal/` - Private application code (intake, kubernetes controller)
+- `pkg/` - Public packages (aws, performance, resource store)
+- `config/` - K8s manifests and Kustomize
+- `ebpf/` - eBPF programs and build system
 
 ## Development Workflow
 
@@ -130,39 +91,21 @@ The Antimetal Agent is a sophisticated Kubernetes controller written in Go that 
 
 ### Common Commands
 
-Use `make help` to see the full list of available commands.
-Below are commands for common workflows.
+Run `make help` for the full list. Key commands:
 
-#### Core Development
-```bash
-make build                    # Build binary for current platform
-make test                     # Run tests with coverage
-make lint                     # Run golangci-lint
-make fmt                      # Format Go code
-make generate                 # Generate K8s manifests (after annotation changes)
-make gen-license-headers      # ALWAYS run before committing
-```
-
-#### Local Testing with KIND
-```bash
-make cluster                  # Create antimetal-agent-dev KIND cluster
-make docker-build             # Build Docker image
-make load-image               # Load image into KIND cluster
-make deploy                   # Deploy agent to current context
-make undeploy                 # Remove agent from cluster
-make destroy-cluster          # Delete KIND cluster
-```
-
-#### Quick Development Iteration
-```bash
-make build-and-load-image     # Rebuild and redeploy in one command
-```
-
-#### Multi-Architecture Support
-```bash
-make build-all               # Build for all platforms
-make docker-build-all        # Build multi-arch Docker images
-```
+| Category | Command | Purpose |
+|----------|---------|---------|
+| **Build** | `make build` | Build binary for current platform |
+| | `make build-all` | Build for all platforms |
+| | `make docker-build-all` | Build multi-arch Docker images |
+| **Test** | `make test` | Run tests with coverage |
+| | `make lint` | Run golangci-lint |
+| | `make fmt` | Format Go code |
+| **Generate** | `make generate` | Generate K8s manifests |
+| | `make gen-license-headers` | **ALWAYS run before committing** |
+| **KIND** | `make cluster` | Create local KIND cluster |
+| | `make build-and-load-image` | Quick rebuild and deploy |
+| | `make destroy-cluster` | Delete KIND cluster |
 
 ### Key Development Patterns
 
@@ -187,394 +130,17 @@ Always run `make generate` after:
 - **ALWAYS** use the `commit-author` agent for creating commit messages, reviewing commits, or generating PR descriptions
 - The agent ensures compliance with project commit conventions and formatting standards
 
-## Performance Collector Architecture
+## Performance Collectors
 
-### Collector Interface Design
-The performance monitoring system follows a dual-interface pattern:
+The Antimetal Agent includes a comprehensive performance monitoring system that collects system metrics from /proc and /sys filesystems. Collectors follow a dual-interface pattern (PointCollector for one-shot, ContinuousCollector for streaming) with standardized error handling and testing methodologies.
 
-```go
-// PointCollector - one-shot data collection
-type PointCollector interface {
-    Collect(ctx context.Context) (any, error)
-}
+**Key concepts:**
+- Constructor pattern with path validation and capabilities
+- Registry system for collector management  
+- Graceful degradation for optional data
+- Comprehensive testing with mock filesystems
 
-// ContinuousCollector - streaming data collection
-type ContinuousCollector interface {
-    Start(ctx context.Context) (<-chan any, error)
-    Stop() error
-}
-```
-
-### Collector Implementation Patterns
-
-#### Constructor Pattern
-All collectors must follow a consistent constructor pattern:
-```go
-func NewXCollector(logger logr.Logger, config performance.CollectionConfig) (*XCollector, error) {
-    // 1. Validate paths are absolute
-    if !filepath.IsAbs(config.HostProcPath) {
-        return nil, fmt.Errorf("HostProcPath must be an absolute path, got: %q", config.HostProcPath)
-    }
-    if !filepath.IsAbs(config.HostSysPath) {  // If collector uses sysfs
-        return nil, fmt.Errorf("HostSysPath must be an absolute path, got: %q", config.HostSysPath)
-    }
-    
-    // 2. Define capabilities
-    capabilities := performance.CollectorCapabilities{
-        SupportsOneShot:    true,
-        SupportsContinuous: false,
-        RequiresRoot:       false,
-        RequiresEBPF:       false,
-        MinKernelVersion:   "2.6.0",
-    }
-    
-    // 3. Return collector with pre-computed paths
-    return &XCollector{
-        BaseCollector: performance.NewBaseCollector(...),
-        specificPath: filepath.Join(config.HostProcPath, "specific/file"),
-    }, nil
-}
-```
-
-#### Compile-Time Interface Checks
-Every collector must include a compile-time interface check:
-```go
-// Compile-time interface check
-var _ performance.Collector = (*NetworkCollector)(nil)
-```
-
-#### Base Collector Pattern
-```go
-type BaseCollector struct {
-    metricType   MetricType
-    name         string
-    logger       logr.Logger
-    config       CollectionConfig
-    capabilities CollectorCapabilities
-}
-```
-
-#### Capabilities System
-```go
-type CollectorCapabilities struct {
-    SupportsOneShot    bool
-    SupportsContinuous bool
-    RequiresRoot       bool
-    RequiresEBPF       bool
-    MinKernelVersion   string
-}
-```
-
-#### Error Handling Strategy
-Collectors must clearly distinguish between critical and optional data and should never panic:
-
-- **Critical files**: Return error immediately if unavailable (e.g., /proc/loadavg for LoadCollector)
-- **Optional files**: Log warning and continue with graceful degradation (e.g., /sys/class/net/* metadata)
-- **Parse errors**: Handle based on field importance - critical fields cause errors, optional fields are logged
-- **Panic prevention**: Collectors must use proper error handling instead of panicking. All errors should be returned to the caller
-
-**Graceful Degradation**: When optional data is unavailable, collectors should:
-1. Log the issue at appropriate verbosity level (V(2) for debug info)
-2. Continue processing with available data
-3. Return partial results rather than failing entirely
-4. Document which fields may be missing in degraded mode
-
-Document the error handling strategy in method comments:
-```go
-// collectNetworkStats reads network statistics
-//
-// Error handling strategy:
-// - /proc/net/dev is critical - returns error if unavailable
-// - /sys/class/net/* files are optional - logs warnings but continues
-// - Malformed lines in /proc/net/dev are skipped with logging
-// - Never panics - all errors are returned to caller
-```
-
-#### Adding Collector to Registry
-In order to use a collector, it has to be added to the registry so that the manager knows about it.
-This is typically done in the init() function in the source file where the collector is implemented: 
-
-For PointCollectors, you need to transform them into ContinuousCollectors in order to add them to the registry.
-There are two wrappers to do that depending on use case:
-1. `ContinuousPointCollector`: wraps a PointCollector to call `Collect()` on an interval
-2. `OnceContinuousCollector`: wraps a PointCollector where it calls `Collect()` once and caches the result
-
-Use `PartialNewContinuousPointCollector` if the collector is collecting runtime statistics.
-
-```go
-func init() {
-	performance.Register(performance.MetricTypeXXX, performance.PartialNewContinuousPointCollector(
-		func(logger logr.Logger, config performance.CollectionConfig) (performance.PointCollector, error) {
-			return NewXCollector(logger, config)
-		},
-	))
-}
-```
-
-Use `PartialOnceContinuousCollector` when collecting hardware information or if the collector needs to run just once.
-
-```go
-func init() {
-	performance.Register(performance.MetricTypeXXX, performance.PartialNewOnceContinuousCollector(
-		func(logger logr.Logger, config performance.CollectionConfig) (performance.PointCollector, error) {
-			return NewXCollector(logger, config)
-		},
-	))
-}
-```
-
-### Performance Collector Testing Methodology
-
-#### Standardized Testing Approach
-Performance collectors follow a comprehensive testing pattern:
-
-1. **Test Structure**
-   - Table-driven tests for multiple scenarios
-   - Temporary file system isolation using `t.TempDir()`
-   - Mock /proc and /sys filesystem files
-   - Reusable helper functions for common operations
-
-2. **Core Testing Areas**
-   - **Constructor validation**: Path handling, configuration validation
-   - **Data parsing**: Valid scenarios, malformed input, edge cases
-   - **Error handling**: Missing files, invalid data, graceful degradation
-   - **File system operations**: Different proc paths, access errors
-   - **Whitespace tolerance**: Leading/trailing whitespace handling
-
-3. **Key Testing Patterns**
-   ```go
-   // Helper function pattern - consistent naming and structure
-   func createTestXCollector(t *testing.T, procContent string, sysFiles map[string]string) (*XCollector, string, string) {
-       tmpDir := t.TempDir()
-       procPath := filepath.Join(tmpDir, "proc")
-       sysPath := filepath.Join(tmpDir, "sys")
-       
-       // Setup mock files...
-       
-       config := performance.CollectionConfig{
-           HostProcPath: procPath,
-           HostSysPath:  sysPath,
-       }
-       collector, err := collectors.NewXCollector(logr.Discard(), config)
-       require.NoError(t, err)
-       
-       return collector, procPath, sysPath
-   }
-   
-   // Collection and validation helper
-   func collectAndValidateX(t *testing.T, collector *XCollector, expectError bool, validate func(t *testing.T, result TypedResult)) {
-       result, err := collector.Collect(context.Background())
-       
-       if expectError {
-           assert.Error(t, err)
-           return
-       }
-       
-       require.NoError(t, err)
-       typedResult, ok := result.(TypedResult)
-       require.True(t, ok, "result should be TypedResult")
-       
-       if validate != nil {
-           validate(t, typedResult)
-       }
-   }
-   
-   // Test data as constants
-   const validProcFile = `actual /proc file content here`
-   const malformedProcFile = `malformed content`
-   ```
-
-4. **Testing Requirements**
-   - **Constructor tests**: Separate test function for constructor validation
-   - **Path validation**: Test absolute vs relative paths, empty paths
-   - **File interdependency**: Test behavior when related files unavailable
-   - **Return type validation**: Explicit type assertions with proper error messages
-   - **Graceful degradation**: Document and test critical vs optional files
-   - **Boundary conditions**: Test zero values, maximum values (e.g., max uint64)
-   - **Malformed input**: Test partial data, missing fields, corrupt formats
-   - **Special cases**: Test virtual interfaces, disabled devices, etc.
-
-5. **Testing Principles**
-   - Don't test static properties (Name, RequiresRoot)
-   - Don't test compile-time interface checks (e.g., `var _ performance.Collector = (*XCollector)(nil)`)
-   - Focus on parsing logic and error handling
-   - Use realistic test data from actual /proc files
-   - Test collectors in `collectors_test` package (external testing)
-   - Name test functions consistently: `TestXCollector_Constructor`, `TestXCollector_Collect`
-   - Use descriptive test names that explain the scenario
-   - Group related test scenarios in the same test function
-
-6. **Documentation Standards**
-   - **Type-level documentation**: Explain purpose, data sources, references
-   - **Method documentation**: Include format examples and error handling strategy
-   - **Inline documentation**: Explain complex parsing logic or non-obvious decisions
-   - **Reference links**: Include kernel documentation links where applicable
-
-### Collector Development Workflow
-
-When adding a new performance collector:
-
-1. **Define the data structure** in `pkg/performance/types.go`
-2. **Create the collector** in `pkg/performance/collectors/your_collector.go`
-   - Include compile-time interface check
-   - Follow constructor pattern with path validation
-   - Document error handling strategy
-3. **Create comprehensive tests** in `pkg/performance/collectors/your_collector_test.go`
-   - Use `collectors_test` package
-   - Include constructor tests
-   - Add helper functions following naming patterns
-   - Test edge cases and error scenarios
-4. **Update collector registry**
-   - Write an init() function in `your_collector.go` to add the collector to the registry
-5. **Run validation**:
-   ```bash
-   make test                    # Run tests
-   make fmt                     # Run go fmt
-   make lint                    # Check code style
-   make gen-license-headers     # Ensure license headers
-   ```
-
-### Common Collector Patterns
-
-#### Reading Single Value Files
-```go
-data, err := os.ReadFile(c.somePath)
-if err != nil {
-    return nil, fmt.Errorf("failed to read %s: %w", c.somePath, err)
-}
-value := strings.TrimSpace(string(data))
-```
-
-#### Parsing Multi-Line Files
-```go
-scanner := bufio.NewScanner(file)
-for scanner.Scan() {
-    line := scanner.Text()
-    // Parse line
-}
-if err := scanner.Err(); err != nil {
-    return nil, fmt.Errorf("error reading %s: %w", c.somePath, err)
-}
-```
-
-#### Handling Optional Metadata
-```go
-// Try to read optional file, but don't fail if missing
-if data, err := os.ReadFile(optionalPath); err == nil {
-    // Process optional data
-} else {
-    c.Logger().V(2).Info("Optional file not available", "path", optionalPath, "error", err)
-}
-```
-
-### Continuous Collector Pattern
-
-When implementing collectors that support continuous collection (ContinuousCollector interface), follow this standardized pattern for proper lifecycle management:
-
-#### Key Components
-1. **Two control mechanisms**:
-   - **Context** (passed to Start): External lifecycle management from parent/app
-   - **Stopped channel** (internal): Direct control via Stop() method
-
-2. **Channel management**:
-   - Data channel (`ch`): Created in Start(), closed in Stop()
-   - Stopped channel (`stopped`): Created in Start(), closed in Stop()
-
-#### Implementation Pattern
-```go
-type MyCollector struct {
-    performance.BaseContinuousCollector
-    // ... collector-specific fields ...
-    
-    // Channel management
-    ch      chan any
-    stopped chan struct{}
-}
-
-func (c *MyCollector) Start(ctx context.Context) (<-chan any, error) {
-    if c.Status() != performance.CollectorStatusDisabled {
-        return nil, fmt.Errorf("collector already running")
-    }
-    
-    c.SetStatus(performance.CollectorStatusActive)
-    
-    // Initialize state if needed
-    // ...
-    
-    c.ch = make(chan any)
-    c.stopped = make(chan struct{})
-    go c.runCollection(ctx)
-    return c.ch, nil
-}
-
-func (c *MyCollector) Stop() error {
-    if c.Status() == performance.CollectorStatusDisabled {
-        return nil
-    }
-    
-    if c.stopped != nil {
-        close(c.stopped)
-        c.stopped = nil
-    }
-    
-    // Give goroutine time to exit cleanly
-    time.Sleep(10 * time.Millisecond)
-    
-    if c.ch != nil {
-        close(c.ch)
-        c.ch = nil
-    }
-    
-    c.SetStatus(performance.CollectorStatusDisabled)
-    return nil
-}
-
-func (c *MyCollector) runCollection(ctx context.Context) {
-    ticker := time.NewTicker(c.interval)
-    defer ticker.Stop()
-    
-    for {
-        select {
-        case <-ctx.Done():
-            // External shutdown (app closing)
-            return
-        case <-c.stopped:
-            // Stop() was called
-            return
-        case <-ticker.C:
-            data, err := c.collect(ctx)
-            if err != nil {
-                c.Logger().Error(err, "Failed to collect")
-                c.SetError(err)
-                continue
-            }
-            
-            select {
-            case c.ch <- data:
-            case <-ctx.Done():
-                return
-            case <-c.stopped:
-                return
-            }
-        }
-    }
-}
-```
-
-#### Why This Pattern?
-1. **Dual control**: Responds to both external shutdown (context) and explicit Stop()
-2. **Clean shutdown**: Stop() actually stops the goroutine and cleans up resources
-3. **No orphaned goroutines**: Either mechanism ensures proper cleanup
-4. **Consistent behavior**: All continuous collectors work the same way
-5. **Prevents resource leaks**: Channels are properly closed
-
-#### Usage Scenarios
-- **App shutdown**: Context cancellation stops all collectors automatically
-- **Individual control**: Stop() specific collectors while others continue
-- **Reconfiguration**: Stop(), reconfigure, Start() again
-- **Debugging**: Temporarily disable specific collectors
-
-This pattern ensures collectors integrate well with Kubernetes controllers and other lifecycle management systems while providing fine-grained control when needed.
+For detailed performance collector development including implementation patterns, testing methodology, continuous collectors, and examples, see **[docs/performance-collectors.md](docs/performance-collectors.md)**.
 
 ## Resource Store Architecture
 
@@ -726,150 +292,11 @@ kubectl describe deployment -n antimetal-system agent
 
 ## eBPF Development
 
-### CO-RE (Compile Once - Run Everywhere) Support
+The Antimetal Agent supports eBPF-based collectors for deep kernel observability using CO-RE (Compile Once - Run Everywhere) technology for portability across kernel versions 4.18+.
 
-The Antimetal Agent uses **CO-RE** technology for portable eBPF programs that work across different kernel versions without recompilation. This provides significant operational benefits:
-
-#### Key Benefits
-- **Single Binary Deployment**: Same eBPF program runs on kernels 4.18+
-- **Automatic Field Relocation**: Kernel structure changes handled automatically
-- **No Runtime Compilation**: Pre-compiled programs with BTF relocations
-- **Improved Reliability**: Reduced kernel compatibility issues
-
-#### Technical Implementation
-
-1. **BTF (BPF Type Format) Support**
-   - Native kernel BTF on kernels 5.2+ at `/sys/kernel/btf/vmlinux`
-   - Pre-generated vmlinux.h from BTF hub for portability
-   - BTF verification during build process
-
-2. **Compilation Flags**
-   ```makefile
-   CFLAGS := -g -O2 -Wall -target bpf -D__TARGET_ARCH_$(ARCH) \
-       -fdebug-types-section -fno-stack-protector
-   ```
-   - `-g`: Enable BTF generation
-   - `-fdebug-types-section`: Improve BTF quality
-   - `-fno-stack-protector`: Required for BPF
-
-3. **CO-RE Macros**
-   - Use `BPF_CORE_READ()` for field access
-   - Automatic offset calculation at load time
-   - Example: `BPF_CORE_READ(task, real_parent, tgid)`
-
-4. **Runtime Support**
-   - `pkg/ebpf/core` package for kernel feature detection
-   - Automatic BTF discovery and loading
-   - cilium/ebpf v0.19.0 handles relocations
-
-#### Kernel Compatibility Matrix
-
-| Kernel Version | BTF Support | CO-RE Support | Notes |
-|----------------|-------------|---------------|-------|
-| 5.2+           | Native      | Full          | Best performance, native BTF |
-| 4.18-5.1       | External    | Partial       | Requires BTF from btfhub |
-| <4.18          | None        | None          | Traditional compilation only |
-
-#### CO-RE Development Workflow
-
-1. **Write CO-RE Compatible Code**
-   ```c
-   #include "vmlinux.h"
-   #include <bpf/bpf_core_read.h>
-   
-   // Use CO-RE macros for kernel struct access
-   pid_t ppid = BPF_CORE_READ(task, real_parent, tgid);
-   ```
-
-2. **Build with CO-RE Support**
-   ```bash
-   make build-ebpf  # Automatically uses CO-RE flags
-   ```
-
-3. **Verify BTF Generation**
-   - Build process includes BTF verification step
-   - Check with: `bpftool btf dump file <program>.bpf.o`
-
-4. **Test Compatibility**
-   ```bash
-   ./ebpf/scripts/check_core_support.sh  # Check system CO-RE support
-   ```
-
-### Adding New eBPF Programs
-For new `.bpf.c` files:
-1. Create `ebpf/src/your_program.bpf.c`
-2. Include CO-RE headers:
-   ```c
-   #include "vmlinux.h"
-   #include <bpf/bpf_core_read.h>
-   ```
-3. Use CO-RE macros for kernel struct access
-4. Add to `BPF_PROGS` in `ebpf/Makefile`
-5. Run `make build-ebpf`
-
-For new struct definitions:
-1. Create `ebpf/include/your_collector_types.h` with C structs
-2. Run `make generate-ebpf-types` to generate Go types
-3. Generated files appear in `pkg/performance/collectors/`
-
-### eBPF Commands
+**Key commands:**
 - `make build-ebpf` - Build eBPF programs with CO-RE support
-- `make generate-ebpf-bindings` - Generate Go bindings from eBPF C code (runs go:generate in collectors)
-- `make generate-ebpf-types` - Generate Go types from eBPF header files
-- `make build-ebpf-builder` - Build/rebuild eBPF Docker image
-- `./ebpf/scripts/check_core_support.sh` - Check system CO-RE capabilities
+- `make generate-ebpf-bindings` - Generate Go bindings from eBPF C code
 
-### CO-RE Best Practices
+For detailed eBPF development guidance including CO-RE support, adding new programs, troubleshooting, and best practices, see **[docs/ebpf-development.md](docs/ebpf-development.md)**.
 
-1. **Always Use CO-RE Macros**
-   - Prefer `BPF_CORE_READ()` over direct field access
-   - Use `BPF_CORE_READ_STR()` for string fields
-   - Check field existence with `BPF_CORE_FIELD_EXISTS()`
-
-2. **Test Across Kernels**
-   - Test on minimum supported kernel (4.18)
-   - Verify on latest stable kernel
-   - Use KIND clusters with different kernel versions
-
-3. **Handle Missing Fields Gracefully**
-   - Not all kernel versions have all fields
-   - Use conditional compilation or runtime checks
-   - Provide fallback behavior
-
-4. **Monitor BTF Size**
-   - BTF adds ~100KB to each eBPF object
-   - Worth it for portability benefits
-   - Strip BTF for size-critical deployments if needed
-
-### Troubleshooting CO-RE
-
-1. **BTF Verification Failures**
-   - Ensure clang has `-g` flag
-   - Check clang version (10+ recommended)
-   - Verify vmlinux.h is accessible
-
-2. **Runtime Loading Errors**
-   - Check kernel has BTF: `ls /sys/kernel/btf/vmlinux`
-   - Verify CO-RE support: `./ebpf/scripts/check_core_support.sh`
-   - Check dmesg for BPF verifier errors
-
-3. **Field Access Errors**
-   - Ensure using CO-RE macros not direct access
-   - Verify field exists in target kernel version
-   - Check struct definitions in vmlinux.h
-
-## Future Extensibility
-
-### Planned Features
-- **eBPF collectors** for deep system monitoring
-- **GKE/AKS provider** implementations
-- **Additional performance metrics** (memory bandwidth, etc.)
-- **Persistent storage** options beyond in-memory
-
-### Extension Points
-- **Collector registry** for new metric types
-- **Provider interface** for additional cloud platforms
-- **gRPC interceptors** for custom processing
-- **Event filters** for selective data collection
-
-This comprehensive guide should enable effective development and maintenance of the Antimetal Agent codebase while maintaining consistency with established patterns and practices.
