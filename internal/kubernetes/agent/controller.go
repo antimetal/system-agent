@@ -209,7 +209,7 @@ func (c *controller) indexObjects(ctx context.Context) {
 	switch ev.typ {
 	case EventAdd:
 		c.logger.V(1).Info("adding object to index", "event", eventStr(ev.typ), "object", ev.obj)
-		err = c.indexer.Add(ctx, ev.obj)
+		err = c.indexer.Update(ctx, ev.obj)
 	case EventUpdate:
 		c.logger.V(1).Info("update object in index", "event", eventStr(ev.typ), "object", ev.obj)
 		err = c.indexer.Update(ctx, ev.obj)
