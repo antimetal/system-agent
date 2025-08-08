@@ -50,6 +50,9 @@ spec:
       #             values:
       #               - linux
       securityContext:
+        # 65532 is the same UID as the one set in the docker image
+        fsGroup: 65532
+        runAsUser: 65532
         runAsNonRoot: true
       containers:
       - name: agent
@@ -79,6 +82,8 @@ spec:
         - name: HOST_DEV
           value: /host/dev
         volumeMounts:
+        - name: data
+          mountPath: /var/lib/antimetal
         - name: proc
           mountPath: /host/proc
           readOnly: true
@@ -116,6 +121,8 @@ spec:
       terminationGracePeriodSeconds: 10
       automountServiceAccountToken: true
       volumes:
+      - name: data
+        emptyDir: {}
       - name: proc
         hostPath:
           path: /proc

@@ -183,6 +183,10 @@ Always run `make generate` after:
 - Table-driven tests for comprehensive coverage
 - Mock external dependencies (gRPC, AWS, K8s)
 
+#### Git Commits and PRs
+- **ALWAYS** use the `commit-author` agent for creating commit messages, reviewing commits, or generating PR descriptions
+- The agent ensures compliance with project commit conventions and formatting standards
+
 ## Performance Collector Architecture
 
 ### Collector Interface Design
