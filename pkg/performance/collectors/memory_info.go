@@ -20,7 +20,7 @@ import (
 )
 
 func init() {
-	performance.Register(performance.MetricTypeMemoryInfo, performance.PartialNewOnceContinuousCollector(
+	performance.TryRegister(performance.MetricTypeMemoryInfo, performance.PartialNewOnceContinuousCollector(
 		func(logger logr.Logger, config performance.CollectionConfig) (performance.PointCollector, error) {
 			return NewMemoryInfoCollector(logger, config)
 		},
@@ -110,11 +110,10 @@ func NewMemoryInfoCollector(logger logr.Logger, config performance.CollectionCon
 	}
 
 	capabilities := performance.CollectorCapabilities{
-		SupportsOneShot:    true,
-		SupportsContinuous: false,
-		RequiresRoot:       false,
-		RequiresEBPF:       false,
-		MinKernelVersion:   "2.6.0",
+		SupportsOneShot:      true,
+		SupportsContinuous:   false,
+		RequiredCapabilities: nil, // No special capabilities required
+		MinKernelVersion:     "2.6.0",
 	}
 
 	return &MemoryInfoCollector{

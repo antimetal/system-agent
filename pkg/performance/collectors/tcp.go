@@ -20,7 +20,7 @@ import (
 )
 
 func init() {
-	performance.Register(performance.MetricTypeTCP, performance.PartialNewContinuousPointCollector(
+	performance.TryRegister(performance.MetricTypeTCP, performance.PartialNewContinuousPointCollector(
 		func(logger logr.Logger, config performance.CollectionConfig) (performance.PointCollector, error) {
 			return NewTCPCollector(logger, config)
 		},
@@ -75,11 +75,10 @@ func NewTCPCollector(logger logr.Logger, config performance.CollectionConfig) (*
 	}
 
 	capabilities := performance.CollectorCapabilities{
-		SupportsOneShot:    true,
-		SupportsContinuous: false,
-		RequiresRoot:       false,
-		RequiresEBPF:       false,
-		MinKernelVersion:   "2.6.0", // /proc/net/snmp has been around for a long time
+		SupportsOneShot:      true,
+		SupportsContinuous:   false,
+		RequiredCapabilities: nil,     // No special capabilities required
+		MinKernelVersion:     "2.6.0", // /proc/net/snmp has been around for a long time
 	}
 
 	return &TCPCollector{

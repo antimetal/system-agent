@@ -41,7 +41,7 @@ func TestProcessCollector(t *testing.T) {
 	caps := collector.Capabilities()
 	assert.False(t, caps.SupportsOneShot)
 	assert.True(t, caps.SupportsContinuous)
-	assert.False(t, caps.RequiresRoot)
+	assert.Nil(t, caps.RequiredCapabilities) // No special capabilities required
 
 	// Test continuous collection
 	ctx, cancel := context.WithCancel(context.Background())

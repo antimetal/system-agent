@@ -20,7 +20,7 @@ import (
 )
 
 func init() {
-	performance.Register(performance.MetricTypeNUMAStats, performance.PartialNewContinuousPointCollector(
+	performance.TryRegister(performance.MetricTypeNUMAStats, performance.PartialNewContinuousPointCollector(
 		func(logger logr.Logger, config performance.CollectionConfig) (performance.PointCollector, error) {
 			return NewNUMAStatsCollector(logger, config)
 		},
@@ -66,11 +66,10 @@ func NewNUMAStatsCollector(logger logr.Logger, config performance.CollectionConf
 	}
 
 	capabilities := performance.CollectorCapabilities{
-		SupportsOneShot:    true,
-		SupportsContinuous: false,
-		RequiresRoot:       false,
-		RequiresEBPF:       false,
-		MinKernelVersion:   "2.6.7", // NUMA support in /sys
+		SupportsOneShot:      true,
+		SupportsContinuous:   false,
+		RequiredCapabilities: nil,     // No special capabilities required
+		MinKernelVersion:     "2.6.7", // NUMA support in /sys
 	}
 
 	return &NUMAStatsCollector{
