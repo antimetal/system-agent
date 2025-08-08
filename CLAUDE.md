@@ -130,13 +130,17 @@ Always run `make generate` after:
 - **ALWAYS** use the `commit-author` agent for creating commit messages, reviewing commits, or generating PR descriptions
 - The agent ensures compliance with project commit conventions and formatting standards
 
+#### Linux Systems and eBPF Development
+- **ALWAYS** use the `linux-systems-expert` agent when developing or debugging Linux system collectors, eBPF programs, or /proc or /sys parsers
+- The agent has deep expertise in kernel interfaces, CO-RE/BTF, performance monitoring, and cross-kernel compatibility
+
 ## Performance Collectors
 
 The Antimetal Agent includes a comprehensive performance monitoring system that collects system metrics from /proc and /sys filesystems. Collectors follow a dual-interface pattern (PointCollector for one-shot, ContinuousCollector for streaming) with standardized error handling and testing methodologies.
 
 **Key concepts:**
 - Constructor pattern with path validation and capabilities
-- Registry system for collector management  
+- Registry system for collector management
 - Graceful degradation for optional data
 - Comprehensive testing with mock filesystems
 
@@ -299,4 +303,3 @@ The Antimetal Agent supports eBPF-based collectors for deep kernel observability
 - `make generate-ebpf-bindings` - Generate Go bindings from eBPF C code
 
 For detailed eBPF development guidance including CO-RE support, adding new programs, troubleshooting, and best practices, see **[docs/ebpf-development.md](docs/ebpf-development.md)**.
-
