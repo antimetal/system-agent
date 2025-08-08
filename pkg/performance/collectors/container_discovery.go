@@ -19,6 +19,7 @@ const (
 	// KubernetesContainerIDLength is the expected length of a Kubernetes container ID
 	KubernetesContainerIDLength = 64
 )
+
 // ContainerPath represents a discovered container with its cgroup location
 type ContainerPath struct {
 	ID         string
@@ -27,6 +28,38 @@ type ContainerPath struct {
 }
 
 // ContainerDiscovery provides methods to discover containers in cgroup hierarchies
+//
+// Container ID extraction patterns by runtime:
+//
+//	Docker:
+//	  Path: /docker/<container_id>
+//	  Example: /docker/abc123def456789...
+//	  ID: First 12+ hex characters
+//
+//	Containerd:
+//	  Path: /containerd/<container_id>
+//	  Example: /containerd/0123456789abcdef...
+//	  ID: Full 64-character hex string
+//
+//	CRI-O:
+//	  Path: /crio-<container_id>.scope
+//	  Example: /crio-abc123def456789.scope
+//	  ID: Characters between "crio-" and ".scope"
+//
+//	Systemd (Docker):
+//	  Path: /docker-<container_id>.scope
+//	  Example: /system.slice/docker-abc123def456789.scope
+//	  ID: Characters between "docker-" and ".scope"
+//
+//	Kubernetes (via containerd/CRI-O):
+//	  Path: /kubepods.slice/.../cri-containerd-<container_id>.scope
+//	  Example: /kubepods.slice/kubepods-pod123.slice/cri-containerd-0123456789abcdef.scope
+//	  ID: 64-character hex string after last hyphen
+//
+// Performance note: Scanning large cgroup hierarchies (100+ containers) may impact
+// collection performance. The discovery process walks the filesystem tree which can
+// be expensive on systems with many containers. Consider caching discovered paths
+// if collection frequency is high.
 type ContainerDiscovery struct {
 	cgroupPath string
 }

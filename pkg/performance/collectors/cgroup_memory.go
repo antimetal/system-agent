@@ -37,6 +37,27 @@ var _ performance.PointCollector = (*CgroupMemoryCollector)(nil)
 // memory pressure situations.
 //
 // Supports both cgroup v1 and v2 hierarchies.
+//
+// Example output format:
+//
+//	[]CgroupMemoryStats{
+//	    {
+//	        ContainerID:   "abc123def456",                      // First 12+ chars of container ID
+//	        CgroupPath:    "/sys/fs/cgroup/memory/docker/abc123def456",
+//	        UsageBytes:    1610612736,                          // Current memory usage in bytes
+//	        LimitBytes:    2147483648,                          // Memory limit (math.MaxUint64 = unlimited)
+//	        MaxUsageBytes: 1879048192,                          // Peak memory usage (v1 only)
+//	        RSS:           1073741824,                          // Resident set size
+//	        Cache:         536870912,                           // Page cache memory
+//	        MappedFile:    134217728,                           // Memory-mapped files
+//	        Swap:          0,                                   // Swap usage
+//	        FailCount:     5,                                   // Number of times limit was hit
+//	        OOMKillCount:  0,                                   // Number of OOM kills
+//	        UnderOOM:      false,                               // Currently under OOM condition
+//	        UsagePercent:  75.0,                                // Usage as percentage of limit
+//	        CachePercent:  33.3,                                // Cache as percentage of usage
+//	    },
+//	}
 type CgroupMemoryCollector struct {
 	performance.BaseCollector
 	cgroupPath string

@@ -35,6 +35,23 @@ var _ performance.PointCollector = (*CgroupCPUCollector)(nil)
 // controllers to monitor container resource consumption and contention.
 //
 // Supports both cgroup v1 and v2 hierarchies.
+//
+// Example output format:
+//
+//	[]CgroupCPUStats{
+//	    {
+//	        ContainerID:     "abc123def456",                    // First 12+ chars of container ID
+//	        CgroupPath:      "/sys/fs/cgroup/cpu/docker/abc123def456",
+//	        UsageNanos:      123456789000,                      // Total CPU time in nanoseconds
+//	        NrPeriods:       1000,                              // Number of enforcement periods
+//	        NrThrottled:     50,                                // Periods when throttled
+//	        ThrottledTime:   5000000000,                        // Time throttled (nanoseconds)
+//	        CpuShares:       1024,                              // CPU shares (relative weight)
+//	        CpuQuotaUs:      50000,                             // CPU quota in microseconds (-1 = unlimited)
+//	        CpuPeriodUs:     100000,                            // CPU period in microseconds
+//	        ThrottlePercent: 5.0,                               // Percentage of periods throttled
+//	    },
+//	}
 type CgroupCPUCollector struct {
 	performance.BaseCollector
 	cgroupPath string
@@ -286,5 +303,3 @@ func (c *CgroupCPUCollector) parseCgroupV2CPUStat(data string, stats *performanc
 		}
 	}
 }
-
-// Helper functions
