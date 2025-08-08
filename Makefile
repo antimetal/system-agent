@@ -1,7 +1,7 @@
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
-ROOT = $(shell git rev-parse --show-toplevel)
+ROOT = $(shell git rev-parse --show-toplevel 2>/dev/null || pwd)
 ## Location to install dependencies to
 LOCALBIN ?= $(ROOT)/bin
 ## Location to store build & release artifacts

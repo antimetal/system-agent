@@ -86,6 +86,10 @@ mount | grep bpf
 # Change to host directory
 cd /host
 
+# Fix git dubious ownership issue
+echo -e "\n=== Configuring Git ==="
+git config --global --add safe.directory /host
+
 # Copy eBPF programs to standard location
 echo -e "\n=== Setting up eBPF Programs ==="
 if [ -d /host/artifacts/ebpf ]; then
