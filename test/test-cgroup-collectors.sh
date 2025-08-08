@@ -16,6 +16,10 @@ NAMESPACE="antimetal-system"
 TEST_NAMESPACE="default"
 WORKLOAD_FILE="test/cgroup-test-workloads.yaml"
 
+# Use local binaries if not in PATH
+KIND="${KIND:-./bin/kind}"
+KUBECTL="${KUBECTL:-kubectl}"
+
 # Helper functions
 info() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -45,21 +49,21 @@ check_prerequisites() {
     header "Checking Prerequisites"
     
     # Check if KIND cluster exists
-    if ! kind get clusters | grep -q "^${CLUSTER_NAME}$"; then
+    if ! ${KIND} get clusters | grep -q "^${CLUSTER_NAME}$"; then
         error "KIND cluster '${CLUSTER_NAME}' not found. Run 'make cluster' first."
     fi
     success "KIND cluster '${CLUSTER_NAME}' exists"
     
-    # Check if kubectl context is set correctly
-    if ! kubectl config current-context | grep -q "kind-${CLUSTER_NAME}"; then
-        warning "Setting kubectl context to kind-${CLUSTER_NAME}"
-        kubectl config use-context "kind-${CLUSTER_NAME}"
+    # Check if ${KUBECTL} context is set correctly
+    if ! ${KUBECTL} config current-context | grep -q "kind-${CLUSTER_NAME}"; then
+        warning "Setting ${KUBECTL} context to kind-${CLUSTER_NAME}"
+        ${KUBECTL} config use-context "kind-${CLUSTER_NAME}"
     fi
-    success "kubectl context set to kind-${CLUSTER_NAME}"
+    success "${KUBECTL} context set to kind-${CLUSTER_NAME}"
     
     # Check if agent is deployed
-    if ! kubectl get deployment -n ${NAMESPACE} agent &>/dev/null; then
-        error "Agent not deployed. Run 'make deploy' first."
+    if ! ${KUBECTL} get deployment -n ${NAMESPACE} agent &>/dev/null; then
+        warning "Agent not deployed. Will deploy it now."
     fi
     success "Agent deployment found"
 }
@@ -81,7 +85,7 @@ deploy_agent() {
     make deploy
     
     info "Waiting for agent to be ready..."
-    kubectl rollout status deployment/agent -n ${NAMESPACE} --timeout=60s
+    ${KUBECTL} rollout status deployment/agent -n ${NAMESPACE} --timeout=60s
     
     success "Agent deployed successfully"
 }
@@ -95,13 +99,13 @@ deploy_workloads() {
     fi
     
     info "Applying test workloads..."
-    kubectl apply -f "${WORKLOAD_FILE}"
+    ${KUBECTL} apply -f "${WORKLOAD_FILE}"
     
     info "Waiting for pods to start..."
     sleep 10
     
     # Check pod status
-    kubectl get pods -l 'test' -o wide
+    ${KUBECTL} get pods -l 'test' -o wide
     
     success "Test workloads deployed"
 }
@@ -115,39 +119,39 @@ monitor_collectors() {
     
     # Check for cgroup version detection
     info "Cgroup version detection:"
-    kubectl logs -n ${NAMESPACE} deployment/agent --tail=1000 | grep -i "cgroup version" || warning "No cgroup version detection found"
+    ${KUBECTL} logs -n ${NAMESPACE} deployment/agent --tail=1000 | grep -i "cgroup version" || warning "No cgroup version detection found"
     
     echo ""
     info "Container discovery:"
-    kubectl logs -n ${NAMESPACE} deployment/agent --tail=1000 | grep -i "discovered.*container\|container.*discovered" || warning "No container discovery messages found"
+    ${KUBECTL} logs -n ${NAMESPACE} deployment/agent --tail=1000 | grep -i "discovered.*container\|container.*discovered" || warning "No container discovery messages found"
     
     echo ""
     info "CPU throttling detection:"
-    kubectl logs -n ${NAMESPACE} deployment/agent --tail=1000 | grep -i "throttl" || warning "No throttling messages found yet"
+    ${KUBECTL} logs -n ${NAMESPACE} deployment/agent --tail=1000 | grep -i "throttl" || warning "No throttling messages found yet"
     
     echo ""
     info "Memory statistics:"
-    kubectl logs -n ${NAMESPACE} deployment/agent --tail=1000 | grep -i "memory.*stats\|cgroup.*memory" || warning "No memory statistics found yet"
+    ${KUBECTL} logs -n ${NAMESPACE} deployment/agent --tail=1000 | grep -i "memory.*stats\|cgroup.*memory" || warning "No memory statistics found yet"
 }
 
 # Verify cgroup mounts in agent pod
 verify_mounts() {
     header "Verifying Cgroup Mounts in Agent Pod"
     
-    POD=$(kubectl get pods -n ${NAMESPACE} -l app=agent -o jsonpath='{.items[0].metadata.name}')
+    POD=$(${KUBECTL} get pods -n ${NAMESPACE} -l app=agent -o jsonpath='{.items[0].metadata.name}')
     
     info "Agent pod: ${POD}"
     
     info "Checking /host/cgroup mount..."
-    kubectl exec -n ${NAMESPACE} ${POD} -- ls -la /host/cgroup/ | head -10
+    ${KUBECTL} exec -n ${NAMESPACE} ${POD} -- ls -la /host/cgroup/ | head -10
     
     info "Checking cgroup version..."
-    if kubectl exec -n ${NAMESPACE} ${POD} -- test -f /host/cgroup/cgroup.controllers; then
+    if ${KUBECTL} exec -n ${NAMESPACE} ${POD} -- test -f /host/cgroup/cgroup.controllers; then
         success "Cgroup v2 detected"
-        kubectl exec -n ${NAMESPACE} ${POD} -- cat /host/cgroup/cgroup.controllers
-    elif kubectl exec -n ${NAMESPACE} ${POD} -- test -d /host/cgroup/cpu; then
+        ${KUBECTL} exec -n ${NAMESPACE} ${POD} -- cat /host/cgroup/cgroup.controllers
+    elif ${KUBECTL} exec -n ${NAMESPACE} ${POD} -- test -d /host/cgroup/cpu; then
         success "Cgroup v1 detected"
-        kubectl exec -n ${NAMESPACE} ${POD} -- ls /host/cgroup/
+        ${KUBECTL} exec -n ${NAMESPACE} ${POD} -- ls /host/cgroup/
     else
         error "Unable to detect cgroup version"
     fi
@@ -157,23 +161,23 @@ verify_mounts() {
 check_container_metrics() {
     header "Checking Container Metrics"
     
-    POD=$(kubectl get pods -n ${NAMESPACE} -l app=agent -o jsonpath='{.items[0].metadata.name}')
+    POD=$(${KUBECTL} get pods -n ${NAMESPACE} -l app=agent -o jsonpath='{.items[0].metadata.name}')
     
     # Get container IDs for our test workloads
     info "Finding test container cgroups..."
     
     for pod in cpu-stress-test memory-stress-test bursty-workload; do
-        if kubectl get pod ${pod} &>/dev/null; then
+        if ${KUBECTL} get pod ${pod} &>/dev/null; then
             info "Checking ${pod}..."
             
             # Try to find the container in cgroups
-            CONTAINER_ID=$(kubectl get pod ${pod} -o jsonpath='{.status.containerStatuses[0].containerID}' | cut -d'/' -f3 | cut -c1-12)
+            CONTAINER_ID=$(${KUBECTL} get pod ${pod} -o jsonpath='{.status.containerStatuses[0].containerID}' | cut -d'/' -f3 | cut -c1-12)
             
             if [ -n "${CONTAINER_ID}" ]; then
                 info "  Container ID: ${CONTAINER_ID}"
                 
                 # Check if we can find it in cgroups (v1 or v2)
-                kubectl exec -n ${NAMESPACE} ${POD} -- sh -c "find /host/cgroup -name '*${CONTAINER_ID}*' -type d 2>/dev/null | head -5" || true
+                ${KUBECTL} exec -n ${NAMESPACE} ${POD} -- sh -c "find /host/cgroup -name '*${CONTAINER_ID}*' -type d 2>/dev/null | head -5" || true
             fi
         fi
     done
@@ -184,7 +188,7 @@ stress_test() {
     header "Running Stress Test (30 seconds)"
     
     info "Current pod status:"
-    kubectl get pods -l 'test' --no-headers
+    ${KUBECTL} get pods -l 'test' --no-headers
     
     info "Waiting for workloads to generate metrics..."
     for i in {1..6}; do
@@ -194,7 +198,7 @@ stress_test() {
     echo ""
     
     info "Checking agent logs for collector activity..."
-    kubectl logs -n ${NAMESPACE} deployment/agent --tail=100 | grep -i "cgroup\|throttl\|container" | tail -20 || true
+    ${KUBECTL} logs -n ${NAMESPACE} deployment/agent --tail=100 | grep -i "cgroup\|throttl\|container" | tail -20 || true
 }
 
 # Enable verbose logging
@@ -202,10 +206,10 @@ enable_verbose_logging() {
     header "Enabling Verbose Logging"
     
     info "Setting verbosity level to 2..."
-    kubectl set env deployment/agent -n ${NAMESPACE} VERBOSITY=2
+    ${KUBECTL} set env deployment/agent -n ${NAMESPACE} VERBOSITY=2
     
     info "Waiting for pod to restart..."
-    kubectl rollout status deployment/agent -n ${NAMESPACE} --timeout=60s
+    ${KUBECTL} rollout status deployment/agent -n ${NAMESPACE} --timeout=60s
     
     success "Verbose logging enabled"
 }
@@ -215,10 +219,10 @@ cleanup() {
     header "Cleaning Up Test Resources"
     
     info "Deleting test workloads..."
-    kubectl delete -f "${WORKLOAD_FILE}" --ignore-not-found=true
+    ${KUBECTL} delete -f "${WORKLOAD_FILE}" --ignore-not-found=true
     
     info "Resetting verbosity..."
-    kubectl set env deployment/agent -n ${NAMESPACE} VERBOSITY-
+    ${KUBECTL} set env deployment/agent -n ${NAMESPACE} VERBOSITY-
     
     success "Cleanup complete"
 }
