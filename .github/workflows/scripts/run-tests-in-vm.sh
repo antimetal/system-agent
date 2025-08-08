@@ -146,14 +146,14 @@ fi
 
 # Run unit tests
 echo -e "\n=== Running Unit Tests ==="
-if ! go test ./... -v 2>&1 | tee unit-test-results.txt; then
+if ! make test-unit 2>&1 | tee unit-test-results.txt; then
     echo "ERROR: Unit tests failed"
     exit 1
 fi
 
 # Run integration tests
 echo -e "\n=== Running Integration Tests (including eBPF verification) ==="
-if ! sudo -E PATH="$PATH" go test -tags integration -v ./pkg/ebpf/core -run TestEBPF 2>&1 | tee integration-test-results.txt; then
+if ! sudo -E PATH="$PATH" make test-integration 2>&1 | tee integration-test-results.txt; then
     echo "ERROR: Integration tests failed"
     exit 1
 fi

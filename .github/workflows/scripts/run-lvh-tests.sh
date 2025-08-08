@@ -154,7 +154,7 @@ VM_OUTPUT_FILE="/host/vm-output.log"
 
 # Run tests and capture output
 echo "Running integration tests and saving results..."
-if go test -tags integration -v ./pkg/ebpf/core -run TestEBPF 2>&1 | tee -a "$VM_OUTPUT_FILE" > "$TEST_RESULTS_FILE"; then
+if make test-integration 2>&1 | tee -a "$VM_OUTPUT_FILE" > "$TEST_RESULTS_FILE"; then
     TEST_STATUS="PASS"
     echo -e "\n✅ Integration tests PASSED"
 else
