@@ -108,6 +108,10 @@ fi
 
 cd /host
 
+# Fix git dubious ownership issue
+echo -e "\n=== Configuring Git ==="
+git config --global --add safe.directory /host
+
 # Generate code if needed
 if [ -f Makefile ] && grep -q "^generate:" Makefile; then
     echo -e "\n=== Generating Code ==="
