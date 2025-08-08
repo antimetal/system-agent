@@ -54,10 +54,10 @@ jobs:
         echo "=== Test Summary ===" >> unit-test-results.txt
         echo "Time: $(date)" >> unit-test-results.txt
         
-        # Show coverage summary
-        if [ -f coverage.out ]; then
+        # Show coverage summary (cover.out is the file created by make test-unit)
+        if [ -f cover.out ]; then
           echo "Coverage report generated successfully"
-          go tool cover -func=coverage.out | tail -5
+          go tool cover -func=cover.out | tail -5
         else
           echo "Warning: No coverage report generated"
         fi
@@ -74,9 +74,9 @@ jobs:
     - name: Generate coverage HTML
       if: always()
       run: |
-        if [ -f coverage.out ]; then
+        if [ -f cover.out ]; then
           echo "Generating HTML coverage report..."
-          go tool cover -html=coverage.out -o coverage.html
+          go tool cover -html=cover.out -o coverage.html
           echo "HTML coverage report generated"
         fi
     
@@ -86,7 +86,7 @@ jobs:
       with:
         name: coverage-report
         path: |
-          coverage.out
+          cover.out
           coverage.html
         retention-days: 7
         if-no-files-found: warn
