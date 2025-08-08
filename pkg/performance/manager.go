@@ -60,6 +60,9 @@ func NewManager(opts ManagerOptions) (*Manager, error) {
 	if os.Getenv("HOST_DEV") != "" {
 		config.HostDevPath = os.Getenv("HOST_DEV")
 	}
+	if os.Getenv("HOST_CGROUP") != "" {
+		config.HostCgroupPath = os.Getenv("HOST_CGROUP")
+	}
 
 	m := &Manager{
 		config:      config,
