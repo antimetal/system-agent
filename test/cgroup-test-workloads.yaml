@@ -1,0 +1,141 @@
+---
+# CPU Stress Test Pod - Will trigger CPU throttling
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cpu-stress-test
+  namespace: default
+  labels:
+    test: cgroup-cpu
+spec:
+  containers:
+  - name: stress
+    image: polinux/stress
+    command: ["stress"]
+    args: ["--cpu", "2", "--timeout", "600s"]
+    resources:
+      limits:
+        cpu: "500m"  # Will cause throttling with 2 CPU workers
+        memory: "128Mi"
+      requests:
+        cpu: "200m"
+        memory: "64Mi"
+---
+# Memory Stress Test Pod - Will use significant memory
+apiVersion: v1
+kind: Pod
+metadata:
+  name: memory-stress-test
+  namespace: default
+  labels:
+    test: cgroup-memory
+spec:
+  containers:
+  - name: stress
+    image: polinux/stress
+    command: ["stress"]
+    args: ["--vm", "1", "--vm-bytes", "450M", "--timeout", "600s"]
+    resources:
+      limits:
+        memory: "512Mi"  # Close to limit to trigger pressure
+        cpu: "200m"
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+---
+# Multi-container deployment for testing discovery
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: multi-container-app
+  namespace: default
+  labels:
+    test: cgroup-discovery
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: test-app
+  template:
+    metadata:
+      labels:
+        app: test-app
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        resources:
+          limits:
+            cpu: "100m"
+            memory: "128Mi"
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+        ports:
+        - containerPort: 80
+---
+# Bursty workload - alternates between idle and busy
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bursty-workload
+  namespace: default
+  labels:
+    test: cgroup-burst
+spec:
+  containers:
+  - name: bursty
+    image: busybox
+    command: ["/bin/sh"]
+    args: 
+    - -c
+    - |
+      while true; do
+        echo "Starting CPU burst..."
+        # Busy loop for 10 seconds
+        timeout 10 sh -c 'while true; do echo "working" > /dev/null; done'
+        echo "Sleeping for 20 seconds..."
+        sleep 20
+      done
+    resources:
+      limits:
+        cpu: "200m"
+        memory: "64Mi"
+      requests:
+        cpu: "100m"
+        memory: "32Mi"
+---
+# Memory leak simulation - gradually increases memory usage
+apiVersion: v1
+kind: Pod
+metadata:
+  name: memory-leak-test
+  namespace: default
+  labels:
+    test: cgroup-memory-leak
+spec:
+  containers:
+  - name: memory-leak
+    image: busybox
+    command: ["/bin/sh"]
+    args:
+    - -c
+    - |
+      echo "Simulating memory leak..."
+      # Allocate memory gradually
+      data=""
+      while true; do
+        # Add 1MB of data every 5 seconds
+        for i in $(seq 1 1024); do
+          data="${data}$(head -c 1024 /dev/zero | tr '\0' 'X')"
+        done
+        echo "Memory allocated: $(echo $data | wc -c) bytes"
+        sleep 5
+      done
+    resources:
+      limits:
+        memory: "256Mi"  # Will eventually hit this limit
+        cpu: "100m"
+      requests:
+        memory: "64Mi"
+        cpu: "50m"
