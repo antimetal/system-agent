@@ -250,9 +250,14 @@ func TestProcFileCompatibility(t *testing.T) {
 			if currentKernel.IsAtLeast(pf.minKernel.Major, pf.minKernel.Minor) {
 				// File should exist
 				if os.IsNotExist(err) {
-					t.Errorf("File %s should exist on kernel %d.%d.%d+ but was not found",
-						pf.path,
-						pf.minKernel.Major, pf.minKernel.Minor, pf.minKernel.Patch)
+					// Special case: PSI files might be disabled in kernel config
+					if kernel.IsPressureFile(pf.path) {
+						t.Logf("⚠ %s: Not found (PSI might be disabled in kernel config)", pf.path)
+					} else {
+						t.Errorf("File %s should exist on kernel %d.%d.%d+ but was not found",
+							pf.path,
+							pf.minKernel.Major, pf.minKernel.Minor, pf.minKernel.Patch)
+					}
 				} else if err != nil {
 					t.Errorf("Error accessing %s: %v", pf.path, err)
 				} else {

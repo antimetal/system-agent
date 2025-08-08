@@ -120,3 +120,9 @@ func (v *Version) Compare(other *Version) int {
 	}
 	return 0
 }
+
+// IsPressureFile checks if a file path is a pressure stall information file
+// These files may not exist even on supported kernels if PSI is disabled
+func IsPressureFile(path string) bool {
+	return strings.HasPrefix(path, "/proc/pressure/")
+}
