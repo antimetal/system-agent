@@ -36,7 +36,7 @@ func TestKernelCompatibility(t *testing.T) {
 		t.Skip("Kernel compatibility tests only run on Linux")
 	}
 
-	currentKernel, err := kernel.CurrentVersion()
+	currentKernel, err := kernel.GetCurrentVersion()
 	require.NoError(t, err, "Failed to get current kernel version")
 
 	t.Logf("Running on kernel version: %d.%d.%d", currentKernel.Major, currentKernel.Minor, currentKernel.Patch)
@@ -72,7 +72,7 @@ func TestKernelCompatibility(t *testing.T) {
 		t.Run(feature.Name, func(t *testing.T) {
 			err := feature.CheckFunc()
 
-			if currentKernel.IsAtLeast(feature.MinVersion.Major, feature.MinVersion.Minor, feature.MinVersion.Patch) {
+			if currentKernel.IsAtLeast(feature.MinVersion.Major, feature.MinVersion.Minor) {
 				// Feature should be available
 				if err != nil {
 					t.Errorf("Feature %s should be available on kernel %d.%d.%d (min: %d.%d.%d) but got error: %v",
@@ -105,7 +105,7 @@ func TestCollectorCompatibility(t *testing.T) {
 		t.Skip("Collector compatibility tests only run on Linux")
 	}
 
-	currentKernel, err := kernel.CurrentVersion()
+	currentKernel, err := kernel.GetCurrentVersion()
 	require.NoError(t, err, "Failed to get current kernel version")
 
 	config := performance.CollectionConfig{
@@ -170,7 +170,7 @@ func TestCollectorCompatibility(t *testing.T) {
 			}
 
 			// Check if kernel version is sufficient
-			if !currentKernel.IsAtLeast(tc.minKernel.Major, tc.minKernel.Minor, tc.minKernel.Patch) {
+			if !currentKernel.IsAtLeast(tc.minKernel.Major, tc.minKernel.Minor) {
 				t.Skipf("Skipping %s: requires kernel %d.%d.%d+, current is %d.%d.%d",
 					tc.name,
 					tc.minKernel.Major, tc.minKernel.Minor, tc.minKernel.Patch,
@@ -240,14 +240,14 @@ func TestProcFileCompatibility(t *testing.T) {
 		{"/proc/pressure/io", kernel.Version{Major: 4, Minor: 20, Patch: 0}, "I/O pressure stall information"},
 	}
 
-	currentKernel, err := kernel.CurrentVersion()
+	currentKernel, err := kernel.GetCurrentVersion()
 	require.NoError(t, err)
 
 	for _, pf := range procFiles {
 		t.Run(pf.path, func(t *testing.T) {
 			_, err := os.Stat(pf.path)
 
-			if currentKernel.IsAtLeast(pf.minKernel.Major, pf.minKernel.Minor, pf.minKernel.Patch) {
+			if currentKernel.IsAtLeast(pf.minKernel.Major, pf.minKernel.Minor) {
 				// File should exist
 				if os.IsNotExist(err) {
 					t.Errorf("File %s should exist on kernel %d.%d.%d+ but was not found",

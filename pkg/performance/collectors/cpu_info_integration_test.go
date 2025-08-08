@@ -35,7 +35,7 @@ func TestCPUInfoCollector_RealProcFS(t *testing.T) {
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err, "Should collect from real /proc/cpuinfo")
 
-	cpuInfo, ok := result.(*collectors.CPUInfo)
+	cpuInfo, ok := result.(*performance.CPUInfo)
 	require.True(t, ok, "Result should be *CPUInfo type")
 
 	// Verify we got actual CPU information
@@ -66,7 +66,7 @@ func TestCPUInfoCollector_Topology(t *testing.T) {
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	cpuInfo, ok := result.(*collectors.CPUInfo)
+	cpuInfo, ok := result.(*performance.CPUInfo)
 	require.True(t, ok)
 
 	// Track unique physical IDs and core IDs
@@ -121,7 +121,7 @@ func TestCPUInfoCollector_Virtualization(t *testing.T) {
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	cpuInfo, ok := result.(*collectors.CPUInfo)
+	cpuInfo, ok := result.(*performance.CPUInfo)
 	require.True(t, ok)
 
 	// Check for virtualization hints
@@ -197,7 +197,7 @@ func TestCPUInfoCollector_CPUFrequency(t *testing.T) {
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	cpuInfo, ok := result.(*collectors.CPUInfo)
+	cpuInfo, ok := result.(*performance.CPUInfo)
 	require.True(t, ok)
 
 	// Check CPU frequency information

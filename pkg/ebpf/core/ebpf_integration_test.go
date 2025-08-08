@@ -9,12 +9,10 @@
 package core_test
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
-	"time"
 
 	"github.com/antimetal/agent/pkg/ebpf/core"
 	"github.com/antimetal/agent/pkg/kernel"
