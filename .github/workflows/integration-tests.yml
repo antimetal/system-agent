@@ -41,7 +41,12 @@ jobs:
     - name: Install build dependencies
       run: |
         sudo apt-get update -qq
-        sudo apt-get install -y -qq clang llvm libelf-dev libbpf-dev
+        sudo apt-get install -y -qq clang llvm libelf-dev libbpf-dev linux-tools-common linux-tools-generic
+    
+    - name: Build eBPF programs
+      run: |
+        echo "Building eBPF programs for code generation..."
+        make build-ebpf
     
     - name: Run unit tests
       run: |
@@ -118,15 +123,15 @@ jobs:
     - name: Install build dependencies
       run: |
         sudo apt-get update -qq
-        sudo apt-get install -y -qq clang llvm libelf-dev libbpf-dev
-    
-    - name: Generate code
-      run: |
-        echo "Running code generation..."
-        make generate
+        sudo apt-get install -y -qq clang llvm libelf-dev libbpf-dev linux-tools-common linux-tools-generic
     
     - name: Build eBPF programs
       run: .github/workflows/scripts/build-ebpf.sh
+    
+    - name: Generate code
+      run: |
+        echo "Running code generation (including eBPF bindings)..."
+        make generate
     
     - name: Package artifacts
       run: .github/workflows/scripts/package-artifacts.sh
