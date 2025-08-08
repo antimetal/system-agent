@@ -21,7 +21,7 @@ import (
 )
 
 func TestStore_AddResource(t *testing.T) {
-	inv, err := New()
+	inv, err := New("")
 	if err != nil {
 		t.Fatalf("failed to create inventory: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestStore_AddResource(t *testing.T) {
 }
 
 func TestStore_UpdateResourceNewResource(t *testing.T) {
-	inv, err := New()
+	inv, err := New("")
 	if err != nil {
 		t.Fatalf("failed to create inventory: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestStore_UpdateResourceNewResource(t *testing.T) {
 }
 
 func TestStore_UpdateResource(t *testing.T) {
-	inv, err := New()
+	inv, err := New("")
 	if err != nil {
 		t.Fatalf("failed to create inventory: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestStore_GetRelationships(t *testing.T) {
 		expectedNumResult int
 	}
 
-	inv, err := New()
+	inv, err := New("")
 	if err != nil {
 		t.Fatalf("failed to create inventory: %v", err)
 	}
@@ -385,7 +385,7 @@ func TestStore_GetRelationships(t *testing.T) {
 }
 
 func TestStore_DeleteResource_CascadeDelete(t *testing.T) {
-	inv, err := New()
+	inv, err := New("")
 	if err != nil {
 		t.Fatalf("failed to create inventory: %v", err)
 	}
@@ -482,7 +482,7 @@ func TestStore_DeleteResource_CascadeDelete(t *testing.T) {
 }
 
 func TestStore_DeleteResource_NoRelationships(t *testing.T) {
-	inv, err := New()
+	inv, err := New("")
 	if err != nil {
 		t.Fatalf("failed to create inventory: %v", err)
 	}
@@ -510,7 +510,7 @@ func TestStore_DeleteResource_NoRelationships(t *testing.T) {
 }
 
 func TestStore_Subscribe(t *testing.T) {
-	s, err := New()
+	s, err := New("")
 	if err != nil {
 		t.Fatalf("failed to create inventory: %v", err)
 	}

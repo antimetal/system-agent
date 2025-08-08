@@ -70,8 +70,14 @@ type store struct {
 }
 
 // New creates a new Store.
-func New() (*store, error) {
-	db, err := badger.Open(badger.DefaultOptions("").WithInMemory(true))
+func New(dataDir string) (*store, error) {
+	db, err := badger.Open(
+		badger.DefaultOptions(dataDir).
+			WithInMemory(dataDir == "").
+			WithNumMemtables(3).
+			WithBlockCacheSize(128 << 20).
+			WithIndexCacheSize(64 << 20),
+	)
 	if err != nil {
 		return nil, err
 	}
