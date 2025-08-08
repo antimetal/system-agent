@@ -1,7 +1,7 @@
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
-ROOT = $(shell git rev-parse --show-toplevel)
+ROOT = $(shell git rev-parse --show-toplevel 2>/dev/null || pwd)
 ## Location to install dependencies to
 LOCALBIN ?= $(ROOT)/bin
 ## Location to store build & release artifacts
@@ -123,8 +123,15 @@ vet: generate ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: generate manifests ## Run tests.
+test: test-unit test-integration ## Run all tests (unit and integration).
+
+.PHONY: test-unit
+test-unit: generate manifests ## Run unit tests only.
 	go test ./... -v -coverprofile $(TESTCOVERAGE_OUT) -timeout 30s
+
+.PHONY: test-integration
+test-integration: generate manifests build-ebpf ## Run integration tests.
+	EBPF_BUILD_DIR=$(EBPF_BUILD_DIR) ANTIMETAL_BPF_PATH=$(EBPF_BUILD_DIR) go test -tags integration ./... -v -timeout 60s
 
 .PHONY: lint
 lint: golangci-lint generate ## Run golangci-lint linter & yamllint.
