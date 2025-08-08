@@ -51,7 +51,7 @@ func (i *indexer) LoadClusterInfo(ctx context.Context, major string, minor strin
 	}
 	i.clusterName = clusterName
 
-	return i.store.AddResource(&resourcev1.Resource{
+	return i.store.UpdateResource(&resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
 			Kind: kindResource,
 			Type: string(cluster.ProtoReflect().Descriptor().FullName()),
@@ -64,20 +64,6 @@ func (i *indexer) LoadClusterInfo(ctx context.Context, major string, minor strin
 		},
 		Spec: clusterAny,
 	})
-}
-
-func (i *indexer) Add(ctx context.Context, obj object) error {
-	rsrc, rels, err := i.generate(obj)
-	if err != nil {
-		return fmt.Errorf("failed to generate resource and relationships: %w", err)
-	}
-	if err := i.store.AddResource(rsrc); err != nil {
-		return fmt.Errorf("failed to add resource to inventory: %w", err)
-	}
-	if err := i.store.AddRelationships(rels...); err != nil {
-		return fmt.Errorf("failed to add relationships for resource to inventory: %w", err)
-	}
-	return nil
 }
 
 func (i *indexer) Update(ctx context.Context, obj object) error {

@@ -10,6 +10,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -57,6 +58,7 @@ var (
 	eksAutodiscover      bool
 	maxStreamAge         time.Duration
 	pprofAddr            string
+	dataDir              string
 )
 
 func init() {
@@ -104,6 +106,8 @@ func init() {
 		"Maximum age of the intake stream before it is reset")
 	flag.StringVar(&pprofAddr, "pprof-address", "0",
 		"The address the pprof server binds to. Set this to '0' to disable the pprof server")
+	flag.StringVar(&dataDir, "data-directory", "/var/lib/antimetal",
+		"The directory where the agent will place its persistent data files. Set to empty string for in-memory mode.")
 
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
@@ -173,7 +177,14 @@ func main() {
 	}
 
 	// Shared resources
-	rsrcStore, err := store.New()
+	var rsrcDataDir string
+	if dataDir != "" {
+		rsrcDataDir = filepath.Join(dataDir, "resource")
+		setupLog.V(1).Info("using disk storage for resource store", "path", rsrcDataDir)
+	} else {
+		setupLog.V(1).Info("using in-memory storage for resource store")
+	}
+	rsrcStore, err := store.New(rsrcDataDir)
 	if err != nil {
 		setupLog.Error(err, "unable to create resource inventory")
 		os.Exit(1)
