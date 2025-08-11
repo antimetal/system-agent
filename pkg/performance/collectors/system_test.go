@@ -4,6 +4,8 @@
 // LICENSE file or at:
 // https://polyformproject.org/wp-content/uploads/2020/06/PolyForm-Shield-1.0.0.txt
 
+//go:build !integration
+
 package collectors_test
 
 import (
@@ -88,9 +90,9 @@ ctxt
 
 	// Whitespace variations
 	extraWhitespaceSystemStatContent = `cpu  1234567 0 2345678 98765432 123456 78901 234567 0 0 0
-intr    123456789    1234    5678    
-ctxt    987654321    
-procs_blocked    2    
+intr    123456789    1234    5678
+ctxt    987654321
+procs_blocked    2
 `
 
 	tabSeparatedSystemStatContent = `cpu	1234567	0	2345678	98765432	123456	78901	234567	0	0	0

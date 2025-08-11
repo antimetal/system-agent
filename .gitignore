@@ -41,3 +41,4 @@ internal/ebpf/*/
 
 # Generated type definitions from eBPF headers
 pkg/performance/collectors/*_types.go
+test-reports/
