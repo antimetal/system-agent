@@ -177,7 +177,7 @@ jobs:
         host-mount: .
         install-dependencies: true
         cpu: 4
-        mem: "4G"
+        mem: "8G"
         cmd: |
           # Make script executable and run it from the mounted host directory
           cd /host
