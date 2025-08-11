@@ -135,11 +135,11 @@ test-integration: generate manifests build-ebpf ## Run integration tests.
 
 .PHONY: lint
 lint: golangci-lint generate ## Run golangci-lint linter & yamllint.
-	$(GOLANGCI_LINT) run
+	$(GOLANGCI_LINT) run --timeout 10m
 
 .PHONY: lint-fix
 lint-fix: golangci-lint generate ## Run golangci-lint linter and perform fixes.
-	$(GOLANGCI_LINT) run --fix
+	$(GOLANGCI_LINT) run --fix --timeout 10m
 
 ##@ eBPF
 
