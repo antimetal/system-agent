@@ -10,16 +10,6 @@ echo "=== Packaging Test Artifacts ==="
 rm -r artifacts || true
 mkdir -p artifacts
 
-# Copy test runner script (required)
-SCRIPT_PATH=".github/workflows/scripts/run-tests-in-vm.sh"
-if [ ! -f "$SCRIPT_PATH" ]; then
-    echo "ERROR: Required script not found: $SCRIPT_PATH"
-    exit 1
-fi
-
-echo "Copying run-tests-in-vm.sh to artifacts..."
-cp "$SCRIPT_PATH" artifacts/
-chmod +x artifacts/run-tests-in-vm.sh
 
 # Copy eBPF programs (required)
 # The main Makefile builds to ebpf/build/
@@ -59,11 +49,6 @@ echo "Successfully packaged $ebpf_count eBPF programs:"
 ls -la artifacts/ebpf/
 
 # Verify artifacts were created
-if [ ! -f "artifacts/run-tests-in-vm.sh" ]; then
-    echo "ERROR: Failed to package run-tests-in-vm.sh"
-    exit 1
-fi
-
 if [ ! -d "artifacts/ebpf" ] || [ -z "$(ls -A artifacts/ebpf)" ]; then
     echo "ERROR: Failed to package eBPF programs"
     exit 1
