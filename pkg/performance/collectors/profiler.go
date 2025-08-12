@@ -37,10 +37,14 @@ const (
 	// Default channel buffer size for profile output
 	DefaultProfileChannelSize = 50
 
-	PERF_COUNT_HW_CPU_CYCLES    = 0
-	PERF_COUNT_HW_INSTRUCTIONS  = 1
-	PERF_COUNT_HW_CACHE_MISSES  = 6
-	PERF_COUNT_HW_BRANCH_MISSES = 5
+	// Hardware events - match linux/perf_event.h PERF_COUNT_HW_* definitions
+	PERF_COUNT_HW_CPU_CYCLES        = 0
+	PERF_COUNT_HW_INSTRUCTIONS      = 1
+	PERF_COUNT_HW_CACHE_REFERENCES  = 2
+	PERF_COUNT_HW_CACHE_MISSES      = 3
+	PERF_COUNT_HW_BRANCH_INSTRUCTIONS = 4
+	PERF_COUNT_HW_BRANCH_MISSES     = 5
+	PERF_COUNT_HW_BUS_CYCLES        = 6
 
 	// Software events (work in virtualized environments)
 	PERF_COUNT_SW_CPU_CLOCK        = 0

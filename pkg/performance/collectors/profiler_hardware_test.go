@@ -58,7 +58,7 @@ func TestProfilerCollector_HardwareEvents_Integration(t *testing.T) {
 			profilerEvent: collectors.ProfilerEventCacheMisses,
 			samplePeriod:  100000, // 100K cache misses
 			eventType:     0, // PERF_TYPE_HARDWARE
-			eventConfig:   6, // PERF_COUNT_HW_CACHE_MISSES
+			eventConfig:   3, // PERF_COUNT_HW_CACHE_MISSES
 			eventName:     "cache-misses",
 		},
 	}
