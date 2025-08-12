@@ -33,7 +33,7 @@ Must be one of the following:
 - **test**: Adding new tests, missing tests or correcting existing tests
 - **ci**: Changes to our CI infrastructure
 - **build**: Changes to our build infrastructure
-- **chore**: Changes to auxiliary tools and libraries and other grunt tasks 
+- **chore**: Changes to auxiliary tools and libraries and other grunt tasks
 - **deps**: Changes to dependencies
 - **license**: Updates to source code licenses
 
@@ -45,7 +45,7 @@ The following is the list of supported scopes:
 
 #### **Kubernetes Agent**
 - **`k8s`** - Kubernetes controller, agent, indexer, handler changes
-- **`intake`** - gRPC intake worker, streaming, batching 
+- **`intake`** - gRPC intake worker, streaming, batching
 - **`resource`** - resource store
 - **`api`** - Protocol buffer definitions, gRPC service definitions
 
@@ -75,9 +75,14 @@ The footer should contain any information about **Breaking Changes** and is also
 **All commits must be signed-off** using `git commit --signoff` (or `-s` for short).
 This adds a `Signed-off-by` line to the commit message, indicating that you certify the commit according to the Developer Certificate of Origin.
 
-#### LLM Contributions
+#### AI Assistance Attribution
 
-If Claude Code or any other LLM contributed to the commit, then they **must** be included as a coauthor.
+**FORBIDDEN ATTRIBUTION PATTERNS:**
+- ❌ NEVER add markdown links like "[Claude Code](https://claude.ai/code)"
+- ❌ NEVER add marketing-style attribution
+
+**OPTIONAL AI Attribution (if desired):**
+- ✅ Co-Authored-By: tags that are consumable by github and others are ok
 
 ## Examples
 
@@ -89,7 +94,6 @@ Add support for monitoring CPU frequency scaling by reading
 
 Closes #123
 
-Co-Authored-By: Claude <noreply@anthropic.com>
 Signed-off-by: John Doe <john.doe@example.com>
 ```
 
@@ -147,11 +151,10 @@ Signed-off-by: John Doe <john.doe@example.com>
 For commits affecting multiple components:
 
 1. **Use the most significant component** as the scope if one component is primary
-2. **Use a broader scope** (e.g., `perf` for multiple collectors, `k8s` for multiple Kubernetes components)  
+2. **Use a broader scope** (e.g., `perf` for multiple collectors, `k8s` for multiple Kubernetes components)
 3. **Use no scope** for very broad architectural changes
 
 ## Reverting changes
 
 If the commit reverts a previous commit, it should begin with `revert:`, followed by the header of the reverted commit.
 In the body it should say: `This reverts commit <hash>.`, where the hash is the SHA of the commit being reverted.
-
