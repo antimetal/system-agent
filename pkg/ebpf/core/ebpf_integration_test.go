@@ -247,4 +247,3 @@ func TestEBPFCollectorPrograms(t *testing.T) {
 		})
 	}
 }
-
