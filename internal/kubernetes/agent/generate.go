@@ -182,7 +182,7 @@ func genPod(store resource.Store, clusterName string, obj object, owners ...obje
 				&resourcev1.Relationship{
 					Type: &resourcev1.TypeDescriptor{
 						Kind: kindRelationship,
-						Type: string(volumeMount.ProtoReflect().Descriptor().FullName()),
+						Type: string(attachedTo.ProtoReflect().Descriptor().FullName()),
 					},
 					Subject:   pvcRef,
 					Object:    objRef,
@@ -191,7 +191,7 @@ func genPod(store resource.Store, clusterName string, obj object, owners ...obje
 				&resourcev1.Relationship{
 					Type: &resourcev1.TypeDescriptor{
 						Kind: kindRelationship,
-						Type: string(attachedTo.ProtoReflect().Descriptor().FullName()),
+						Type: string(volumeMount.ProtoReflect().Descriptor().FullName()),
 					},
 					Subject:   objRef,
 					Object:    pvcRef,
