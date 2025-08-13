@@ -144,7 +144,11 @@ The Antimetal Agent includes a comprehensive performance monitoring system that 
 - Graceful degradation for optional data
 - Comprehensive testing with mock filesystems
 
-For detailed performance collector development including implementation patterns, testing methodology, continuous collectors, and examples, see **[docs/performance-collectors.md](docs/performance-collectors.md)**.
+### eBPF ProfilerCollector
+
+The ProfilerCollector provides CPU profiling using eBPF with unified configuration supporting both predefined and discovered perf events. Key features include event enumeration, cross-platform compatibility, and comprehensive validation.
+
+For detailed performance collector development including implementation patterns, testing methodology, continuous collectors, and examples, see **[docs/performance-collectors.md](docs/performance-collectors.md)**. For eBPF profiler usage and perf event enumeration, see **[docs/perf-event-enumeration.md](docs/perf-event-enumeration.md)**.
 
 ## Resource Store Architecture
 

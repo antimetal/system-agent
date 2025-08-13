@@ -577,8 +577,8 @@ type ProfileStats struct {
 	EventConfig  uint64 // Event-specific config (PERF_COUNT_HW_*, PERF_COUNT_SW_*, etc.)
 	SamplePeriod uint64 // Sample every N events
 	// Collection statistics
-	SampleCount   uint64 // Total number of samples collected
-	LostSamples   uint64 // Samples lost due to ring buffer overflow
+	SampleCount    uint64 // Total number of samples collected
+	LostSamples    uint64 // Samples lost due to ring buffer overflow
 	DroppedSamples uint64 // Samples dropped due to full output channel
 	// Stack traces
 	Stacks []ProfileStack

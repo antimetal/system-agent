@@ -33,18 +33,18 @@ const (
 	PERF_TYPE_TRACEPOINT = 2
 	PERF_TYPE_HW_CACHE   = 3
 	PERF_TYPE_RAW        = 4
-	
+
 	// Default channel buffer size for profile output
 	DefaultProfileChannelSize = 50
 
 	// Hardware events - match linux/perf_event.h PERF_COUNT_HW_* definitions
-	PERF_COUNT_HW_CPU_CYCLES        = 0
-	PERF_COUNT_HW_INSTRUCTIONS      = 1
-	PERF_COUNT_HW_CACHE_REFERENCES  = 2
-	PERF_COUNT_HW_CACHE_MISSES      = 3
+	PERF_COUNT_HW_CPU_CYCLES          = 0
+	PERF_COUNT_HW_INSTRUCTIONS        = 1
+	PERF_COUNT_HW_CACHE_REFERENCES    = 2
+	PERF_COUNT_HW_CACHE_MISSES        = 3
 	PERF_COUNT_HW_BRANCH_INSTRUCTIONS = 4
-	PERF_COUNT_HW_BRANCH_MISSES     = 5
-	PERF_COUNT_HW_BUS_CYCLES        = 6
+	PERF_COUNT_HW_BRANCH_MISSES       = 5
+	PERF_COUNT_HW_BUS_CYCLES          = 6
 
 	// Software events (work in virtualized environments)
 	PERF_COUNT_SW_CPU_CLOCK        = 0
@@ -84,9 +84,11 @@ func (t ProfilerEventType) String() string {
 
 // ProfilerConfig specifies how the profiler should be configured
 type ProfilerConfig struct {
-	EventType    ProfilerEventType // Type of perf event to profile
-	SamplePeriod uint64            // Sample every N events (optional, uses default if 0)
-	Interval     time.Duration     // Collection interval (optional, uses CollectionConfig.Interval if 0)
+	// Event configuration:
+	Event PerfEventConfig // Perf event to profile (required)
+
+	// Optional configuration:
+	Interval time.Duration // Profile collection interval (optional, uses CollectionConfig.Interval if 0)
 }
 
 // ProfilerSetup interface for configuring profiler before starting
@@ -99,48 +101,8 @@ type PerfEventConfig struct {
 	Name         string // Human-readable name
 	Type         uint32 // PERF_TYPE_*
 	Config       uint64 // Event-specific config
-	SamplePeriod uint64 // Sample every N events/nanoseconds
+	SamplePeriod uint64 // Sample every N events (or nanoseconds) (required, must be > 0)
 }
-
-// Predefined perf event configurations
-var (
-	// Hardware events (require PMU access)
-	HardwareCPUCycles = PerfEventConfig{
-		Name:         "cpu-cycles",
-		Type:         PERF_TYPE_HARDWARE,
-		Config:       PERF_COUNT_HW_CPU_CYCLES,
-		SamplePeriod: 1000000, // 1M cycles
-	}
-
-	HardwareCacheMisses = PerfEventConfig{
-		Name:         "cache-misses",
-		Type:         PERF_TYPE_HARDWARE,
-		Config:       PERF_COUNT_HW_CACHE_MISSES,
-		SamplePeriod: 10000, // 10K misses
-	}
-
-	// Software events (work in VMs, no PMU required)
-	SoftwareCPUClock = PerfEventConfig{
-		Name:         "cpu-clock",
-		Type:         PERF_TYPE_SOFTWARE,
-		Config:       PERF_COUNT_SW_CPU_CLOCK,
-		SamplePeriod: 10000000, // 10ms in nanoseconds
-	}
-
-	SoftwareTaskClock = PerfEventConfig{
-		Name:         "task-clock",
-		Type:         PERF_TYPE_SOFTWARE,
-		Config:       PERF_COUNT_SW_TASK_CLOCK,
-		SamplePeriod: 10000000, // 10ms in nanoseconds
-	}
-
-	SoftwarePageFaults = PerfEventConfig{
-		Name:         "page-faults",
-		Type:         PERF_TYPE_SOFTWARE,
-		Config:       PERF_COUNT_SW_PAGE_FAULTS,
-		SamplePeriod: 1000, // 1K faults
-	}
-)
 
 func init() {
 	// Register flexible profiler that requires Setup() before use
@@ -167,13 +129,13 @@ type ProfilerCollector struct {
 	wg            sync.WaitGroup
 
 	// Configuration
-	sysPath       string // Path to /sys filesystem
-	channelSize   int    // Output channel buffer size
-	interval      time.Duration // Collection interval
-	setupCalled   bool   // Whether Setup() has been called
-	profilerConfig ProfilerConfig // User-provided configuration
+	sysPath             string           // Path to /sys filesystem
+	channelSize         int              // Output channel buffer size
+	interval            time.Duration    // Collection interval
+	setupCalled         bool             // Whether Setup() has been called
+	profilerConfig      ProfilerConfig   // User-provided configuration
 	resolvedEventConfig *PerfEventConfig // Resolved event configuration
-	
+
 	// Statistics
 	droppedSamples uint64 // Atomic counter for dropped samples
 }
@@ -216,79 +178,144 @@ func NewProfiler(logger logr.Logger, config performance.CollectionConfig) (*Prof
 	return collector, nil
 }
 
-// Setup configures the profiler with the specified event type and options
+// Setup configures the profiler with the specified event
 func (c *ProfilerCollector) Setup(config ProfilerConfig) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
-	// Convert ProfilerEventType to PerfEventConfig
-	eventConfig, err := c.eventTypeToConfig(config.EventType)
-	if err != nil {
-		return fmt.Errorf("invalid event type %v: %w", config.EventType, err)
+
+	// Validate event configuration
+	if config.Event.Name == "" {
+		return fmt.Errorf("event name is required")
 	}
-	
-	// Apply defaults if not specified
-	if config.SamplePeriod == 0 {
-		config.SamplePeriod = eventConfig.SamplePeriod
-	} else {
-		// Override the default sample period
-		eventConfig.SamplePeriod = config.SamplePeriod
+	if config.Event.SamplePeriod == 0 {
+		return fmt.Errorf("sample period must be greater than zero")
 	}
-	
-	// Validate sample period
-	if config.SamplePeriod == 0 {
-		return fmt.Errorf("sample period cannot be zero")
+
+	// Copy event config to avoid modification of the original
+	eventConfig := &PerfEventConfig{
+		Name:         config.Event.Name,
+		Type:         config.Event.Type,
+		Config:       config.Event.Config,
+		SamplePeriod: config.Event.SamplePeriod,
 	}
-	
+
 	// Check if event is supported (fail-fast validation)
 	if err := c.validateEventSupport(eventConfig); err != nil {
-		return fmt.Errorf("event type %v not supported: %w", config.EventType, err)
+		return fmt.Errorf("event %q not supported: %w", eventConfig.Name, err)
 	}
-	
+
 	// Store configuration (last Setup() call wins)
 	c.profilerConfig = config
 	c.resolvedEventConfig = eventConfig
 	c.setupCalled = true
-	
-	c.Logger().V(1).Info("profiler configured", 
-		"event_type", config.EventType.String(),
+
+	c.Logger().V(1).Info("profiler configured",
+		"event_name", eventConfig.Name,
+		"event_type", eventConfig.Type,
+		"event_config", fmt.Sprintf("0x%x", eventConfig.Config),
 		"sample_period", eventConfig.SamplePeriod)
-	
+
 	return nil
 }
 
-// eventTypeToConfig converts ProfilerEventType to PerfEventConfig
-func (c *ProfilerCollector) eventTypeToConfig(eventType ProfilerEventType) (*PerfEventConfig, error) {
+// Helper function to get predefined event by type (for backwards compatibility)
+func GetEventConfigByType(eventType ProfilerEventType) (PerfEventConfig, error) {
 	switch eventType {
 	case ProfilerEventCPUCycles:
-		return &HardwareCPUCycles, nil
+		return CPUCyclesEvent, nil
 	case ProfilerEventCacheMisses:
-		return &HardwareCacheMisses, nil
+		return CacheMissesEvent, nil
 	case ProfilerEventCPUClock:
-		return &SoftwareCPUClock, nil
+		return CPUClockEvent, nil
 	case ProfilerEventPageFaults:
-		return &SoftwarePageFaults, nil
+		return PageFaultsEvent, nil
 	default:
-		return nil, fmt.Errorf("unknown event type: %d", eventType)
+		return PerfEventConfig{}, fmt.Errorf("unknown event type: %d", eventType)
+	}
+}
+
+// Predefined PerfEventConfig instances for common events
+var (
+	// Hardware events (require PMU access)
+	CPUCyclesEvent = PerfEventConfig{
+		Name:         "cpu-cycles",
+		Type:         PERF_TYPE_HARDWARE,
+		Config:       PERF_COUNT_HW_CPU_CYCLES,
+		SamplePeriod: 1000000, // 1M cycles
+	}
+
+	CacheMissesEvent = PerfEventConfig{
+		Name:         "cache-misses",
+		Type:         PERF_TYPE_HARDWARE,
+		Config:       PERF_COUNT_HW_CACHE_MISSES,
+		SamplePeriod: 100000, // 100K cache misses
+	}
+
+	// Software events (work in VMs)
+	CPUClockEvent = PerfEventConfig{
+		Name:         "cpu-clock",
+		Type:         PERF_TYPE_SOFTWARE,
+		Config:       PERF_COUNT_SW_CPU_CLOCK,
+		SamplePeriod: 10000000, // 10ms
+	}
+
+	PageFaultsEvent = PerfEventConfig{
+		Name:         "page-faults",
+		Type:         PERF_TYPE_SOFTWARE,
+		Config:       PERF_COUNT_SW_PAGE_FAULTS,
+		SamplePeriod: 1000, // 1K page faults
+	}
+)
+
+// Helper functions for creating ProfilerConfig with predefined events
+func NewProfilerConfig(event PerfEventConfig) ProfilerConfig {
+	return ProfilerConfig{
+		Event: event,
+	}
+}
+
+// Helper function to create ProfilerConfig with custom sample period
+func NewProfilerConfigWithSamplePeriod(event PerfEventConfig, samplePeriod uint64) ProfilerConfig {
+	event.SamplePeriod = samplePeriod
+	return ProfilerConfig{
+		Event: event,
 	}
 }
 
 // validateEventSupport checks if the event type is supported on this system
 func (c *ProfilerCollector) validateEventSupport(eventConfig *PerfEventConfig) error {
-	// For now, basic validation - could be enhanced to actually test perf_event_open
-	// Hardware events require PMU access (typically bare metal)
+	// Test if the specific event is available on this system
+	if !isPerfEventAvailable(eventConfig.Type, eventConfig.Config) {
+		// Provide helpful error message with available alternatives
+		availableEvents, enumErr := GetAvailablePerfEventNames()
+		if enumErr == nil && len(availableEvents) > 0 {
+			return fmt.Errorf("perf event %q (type=%d, config=%d) not available on this system. Available events: %v",
+				eventConfig.Name, eventConfig.Type, eventConfig.Config, availableEvents)
+		}
+		return fmt.Errorf("perf event %q (type=%d, config=%d) not available on this system",
+			eventConfig.Name, eventConfig.Type, eventConfig.Config)
+	}
+
+	// Log successful validation with context
 	if eventConfig.Type == PERF_TYPE_HARDWARE {
-		c.Logger().V(1).Info("hardware event selected - requires PMU access", 
+		c.Logger().V(1).Info("hardware event validated - PMU access available",
+			"event", eventConfig.Name)
+	} else {
+		c.Logger().V(1).Info("software event validated",
 			"event", eventConfig.Name)
 	}
-	
-	// Software events should work everywhere
-	if eventConfig.Type == PERF_TYPE_SOFTWARE {
-		c.Logger().V(1).Info("software event selected - should work in all environments", 
-			"event", eventConfig.Name)
-	}
-	
+
 	return nil
+}
+
+// EnumerateSupportedEvents returns all perf events supported on this system
+func (c *ProfilerCollector) EnumerateSupportedEvents() ([]PerfEventInfo, error) {
+	return EnumerateAvailablePerfEvents()
+}
+
+// GetSupportedEventNames returns just the names of supported perf events
+func (c *ProfilerCollector) GetSupportedEventNames() ([]string, error) {
+	return GetAvailablePerfEventNames()
 }
 
 func (c *ProfilerCollector) Start(ctx context.Context) (<-chan any, error) {
@@ -538,4 +565,22 @@ func trimStack(stack []uint64) []uint64 {
 		}
 	}
 	return stack
+}
+
+// GetEventSummary returns statistics about available perf events
+func (c *ProfilerCollector) GetEventSummary() (*PerfEventSummary, error) {
+	return GetPerfEventSummary()
+}
+
+// FindEventByName looks up a perf event by name
+func (c *ProfilerCollector) FindEventByName(name string) (*PerfEventInfo, error) {
+	return FindPerfEventByName(name)
+}
+
+// IsEventSupported checks if a specific event is supported on this system
+func (c *ProfilerCollector) IsEventSupported(eventConfig *PerfEventConfig) bool {
+	if eventConfig == nil {
+		return false
+	}
+	return isPerfEventAvailable(eventConfig.Type, eventConfig.Config)
 }

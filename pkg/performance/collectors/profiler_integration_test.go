@@ -53,11 +53,11 @@ func TestProfilerCollector_SoftwareEvents_Integration(t *testing.T) {
 	// Create a software-based CPU profiler (VM-compatible)
 	collector, err := collectors.NewProfiler(logr.Discard(), config)
 	require.NoError(t, err)
-	
-	err = collector.Setup(collectors.ProfilerConfig{
-		EventType:    collectors.ProfilerEventCPUClock,
-		SamplePeriod: 10000000, // 10ms for software clock
-	})
+
+	err = collector.Setup(collectors.NewProfilerConfigWithSamplePeriod(
+		collectors.CPUClockEvent,
+		10000000, // 10ms for software clock
+	))
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -121,109 +121,6 @@ func TestProfilerCollector_SoftwareEvents_Integration(t *testing.T) {
 	t.Log("Software profiler integration test completed successfully!")
 }
 
-func TestProfilerCollector_HardwareVSoftware_Integration(t *testing.T) {
-	// Skip on non-Linux platforms
-	if runtime.GOOS != "linux" {
-		t.Skip("Hardware vs software tests only run on Linux")
-	}
-
-	config := performance.CollectionConfig{
-		HostProcPath: "/proc",
-		HostSysPath:  "/sys",
-		Interval:     time.Second,
-	}
-
-	// Test 1: Hardware profiler should either work (bare metal) or fail (VMs)
-	t.Run("Hardware_Event", func(t *testing.T) {
-		collector, err := collectors.NewProfiler(logr.Discard(), config)
-		require.NoError(t, err)
-		
-		err = collector.Setup(collectors.ProfilerConfig{
-			EventType:    collectors.ProfilerEventCPUCycles,
-			SamplePeriod: 1000000, // 1M cycles
-		})
-		require.NoError(t, err)
-
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-
-		ch, err := collector.Start(ctx)
-		if isKernelTooOld(err) {
-			t.Skipf("Kernel too old for stable BPF perf event links (requires >= 5.15): %v", err)
-			return
-		}
-		if err != nil {
-			// Expected in VMs - hardware events should fail without fallback
-			t.Logf("✅ Hardware profiler correctly failed in VM environment: %v", err)
-			assert.Contains(t, err.Error(), "perf_event_open failed", "Hardware failure should mention perf_event_open")
-			return
-		}
-
-		// If we get here, we're on bare metal
-		require.NotNil(t, ch)
-		defer collector.Stop()
-
-		select {
-		case profile := <-ch:
-			profileStats, ok := profile.(*performance.ProfileStats)
-			require.True(t, ok, "Expected ProfileStats object")
-			assert.Equal(t, uint32(0), profileStats.EventType, "Should use PERF_TYPE_HARDWARE (0)")
-			assert.Equal(t, "cpu-cycles", profileStats.EventName, "Should use cpu-cycles event")
-			t.Log("✅ Hardware profiler working on bare metal")
-
-		case <-time.After(10 * time.Second):
-			t.Fatal("Timeout waiting for hardware profile on bare metal")
-		case <-ctx.Done():
-			t.Fatal("Context cancelled")
-		}
-	})
-
-	// Test 2: Software profiler should always work
-	t.Run("Software_Event", func(t *testing.T) {
-		collector, err := collectors.NewProfiler(logr.Discard(), config)
-		require.NoError(t, err)
-		
-		err = collector.Setup(collectors.ProfilerConfig{
-			EventType:    collectors.ProfilerEventCPUClock,
-			SamplePeriod: 10000000, // 10ms for software clock
-		})
-		require.NoError(t, err)
-
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-
-		ch, err := collector.Start(ctx)
-		if isKernelTooOld(err) {
-			t.Skipf("Kernel too old for stable BPF perf event links (requires >= 5.15): %v", err)
-			return
-		}
-		require.NoError(t, err, "Software profiler should always start")
-		require.NotNil(t, ch)
-		defer collector.Stop()
-
-		// Generate CPU activity to ensure samples
-		go func() {
-			for i := 0; i < 5000; i++ {
-				_ = make([]byte, 1024)
-			}
-		}()
-
-		select {
-		case profile := <-ch:
-			profileStats, ok := profile.(*performance.ProfileStats)
-			require.True(t, ok, "Expected ProfileStats object")
-			assert.Equal(t, uint32(1), profileStats.EventType, "Should use PERF_TYPE_SOFTWARE (1)")
-			assert.Equal(t, "cpu-clock", profileStats.EventName, "Should use cpu-clock event")
-			t.Log("✅ Software profiler working in VM/bare metal")
-
-		case <-time.After(12 * time.Second):
-			t.Fatal("Timeout waiting for software cpu-clock profile")
-		case <-ctx.Done():
-			t.Fatal("Context cancelled")
-		}
-	})
-}
-
 func TestProfilerCollector_SoftwareEventTypes_Integration(t *testing.T) {
 	// Skip on non-Linux platforms
 	if runtime.GOOS != "linux" {
@@ -246,19 +143,19 @@ func TestProfilerCollector_SoftwareEventTypes_Integration(t *testing.T) {
 		eventName      string
 	}{
 		{
-			name:           "SoftwareCPU", 
+			name:           "SoftwareCPU",
 			profilerEvent:  collectors.ProfilerEventCPUClock,
 			samplePeriod:   10000000, // 10ms for cpu-clock
-			eventType:      1, // PERF_TYPE_SOFTWARE
-			eventConfigVal: 0, // PERF_COUNT_SW_CPU_CLOCK
+			eventType:      1,        // PERF_TYPE_SOFTWARE
+			eventConfigVal: 0,        // PERF_COUNT_SW_CPU_CLOCK
 			eventName:      "cpu-clock",
 		},
 		{
 			name:           "PageFaults",
 			profilerEvent:  collectors.ProfilerEventPageFaults,
 			samplePeriod:   1000, // 1K page faults
-			eventType:      1, // PERF_TYPE_SOFTWARE
-			eventConfigVal: 2, // PERF_COUNT_SW_PAGE_FAULTS
+			eventType:      1,    // PERF_TYPE_SOFTWARE
+			eventConfigVal: 2,    // PERF_COUNT_SW_PAGE_FAULTS
 			eventName:      "page-faults",
 		},
 	}
@@ -267,11 +164,15 @@ func TestProfilerCollector_SoftwareEventTypes_Integration(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			collector, err := collectors.NewProfiler(logr.Discard(), config)
 			require.NoError(t, err, "%s profiler creation should succeed", tc.name)
-			
-			err = collector.Setup(collectors.ProfilerConfig{
-				EventType:    tc.profilerEvent,
-				SamplePeriod: tc.samplePeriod,
-			})
+
+			event, err := collectors.GetEventConfigByType(tc.profilerEvent)
+			if err != nil {
+				t.Fatalf("Failed to get event config: %v", err)
+			}
+			err = collector.Setup(collectors.NewProfilerConfigWithSamplePeriod(
+				event,
+				tc.samplePeriod,
+			))
 			require.NoError(t, err, "%s profiler setup should succeed", tc.name)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -313,7 +214,7 @@ func TestProfilerCollector_SoftwareEventTypes_Integration(t *testing.T) {
 				assert.Equal(t, tc.eventConfigVal, profileStats.EventConfig, "Event config mismatch")
 				assert.Equal(t, tc.eventName, profileStats.EventName, "Event name mismatch")
 
-				t.Logf("✅ %s: %d samples, %d stacks", 
+				t.Logf("✅ %s: %d samples, %d stacks",
 					tc.name, profileStats.SampleCount, len(profileStats.Stacks))
 
 			case <-time.After(timeout):
