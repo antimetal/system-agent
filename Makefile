@@ -134,11 +134,7 @@ test-integration: generate manifests build-ebpf ## Run integration tests.
 	EBPF_BUILD_DIR=$(EBPF_BUILD_DIR) ANTIMETAL_BPF_PATH=$(EBPF_BUILD_DIR) go test -tags integration ./... -v -timeout 60s
 
 .PHONY: lint
-<<<<<<< HEAD
 lint: golangci-lint generate ## Run golangci-lint linter & yamllint.
-=======
-lint: golangci-lint generate ## Run golangci-lint linter
->>>>>>> 819d4f1 (ci: refactor integration testing to support multi-binary architecture)
 	$(GOLANGCI_LINT) run --timeout 10m
 
 .PHONY: lint-fix
