@@ -141,7 +141,7 @@ type ProfilerCollector struct {
 	resolvedEventConfig *PerfEventConfig // Resolved event configuration
 
 	// Statistics
-	droppedSamples   uint64 // Atomic counter for dropped samples
+	droppedSamples  uint64 // Atomic counter for dropped samples
 	eventsProcessed uint64 // Atomic counter for processed events
 	ringBufferFull  uint64 // Atomic counter for ring buffer full events
 }

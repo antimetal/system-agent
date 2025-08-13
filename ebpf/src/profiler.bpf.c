@@ -40,7 +40,7 @@ int profile(struct bpf_perf_event_data *ctx) {
   u64 *dropped;
 
   task = (struct task_struct *)bpf_get_current_task();
-  
+
   // Skip kernel threads (PID 0)
   s32 pid = BPF_CORE_READ(task, tgid);
   if (pid == 0) {
