@@ -123,15 +123,19 @@ vet: generate ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: test-unit test-integration ## Run all tests (unit and integration).
+test: test-unit test-integration ## Run all tests (unit and integration). Use 'make test-hardware' for bare metal tests.
 
 .PHONY: test-unit
-test-unit: generate manifests ## Run unit tests only.
+test-unit: generate manifests ## Run unit tests only (excludes integration and hardware tests).
 	go test ./... -v -coverprofile $(TESTCOVERAGE_OUT) -timeout 30s
 
 .PHONY: test-integration
-test-integration: generate manifests build-ebpf ## Run integration tests.
+test-integration: generate manifests build-ebpf ## Run integration tests (VM-compatible, no PMU required).
 	EBPF_BUILD_DIR=$(EBPF_BUILD_DIR) ANTIMETAL_BPF_PATH=$(EBPF_BUILD_DIR) go test -tags integration ./... -v -timeout 60s
+
+.PHONY: test-hardware
+test-hardware: generate manifests build-ebpf ## Run hardware tests (bare metal with PMU required).
+	EBPF_BUILD_DIR=$(EBPF_BUILD_DIR) ANTIMETAL_BPF_PATH=$(EBPF_BUILD_DIR) go test -tags hardware ./... -v -timeout 120s
 
 .PHONY: lint
 lint: golangci-lint generate ## Run golangci-lint linter & yamllint.
