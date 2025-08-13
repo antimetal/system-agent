@@ -126,15 +126,19 @@ vet: generate ## Run go vet against code.
 test: test-unit test-integration ## Run all tests (unit and integration).
 
 .PHONY: test-unit
-test-unit: generate manifests ## Run unit tests only.
-	go test ./... -v -coverprofile $(TESTCOVERAGE_OUT) -timeout 30s
+test-unit: generate ## Run unit tests only.
+	go test ./... -v -timeout 30s
 
 .PHONY: test-integration
 test-integration: generate manifests build-ebpf ## Run integration tests.
 	EBPF_BUILD_DIR=$(EBPF_BUILD_DIR) ANTIMETAL_BPF_PATH=$(EBPF_BUILD_DIR) go test -tags integration ./... -v -timeout 60s
 
 .PHONY: lint
+<<<<<<< HEAD
 lint: golangci-lint generate ## Run golangci-lint linter & yamllint.
+=======
+lint: golangci-lint generate ## Run golangci-lint linter
+>>>>>>> 819d4f1 (ci: refactor integration testing to support multi-binary architecture)
 	$(GOLANGCI_LINT) run --timeout 10m
 
 .PHONY: lint-fix

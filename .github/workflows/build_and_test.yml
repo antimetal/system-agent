@@ -30,18 +30,28 @@ jobs:
         cache: true
         cache-dependency-path: go.sum
 
-    - name: Cache apt packages
+    - name: Extract golangci-lint version
+      id: lint-version
+      run: echo "version=$(grep 'GOLANGCI_LINT_VERSION ?=' Makefile | cut -d'=' -f2 | tr -d ' ')" >> $GITHUB_OUTPUT
+
+    - name: Cache tool binaries
       uses: actions/cache@v4
       with:
-        path: /var/cache/apt/archives
-        key: ${{ runner.os }}-apt-lint-${{ hashFiles('.github/workflows/build_and_test.yml') }}
+        path: bin/
+        key: ${{ runner.os }}-tools-${{ hashFiles('Makefile') }}-golangci-lint-${{ steps.lint-version.outputs.version }}
         restore-keys: |
-          ${{ runner.os }}-apt-lint-
+          ${{ runner.os }}-tools-${{ hashFiles('Makefile') }}-
+          ${{ runner.os }}-tools-
 
-    - name: Install build dependencies
-      run: |
-        sudo apt-get update -qq
-        sudo apt-get install -y -qq clang llvm libelf-dev libbpf-dev
+    - name: Cache buf modules and generated files
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/buf
+          pkg/api/**/*.pb.go
+        key: ${{ runner.os }}-buf-${{ hashFiles('buf.gen.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-buf-
 
     - name: Run linting
       run: make lint
@@ -130,72 +140,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
         go-version-file: 'go.mod'
         cache: true
         cache-dependency-path: go.sum
-    
-    - name: Cache apt packages
-      uses: actions/cache@v4
-      with:
-        path: /var/cache/apt/archives
-        key: ${{ runner.os }}-apt-unit-tests-${{ hashFiles('.github/workflows/build_and_test.yml') }}
-        restore-keys: |
-          ${{ runner.os }}-apt-unit-tests-
-    
-    - name: Install build dependencies
-      run: |
-        sudo apt-get update -qq
-        sudo apt-get install -y -qq clang llvm libelf-dev libbpf-dev
-    
+
     - name: Run unit tests
       run: |
-        echo "Running unit tests with coverage (excluding integration tests)..."
-        # Run tests with coverage and save results (generate is a dependency of test-unit)
+        set -o pipefail
+        echo "Running unit tests (excluding integration tests)..."
         make test-unit 2>&1 | tee unit-test-results.txt
-        
-        # Generate coverage summary
+
         echo "" >> unit-test-results.txt
         echo "=== Test Summary ===" >> unit-test-results.txt
         echo "Time: $(date)" >> unit-test-results.txt
-        
-        # Show coverage summary (cover.out is the file created by make test-unit)
-        if [ -f cover.out ]; then
-          echo "Coverage report generated successfully"
-          go tool cover -func=cover.out | tail -5
-        else
-          echo "Warning: No coverage report generated"
-        fi
-    
+
     - name: Upload test results
       uses: actions/upload-artifact@v4
       if: always()
       with:
         name: unit-test-results
         path: unit-test-results.txt
-        retention-days: 7
-        if-no-files-found: warn
-    
-    - name: Generate coverage HTML
-      if: always()
-      run: |
-        if [ -f cover.out ]; then
-          echo "Generating HTML coverage report..."
-          go tool cover -html=cover.out -o coverage.html
-          echo "HTML coverage report generated"
-        fi
-    
-    - name: Upload coverage
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: coverage-report
-        path: |
-          cover.out
-          coverage.html
         retention-days: 7
         if-no-files-found: warn
 
@@ -207,14 +175,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
         go-version-file: 'go.mod'
         cache: true
         cache-dependency-path: go.sum
-    
+
     - name: Cache apt packages
       uses: actions/cache@v4
       with:
@@ -222,23 +190,23 @@ jobs:
         key: ${{ runner.os }}-apt-build-artifacts-${{ hashFiles('.github/workflows/build_and_test.yml') }}
         restore-keys: |
           ${{ runner.os }}-apt-build-artifacts-
-    
+
     - name: Install build dependencies
       run: |
         sudo apt-get update -qq
         sudo apt-get install -y -qq clang llvm libelf-dev libbpf-dev
-    
+
     - name: Generate code
       run: |
         echo "Running code generation..."
         make generate
-    
-    - name: Build eBPF programs
-      run: .github/workflows/scripts/build-ebpf.sh
-    
+
+    - name: Build test artifacts
+      run: .github/workflows/scripts/build-test-artifacts.sh
+
     - name: Package artifacts
       run: .github/workflows/scripts/package-artifacts.sh
-    
+
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
@@ -260,23 +228,23 @@ jobs:
           - kernel: "6.1-20250616.013250"   # LTS kernel
           - kernel: "6.6-20250616.013250"   # Current LTS kernel
           - kernel: "6.12-20250805.082402"  # Next LTS kernel (6.12)
-    
+
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Download test artifacts
       uses: actions/download-artifact@v4
       with:
         name: test-artifacts
         path: artifacts/
-    
+
     - name: Setup Go
       uses: actions/setup-go@v5
       with:
         go-version: '1.24'
         cache: true
         cache-dependency-path: go.sum
-    
+
     - name: Run tests in VM using LVH Action
       uses: cilium/little-vm-helper@main
       with:

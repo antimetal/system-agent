@@ -49,29 +49,10 @@ else
     exit 1
 fi
 
-# Install dependencies
+# Install dependencies (minimal set - no Go needed since we use pre-built binary)
 echo -e "\n=== Installing Dependencies ==="
 apt-get update -qq
-apt-get install -y -qq build-essential git wget curl
-
-# Install additional tools (required for eBPF)
-apt-get install -y -qq clang llvm libbpf-dev
-
-# Install Go
-echo -e "\n=== Installing Go ==="
-if ! command -v go &> /dev/null; then
-    cd /tmp
-    wget -q "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz"
-    if [ ! -f "go${GO_VERSION}.linux-amd64.tar.gz" ]; then
-        echo "ERROR: Failed to download Go ${GO_VERSION}"
-        exit 1
-    fi
-    tar -C /usr/local -xzf "go${GO_VERSION}.linux-amd64.tar.gz"
-    export PATH=$PATH:/usr/local/go/bin
-    rm "go${GO_VERSION}.linux-amd64.tar.gz"
-fi
-
-echo "Go version: $(go version)"
+apt-get install -y -qq build-essential git
 
 # Mount BPF filesystem if not already mounted
 echo -e "\n=== Mounting BPF Filesystem ==="
@@ -85,10 +66,6 @@ mount | grep bpf
 
 # Change to host directory
 cd /host
-
-# Fix git dubious ownership issue
-echo -e "\n=== Configuring Git ==="
-git config --global --add safe.directory /host
 
 # Copy eBPF programs to standard location
 echo -e "\n=== Setting up eBPF Programs ==="
@@ -133,15 +110,29 @@ else
     exit 1
 fi
 
+# Verify integration test binaries exist
+echo -e "\n=== Verifying Integration Test Binaries ==="
+if [ ! -d /host/artifacts/integration-tests ] || [ -z "$(ls -A /host/artifacts/integration-tests)" ]; then
+    echo "ERROR: Integration test binaries not found at /host/artifacts/integration-tests/"
+    exit 1
+fi
+echo "Integration test binaries found:"
+ls -la /host/artifacts/integration-tests/
+
+# Fix execute permissions (GitHub Actions artifact upload/download strips them)
+echo "Restoring execute permissions for integration test binaries..."
+chmod +x /host/artifacts/integration-tests/*
+echo "Updated permissions:"
+ls -la /host/artifacts/integration-tests/
+
 # Run the actual tests
 echo -e "\n=== Running Integration Tests ==="
-export PATH=$PATH:/usr/local/go/bin
 
 # Set environment variable for eBPF program location
 export EBPF_BUILD_DIR=/usr/local/lib/antimetal/ebpf
 
-# Run integration tests with verbose output and save results
-echo "Running eBPF integration tests..."
+# Run pre-built integration test binary with verbose output and save results
+echo "Running pre-built integration test binary..."
 
 # Create test results file
 TEST_RESULTS_FILE="/host/integration-test-results.txt"
@@ -152,19 +143,36 @@ VM_OUTPUT_FILE="/host/vm-output.log"
     echo "=== VM Output Log ==="
     echo "Kernel: $(uname -r)"
     echo "Time: $(date)"
-    echo "Go Version: $(go version)"
+    echo "Integration Test Binaries:"
+    ls -la /host/artifacts/integration-tests/
     echo ""
 } > "$VM_OUTPUT_FILE"
 
 # Run tests and capture output
-echo "Running integration tests and saving results..."
-if make test-integration 2>&1 | tee -a "$VM_OUTPUT_FILE" > "$TEST_RESULTS_FILE"; then
-    TEST_STATUS="PASS"
-    echo -e "\n✅ Integration tests PASSED"
+echo "Running integration test binaries and saving results..."
+cd /host
+TEST_STATUS="PASS"
+
+# Run each test binary individually
+for test_binary in /host/artifacts/integration-tests/*.test; do
+    if [ -f "$test_binary" ]; then
+        binary_name=$(basename "$test_binary")
+        echo "Running $binary_name..."
+        
+        if $test_binary -test.v 2>&1 | tee -a "$VM_OUTPUT_FILE" >> "$TEST_RESULTS_FILE"; then
+            echo "✅ $binary_name PASSED"
+        else
+            echo "❌ $binary_name FAILED"
+            TEST_STATUS="FAIL"
+        fi
+        echo "" >> "$TEST_RESULTS_FILE"
+    fi
+done
+
+if [ "$TEST_STATUS" = "PASS" ]; then
+    echo -e "\n✅ All integration tests PASSED"
 else
-    TEST_STATUS="FAIL"
-    echo -e "\n❌ Integration tests FAILED"
-    # Don't exit immediately - save results first
+    echo -e "\n❌ Some integration tests FAILED"
 fi
 
 # Append summary to results file
@@ -174,7 +182,8 @@ fi
     echo "Status: $TEST_STATUS"
     echo "Kernel: $(uname -r)"
     echo "Time: $(date)"
-    echo "Go: $(go version)"
+    echo "Integration Test Binaries:"
+    ls -la /host/artifacts/integration-tests/
 } >> "$TEST_RESULTS_FILE"
 
 echo -e "\n=== Test Completed ==="
