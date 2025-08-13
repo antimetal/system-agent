@@ -32,6 +32,41 @@ echo "Building eBPF programs using main Makefile..."
 make build-ebpf
 
 echo "eBPF programs built successfully"
+
+# Build integration test binaries
+echo "Building integration test binaries..."
+
+# Find packages with integration tests
+packages_with_tests=""
+for pkg in $(go list -tags integration ./...); do
+    if go list -f '{{.TestGoFiles}}' -tags integration "$pkg" | grep -q "\.go"; then
+        if [ -z "$packages_with_tests" ]; then
+            packages_with_tests="$pkg"
+        else
+            packages_with_tests="$packages_with_tests $pkg"
+        fi
+    fi
+done
+
+if [ -z "$packages_with_tests" ]; then
+    echo "ERROR: No packages with integration tests found"
+    exit 1
+fi
+
+echo "Found packages with integration tests: $packages_with_tests"
+
+# Build integration test binaries for packages with integration tests
+echo "Creating integration test binaries"
+mkdir -p integration-tests
+GOOS=linux GOARCH=amd64 go test -c -tags integration -o integration-tests $packages_with_tests
+
+if [ ! -d "integration-tests" ] || [ -z "$(ls -A integration-tests)" ]; then
+    echo "ERROR: Failed to build integration test binaries"
+    exit 1
+fi
+
+echo "Integration test binaries built successfully:"
+ls -la integration-tests/
 echo "Looking for .bpf.o files in ebpf/build/:"
 
 # Verify that eBPF programs were built

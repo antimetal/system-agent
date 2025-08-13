@@ -126,8 +126,8 @@ vet: generate ## Run go vet against code.
 test: test-unit test-integration ## Run all tests (unit and integration).
 
 .PHONY: test-unit
-test-unit: generate manifests ## Run unit tests only.
-	go test ./... -v -coverprofile $(TESTCOVERAGE_OUT) -timeout 30s
+test-unit: generate ## Run unit tests only.
+	go test ./... -v -timeout 30s
 
 .PHONY: test-integration
 test-integration: generate manifests build-ebpf ## Run integration tests.
