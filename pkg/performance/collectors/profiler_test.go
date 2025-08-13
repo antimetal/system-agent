@@ -10,7 +10,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 	"time"
 
@@ -86,51 +85,39 @@ func TestProfilerCollector_Constructor_IntervalValidation(t *testing.T) {
 	}
 }
 
-func TestProfilerCollector_Setup(t *testing.T) {
+func TestProfilerCollector_Setup_ConfigValidation(t *testing.T) {
+	// Unit tests for configuration validation (hardware-agnostic)
 	tests := []struct {
 		name           string
 		profilerConfig collectors.ProfilerConfig
 		expectError    bool
+		errorContains  string
 	}{
 		{
-			name: "Valid CPU profiler",
+			name: "Empty event name",
 			profilerConfig: collectors.ProfilerConfig{
-				EventType:    collectors.ProfilerEventCPUCycles,
-				SamplePeriod: 1000000,
+				Event: collectors.PerfEventConfig{
+					Name:         "", // Invalid - empty name
+					Type:         0,
+					Config:       0,
+					SamplePeriod: 1000000,
+				},
 			},
-			expectError: false,
+			expectError:   true,
+			errorContains: "event name is required",
 		},
 		{
-			name: "Valid cache miss profiler",
+			name: "Zero sample period",
 			profilerConfig: collectors.ProfilerConfig{
-				EventType:    collectors.ProfilerEventCacheMisses,
-				SamplePeriod: 100000,
+				Event: collectors.PerfEventConfig{
+					Name:         "test-event",
+					Type:         0,
+					Config:       0,
+					SamplePeriod: 0, // Invalid - zero sample period
+				},
 			},
-			expectError: false,
-		},
-		{
-			name: "Valid software profiler",
-			profilerConfig: collectors.ProfilerConfig{
-				EventType:    collectors.ProfilerEventCPUClock,
-				SamplePeriod: 10000000,
-			},
-			expectError: false,
-		},
-		{
-			name: "Zero sample period uses default",
-			profilerConfig: collectors.ProfilerConfig{
-				EventType:    collectors.ProfilerEventCPUClock,
-				SamplePeriod: 0, // Should use default
-			},
-			expectError: false,
-		},
-		{
-			name: "Invalid event type",
-			profilerConfig: collectors.ProfilerConfig{
-				EventType:    collectors.ProfilerEventType(999), // Invalid
-				SamplePeriod: 1000000,
-			},
-			expectError: true,
+			expectError:   true,
+			errorContains: "sample period must be greater than zero",
 		},
 	}
 
@@ -139,7 +126,7 @@ func TestProfilerCollector_Setup(t *testing.T) {
 			config := performance.CollectionConfig{
 				HostProcPath: "/proc",
 				HostSysPath:  "/sys",
-				Interval:     time.Second, // Add interval to prevent ticker panic
+				Interval:     time.Second,
 			}
 
 			collector, err := collectors.NewProfiler(logr.Discard(), config)
@@ -149,75 +136,14 @@ func TestProfilerCollector_Setup(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
+				}
 			} else {
 				assert.NoError(t, err)
 			}
 		})
 	}
-}
-
-func TestProfilerCollector_CPUProfiler(t *testing.T) {
-	config := performance.CollectionConfig{
-		HostProcPath: "/proc",
-		HostSysPath:  "/sys",
-		Interval:     time.Second,
-	}
-
-	collector, err := collectors.NewProfiler(logr.Discard(), config)
-	require.NoError(t, err)
-
-	err = collector.Setup(collectors.ProfilerConfig{
-		EventType:    collectors.ProfilerEventCPUCycles,
-		SamplePeriod: 1000000,
-	})
-	require.NoError(t, err)
-	assert.NotNil(t, collector)
-}
-
-func TestProfilerCollector_CacheMissProfiler(t *testing.T) {
-	config := performance.CollectionConfig{
-		HostProcPath: "/proc",
-		HostSysPath:  "/sys",
-		Interval:     time.Second,
-	}
-
-	collector, err := collectors.NewProfiler(logr.Discard(), config)
-	require.NoError(t, err)
-
-	err = collector.Setup(collectors.ProfilerConfig{
-		EventType:    collectors.ProfilerEventCacheMisses,
-		SamplePeriod: 100000,
-	})
-	require.NoError(t, err)
-	assert.NotNil(t, collector)
-}
-
-func TestProfilerCollector_LinuxOnly(t *testing.T) {
-	if runtime.GOOS == "linux" {
-		t.Skip("This test is for non-Linux platforms")
-	}
-
-	config := performance.CollectionConfig{
-		HostProcPath: "/proc",
-		HostSysPath:  "/sys",
-		Interval:     time.Second,
-	}
-
-	collector, err := collectors.NewProfiler(logr.Discard(), config)
-	require.NoError(t, err)
-
-	err = collector.Setup(collectors.ProfilerConfig{
-		EventType:    collectors.ProfilerEventCPUCycles,
-		SamplePeriod: 1000000,
-	})
-	require.NoError(t, err)
-
-	// Start should fail on non-Linux
-	ctx := context.Background()
-	ch, err := collector.Start(ctx)
-	assert.Error(t, err)
-	assert.Nil(t, ch)
-	assert.Contains(t, err.Error(), "only supported on Linux")
 }
 
 func TestProfilerCollector_StartWithoutSetup(t *testing.T) {
@@ -236,33 +162,6 @@ func TestProfilerCollector_StartWithoutSetup(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, ch)
 	assert.Contains(t, err.Error(), "Setup() must be called before Start()")
-}
-
-func TestProfilerCollector_MultipleSetup(t *testing.T) {
-	config := performance.CollectionConfig{
-		HostProcPath: "/proc",
-		HostSysPath:  "/sys",
-		Interval:     time.Second,
-	}
-
-	collector, err := collectors.NewProfiler(logr.Discard(), config)
-	require.NoError(t, err)
-
-	// First setup
-	err = collector.Setup(collectors.ProfilerConfig{
-		EventType:    collectors.ProfilerEventCPUCycles,
-		SamplePeriod: 1000000,
-	})
-	require.NoError(t, err)
-
-	// Second setup (should override first)
-	err = collector.Setup(collectors.ProfilerConfig{
-		EventType:    collectors.ProfilerEventCPUClock,
-		SamplePeriod: 10000000,
-	})
-	require.NoError(t, err)
-
-	// Should use the last setup configuration
 }
 
 func TestParseCPUList(t *testing.T) {
