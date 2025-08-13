@@ -94,6 +94,7 @@ Add support for monitoring CPU frequency scaling by reading
 
 Closes #123
 
+Co-Authored-By: Claude <noreply@anthropic.com>
 Signed-off-by: John Doe <john.doe@example.com>
 ```
 
