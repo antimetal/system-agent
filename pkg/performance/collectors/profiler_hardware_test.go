@@ -68,10 +68,14 @@ func TestProfilerCollector_HardwareEvents_Integration(t *testing.T) {
 			collector, err := collectors.NewProfiler(logr.Discard(), config)
 			require.NoError(t, err, "%s profiler creation should succeed", tc.name)
 
-			err = collector.Setup(collectors.ProfilerConfig{
-				EventType:    tc.profilerEvent,
-				SamplePeriod: tc.samplePeriod,
-			})
+			event, err := collectors.GetEventConfigByType(tc.profilerEvent)
+			if err != nil {
+				t.Fatalf("Failed to get event config: %v", err)
+			}
+			err = collector.Setup(collectors.NewProfilerConfigWithSamplePeriod(
+				event,
+				tc.samplePeriod,
+			))
 			require.NoError(t, err, "%s profiler setup should succeed", tc.name)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -143,10 +147,10 @@ func TestProfilerCollector_HardwareLifecycle_Integration(t *testing.T) {
 	collector, err := collectors.NewProfiler(logr.Discard(), config)
 	require.NoError(t, err)
 
-	err = collector.Setup(collectors.ProfilerConfig{
-		EventType:    collectors.ProfilerEventCPUCycles,
-		SamplePeriod: 1000000, // 1M CPU cycles
-	})
+	err = collector.Setup(collectors.NewProfilerConfigWithSamplePeriod(
+		collectors.CPUCyclesEvent,
+		1000000, // 1M CPU cycles
+	))
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -184,4 +188,60 @@ func TestProfilerCollector_HardwareLifecycle_Integration(t *testing.T) {
 	assert.NoError(t, err, "Second stop should be safe")
 
 	t.Log("✅ Hardware profiler lifecycle completed successfully")
+}
+
+func TestProfilerCollector_HardwarePMUAccess_Integration(t *testing.T) {
+	// Skip on non-Linux platforms
+	if runtime.GOOS != "linux" {
+		t.Skip("Hardware PMU access tests only run on Linux")
+	}
+
+	config := performance.CollectionConfig{
+		HostProcPath: "/proc",
+		HostSysPath:  "/sys",
+		Interval:     time.Second,
+	}
+
+	// Test that hardware events (cpu-cycles) work on bare metal
+	// This test validates that PMU access is available
+	t.Run("PMU_Hardware_Events", func(t *testing.T) {
+		collector, err := collectors.NewProfiler(logr.Discard(), config)
+		require.NoError(t, err)
+
+		err = collector.Setup(collectors.NewProfilerConfigWithSamplePeriod(
+			collectors.CPUCyclesEvent,
+			1000000, // 1M cycles
+		))
+		require.NoError(t, err)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
+		ch, err := collector.Start(ctx)
+		require.NoError(t, err, "Hardware events should work on bare metal with PMU access")
+		require.NotNil(t, ch)
+		defer collector.Stop()
+
+		// Generate CPU activity to trigger samples
+		go func() {
+			for i := 0; i < 10000; i++ {
+				_ = make([]byte, 1024)
+			}
+		}()
+
+		select {
+		case profile := <-ch:
+			profileStats, ok := profile.(*performance.ProfileStats)
+			require.True(t, ok, "Expected ProfileStats object")
+			assert.Equal(t, uint32(0), profileStats.EventType, "Should use PERF_TYPE_HARDWARE (0)")
+			assert.Equal(t, "cpu-cycles", profileStats.EventName, "Should use cpu-cycles event")
+			assert.Greater(t, profileStats.SampleCount, uint64(0), "Should collect hardware samples")
+			t.Log("✅ Hardware PMU profiler working on bare metal")
+
+		case <-time.After(10 * time.Second):
+			t.Fatal("Timeout waiting for hardware PMU profile")
+		case <-ctx.Done():
+			t.Fatal("Context cancelled")
+		}
+	})
 }
