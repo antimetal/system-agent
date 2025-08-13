@@ -33,18 +33,18 @@ const (
 	PERF_TYPE_TRACEPOINT = 2
 	PERF_TYPE_HW_CACHE   = 3
 	PERF_TYPE_RAW        = 4
-	
+
 	// Default channel buffer size for profile output
 	DefaultProfileChannelSize = 50
 
 	// Hardware events - match linux/perf_event.h PERF_COUNT_HW_* definitions
-	PERF_COUNT_HW_CPU_CYCLES        = 0
-	PERF_COUNT_HW_INSTRUCTIONS      = 1
-	PERF_COUNT_HW_CACHE_REFERENCES  = 2
-	PERF_COUNT_HW_CACHE_MISSES      = 3
+	PERF_COUNT_HW_CPU_CYCLES          = 0
+	PERF_COUNT_HW_INSTRUCTIONS        = 1
+	PERF_COUNT_HW_CACHE_REFERENCES    = 2
+	PERF_COUNT_HW_CACHE_MISSES        = 3
 	PERF_COUNT_HW_BRANCH_INSTRUCTIONS = 4
-	PERF_COUNT_HW_BRANCH_MISSES     = 5
-	PERF_COUNT_HW_BUS_CYCLES        = 6
+	PERF_COUNT_HW_BRANCH_MISSES       = 5
+	PERF_COUNT_HW_BUS_CYCLES          = 6
 
 	// Software events (work in virtualized environments)
 	PERF_COUNT_SW_CPU_CLOCK        = 0
@@ -167,13 +167,13 @@ type ProfilerCollector struct {
 	wg            sync.WaitGroup
 
 	// Configuration
-	sysPath       string // Path to /sys filesystem
-	channelSize   int    // Output channel buffer size
-	interval      time.Duration // Collection interval
-	setupCalled   bool   // Whether Setup() has been called
-	profilerConfig ProfilerConfig // User-provided configuration
+	sysPath             string           // Path to /sys filesystem
+	channelSize         int              // Output channel buffer size
+	interval            time.Duration    // Collection interval
+	setupCalled         bool             // Whether Setup() has been called
+	profilerConfig      ProfilerConfig   // User-provided configuration
 	resolvedEventConfig *PerfEventConfig // Resolved event configuration
-	
+
 	// Statistics
 	droppedSamples uint64 // Atomic counter for dropped samples
 }
@@ -220,13 +220,13 @@ func NewProfiler(logger logr.Logger, config performance.CollectionConfig) (*Prof
 func (c *ProfilerCollector) Setup(config ProfilerConfig) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	// Convert ProfilerEventType to PerfEventConfig
 	eventConfig, err := c.eventTypeToConfig(config.EventType)
 	if err != nil {
 		return fmt.Errorf("invalid event type %v: %w", config.EventType, err)
 	}
-	
+
 	// Apply defaults if not specified
 	if config.SamplePeriod == 0 {
 		config.SamplePeriod = eventConfig.SamplePeriod
@@ -234,26 +234,26 @@ func (c *ProfilerCollector) Setup(config ProfilerConfig) error {
 		// Override the default sample period
 		eventConfig.SamplePeriod = config.SamplePeriod
 	}
-	
+
 	// Validate sample period
 	if config.SamplePeriod == 0 {
 		return fmt.Errorf("sample period cannot be zero")
 	}
-	
+
 	// Check if event is supported (fail-fast validation)
 	if err := c.validateEventSupport(eventConfig); err != nil {
 		return fmt.Errorf("event type %v not supported: %w", config.EventType, err)
 	}
-	
+
 	// Store configuration (last Setup() call wins)
 	c.profilerConfig = config
 	c.resolvedEventConfig = eventConfig
 	c.setupCalled = true
-	
-	c.Logger().V(1).Info("profiler configured", 
+
+	c.Logger().V(1).Info("profiler configured",
 		"event_type", config.EventType.String(),
 		"sample_period", eventConfig.SamplePeriod)
-	
+
 	return nil
 }
 
@@ -278,16 +278,16 @@ func (c *ProfilerCollector) validateEventSupport(eventConfig *PerfEventConfig) e
 	// For now, basic validation - could be enhanced to actually test perf_event_open
 	// Hardware events require PMU access (typically bare metal)
 	if eventConfig.Type == PERF_TYPE_HARDWARE {
-		c.Logger().V(1).Info("hardware event selected - requires PMU access", 
+		c.Logger().V(1).Info("hardware event selected - requires PMU access",
 			"event", eventConfig.Name)
 	}
-	
+
 	// Software events should work everywhere
 	if eventConfig.Type == PERF_TYPE_SOFTWARE {
-		c.Logger().V(1).Info("software event selected - should work in all environments", 
+		c.Logger().V(1).Info("software event selected - should work in all environments",
 			"event", eventConfig.Name)
 	}
-	
+
 	return nil
 }
 

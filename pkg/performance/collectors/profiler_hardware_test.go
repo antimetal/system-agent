@@ -49,16 +49,16 @@ func TestProfilerCollector_HardwareEvents_Integration(t *testing.T) {
 			name:          "CPUCycles",
 			profilerEvent: collectors.ProfilerEventCPUCycles,
 			samplePeriod:  1000000, // 1M CPU cycles
-			eventType:     0, // PERF_TYPE_HARDWARE
-			eventConfig:   0, // PERF_COUNT_HW_CPU_CYCLES
+			eventType:     0,       // PERF_TYPE_HARDWARE
+			eventConfig:   0,       // PERF_COUNT_HW_CPU_CYCLES
 			eventName:     "cpu-cycles",
 		},
 		{
 			name:          "CacheMisses",
 			profilerEvent: collectors.ProfilerEventCacheMisses,
 			samplePeriod:  100000, // 100K cache misses
-			eventType:     0, // PERF_TYPE_HARDWARE
-			eventConfig:   3, // PERF_COUNT_HW_CACHE_MISSES
+			eventType:     0,      // PERF_TYPE_HARDWARE
+			eventConfig:   3,      // PERF_COUNT_HW_CACHE_MISSES
 			eventName:     "cache-misses",
 		},
 	}
@@ -67,7 +67,7 @@ func TestProfilerCollector_HardwareEvents_Integration(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			collector, err := collectors.NewProfiler(logr.Discard(), config)
 			require.NoError(t, err, "%s profiler creation should succeed", tc.name)
-			
+
 			err = collector.Setup(collectors.ProfilerConfig{
 				EventType:    tc.profilerEvent,
 				SamplePeriod: tc.samplePeriod,
@@ -113,8 +113,8 @@ func TestProfilerCollector_HardwareEvents_Integration(t *testing.T) {
 				assert.Greater(t, len(profileStats.Stacks), 0, "Should have stack traces")
 				assert.NotZero(t, profileStats.Duration, "Should have non-zero duration")
 
-				t.Logf("🔧 %s (hardware): %d samples, %d stacks, %.2fs duration", 
-					tc.name, profileStats.SampleCount, len(profileStats.Stacks), 
+				t.Logf("🔧 %s (hardware): %d samples, %d stacks, %.2fs duration",
+					tc.name, profileStats.SampleCount, len(profileStats.Stacks),
 					profileStats.Duration.Seconds())
 
 			case <-time.After(15 * time.Second):
@@ -142,7 +142,7 @@ func TestProfilerCollector_HardwareLifecycle_Integration(t *testing.T) {
 
 	collector, err := collectors.NewProfiler(logr.Discard(), config)
 	require.NoError(t, err)
-	
+
 	err = collector.Setup(collectors.ProfilerConfig{
 		EventType:    collectors.ProfilerEventCPUCycles,
 		SamplePeriod: 1000000, // 1M CPU cycles

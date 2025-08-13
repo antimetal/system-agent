@@ -53,7 +53,7 @@ func TestProfilerCollector_SoftwareEvents_Integration(t *testing.T) {
 	// Create a software-based CPU profiler (VM-compatible)
 	collector, err := collectors.NewProfiler(logr.Discard(), config)
 	require.NoError(t, err)
-	
+
 	err = collector.Setup(collectors.ProfilerConfig{
 		EventType:    collectors.ProfilerEventCPUClock,
 		SamplePeriod: 10000000, // 10ms for software clock
@@ -137,7 +137,7 @@ func TestProfilerCollector_HardwareVSoftware_Integration(t *testing.T) {
 	t.Run("Hardware_Event", func(t *testing.T) {
 		collector, err := collectors.NewProfiler(logr.Discard(), config)
 		require.NoError(t, err)
-		
+
 		err = collector.Setup(collectors.ProfilerConfig{
 			EventType:    collectors.ProfilerEventCPUCycles,
 			SamplePeriod: 1000000, // 1M cycles
@@ -182,7 +182,7 @@ func TestProfilerCollector_HardwareVSoftware_Integration(t *testing.T) {
 	t.Run("Software_Event", func(t *testing.T) {
 		collector, err := collectors.NewProfiler(logr.Discard(), config)
 		require.NoError(t, err)
-		
+
 		err = collector.Setup(collectors.ProfilerConfig{
 			EventType:    collectors.ProfilerEventCPUClock,
 			SamplePeriod: 10000000, // 10ms for software clock
@@ -246,19 +246,19 @@ func TestProfilerCollector_SoftwareEventTypes_Integration(t *testing.T) {
 		eventName      string
 	}{
 		{
-			name:           "SoftwareCPU", 
+			name:           "SoftwareCPU",
 			profilerEvent:  collectors.ProfilerEventCPUClock,
 			samplePeriod:   10000000, // 10ms for cpu-clock
-			eventType:      1, // PERF_TYPE_SOFTWARE
-			eventConfigVal: 0, // PERF_COUNT_SW_CPU_CLOCK
+			eventType:      1,        // PERF_TYPE_SOFTWARE
+			eventConfigVal: 0,        // PERF_COUNT_SW_CPU_CLOCK
 			eventName:      "cpu-clock",
 		},
 		{
 			name:           "PageFaults",
 			profilerEvent:  collectors.ProfilerEventPageFaults,
 			samplePeriod:   1000, // 1K page faults
-			eventType:      1, // PERF_TYPE_SOFTWARE
-			eventConfigVal: 2, // PERF_COUNT_SW_PAGE_FAULTS
+			eventType:      1,    // PERF_TYPE_SOFTWARE
+			eventConfigVal: 2,    // PERF_COUNT_SW_PAGE_FAULTS
 			eventName:      "page-faults",
 		},
 	}
@@ -267,7 +267,7 @@ func TestProfilerCollector_SoftwareEventTypes_Integration(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			collector, err := collectors.NewProfiler(logr.Discard(), config)
 			require.NoError(t, err, "%s profiler creation should succeed", tc.name)
-			
+
 			err = collector.Setup(collectors.ProfilerConfig{
 				EventType:    tc.profilerEvent,
 				SamplePeriod: tc.samplePeriod,
@@ -313,7 +313,7 @@ func TestProfilerCollector_SoftwareEventTypes_Integration(t *testing.T) {
 				assert.Equal(t, tc.eventConfigVal, profileStats.EventConfig, "Event config mismatch")
 				assert.Equal(t, tc.eventName, profileStats.EventName, "Event name mismatch")
 
-				t.Logf("✅ %s: %d samples, %d stacks", 
+				t.Logf("✅ %s: %d samples, %d stacks",
 					tc.name, profileStats.SampleCount, len(profileStats.Stacks))
 
 			case <-time.After(timeout):

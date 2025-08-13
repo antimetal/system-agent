@@ -30,11 +30,11 @@ func TestProfilerCollector_Constructor(t *testing.T) {
 
 	// NewProfiler should succeed with valid interval
 	collector, err := collectors.NewProfiler(logr.Discard(), config)
-	
+
 	assert.NoError(t, err)
 	assert.NotNil(t, collector)
 	assert.Equal(t, "profiler", collector.Name())
-	
+
 	caps := collector.Capabilities()
 	assert.NotEmpty(t, caps.RequiredCapabilities, "Profiler should require eBPF capabilities")
 	assert.False(t, caps.SupportsOneShot, "Profiler should not support one-shot collection")
@@ -88,9 +88,9 @@ func TestProfilerCollector_Constructor_IntervalValidation(t *testing.T) {
 
 func TestProfilerCollector_Setup(t *testing.T) {
 	tests := []struct {
-		name         string
+		name           string
 		profilerConfig collectors.ProfilerConfig
-		expectError bool
+		expectError    bool
 	}{
 		{
 			name: "Valid CPU profiler",
@@ -101,7 +101,7 @@ func TestProfilerCollector_Setup(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "Valid cache miss profiler", 
+			name: "Valid cache miss profiler",
 			profilerConfig: collectors.ProfilerConfig{
 				EventType:    collectors.ProfilerEventCacheMisses,
 				SamplePeriod: 100000,
@@ -146,7 +146,7 @@ func TestProfilerCollector_Setup(t *testing.T) {
 			require.NoError(t, err)
 
 			err = collector.Setup(tt.profilerConfig)
-			
+
 			if tt.expectError {
 				assert.Error(t, err)
 			} else {
@@ -165,7 +165,7 @@ func TestProfilerCollector_CPUProfiler(t *testing.T) {
 
 	collector, err := collectors.NewProfiler(logr.Discard(), config)
 	require.NoError(t, err)
-	
+
 	err = collector.Setup(collectors.ProfilerConfig{
 		EventType:    collectors.ProfilerEventCPUCycles,
 		SamplePeriod: 1000000,
@@ -183,7 +183,7 @@ func TestProfilerCollector_CacheMissProfiler(t *testing.T) {
 
 	collector, err := collectors.NewProfiler(logr.Discard(), config)
 	require.NoError(t, err)
-	
+
 	err = collector.Setup(collectors.ProfilerConfig{
 		EventType:    collectors.ProfilerEventCacheMisses,
 		SamplePeriod: 100000,
@@ -205,7 +205,7 @@ func TestProfilerCollector_LinuxOnly(t *testing.T) {
 
 	collector, err := collectors.NewProfiler(logr.Discard(), config)
 	require.NoError(t, err)
-	
+
 	err = collector.Setup(collectors.ProfilerConfig{
 		EventType:    collectors.ProfilerEventCPUCycles,
 		SamplePeriod: 1000000,
@@ -261,7 +261,7 @@ func TestProfilerCollector_MultipleSetup(t *testing.T) {
 		SamplePeriod: 10000000,
 	})
 	require.NoError(t, err)
-	
+
 	// Should use the last setup configuration
 }
 
