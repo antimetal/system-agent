@@ -1,0 +1,76 @@
+// Copyright 2024 Antimetal LLC
+// SPDX-License-Identifier: PolyForm-Shield-1.0.0
+
+syntax = "proto3";
+
+package performance;
+
+option go_package = "github.com/antimetal/agent/pkg/performance/proto";
+
+// ProfileBatch contains efficiently-packed profiling events
+// Events are binary-encoded in packed_events to maintain zero allocations
+message ProfileBatch {
+  // Batch collection timestamp in nanoseconds since Unix epoch
+  uint64 timestamp_ns = 1;
+  
+  // Number of CPUs on the system
+  uint32 cpu_count = 2;
+  
+  // Binary-packed ProfileEvents using efficient encoding
+  // Format (32 bytes per event):
+  // [0:8]   uint64 timestamp_ns     - Event timestamp
+  // [8:12]  int32  pid              - Process ID
+  // [12:16] int32  tid              - Thread ID  
+  // [16:20] int32  user_stack_id    - User stack trace ID
+  // [20:24] int32  kernel_stack_id  - Kernel stack trace ID
+  // [24:28] uint32 cpu              - CPU number
+  // [28:32] uint32 flags            - Event flags
+  bytes packed_events = 3;
+  
+  // Number of events in packed_events
+  uint32 event_count = 4;
+  
+  // Binary format version for backward compatibility
+  uint32 format_version = 5;
+  
+  // Number of events dropped due to buffer exhaustion
+  uint32 dropped_events = 6;
+  
+  // Optional: Node identifier for multi-node deployments
+  string node_name = 7;
+  
+  // Optional: Additional metadata
+  map<string, string> metadata = 8;
+}
+
+// ProfileStream is used for streaming profile batches
+message ProfileStreamRequest {
+  oneof payload {
+    ProfileBatch batch = 1;
+    ProfileHandshake handshake = 2;
+  }
+}
+
+// ProfileHandshake establishes stream parameters
+message ProfileHandshake {
+  // Client capabilities
+  uint32 supported_format_version = 1;
+  
+  // Requested sampling frequency in Hz
+  uint32 sampling_frequency_hz = 2;
+  
+  // Client identifier
+  string client_id = 3;
+}
+
+// ProfileStreamResponse acknowledges batches
+message ProfileStreamResponse {
+  // Sequence number of acknowledged batch
+  uint64 ack_sequence = 1;
+  
+  // Server can request rate adjustment
+  uint32 suggested_rate_hz = 2;
+  
+  // Error message if any
+  string error = 3;
+}
