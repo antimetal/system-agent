@@ -57,7 +57,7 @@ func (p *MinimalPool) Get() []byte {
 	case buf := <-p.buffers:
 		atomic.AddInt32(&p.stats.InUse, 1)
 		atomic.AddUint64(&p.stats.Gets, 1)
-		return buf[:0] // Reset length, keep capacity
+		return buf[:cap(buf)] // Return full capacity buffer
 	default:
 		// Pool exhausted - this is expected under load
 		atomic.AddUint64(&p.stats.Misses, 1)
@@ -80,7 +80,7 @@ func (p *MinimalPool) Put(buf []byte) {
 	atomic.AddUint64(&p.stats.Puts, 1)
 
 	select {
-	case p.buffers <- buf[:0]: // Reset buffer before returning
+	case p.buffers <- buf[:cap(buf)]: // Keep full capacity when returning
 		// Buffer returned to pool
 	default:
 		// Should never happen with 3 buffer limit

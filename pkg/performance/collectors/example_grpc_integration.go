@@ -9,8 +9,6 @@ package collectors
 import (
 	"context"
 	"fmt"
-
-	pb "github.com/antimetal/agent/pkg/performance/proto"
 )
 
 // ProfileStreamer demonstrates how to integrate the zero-allocation
