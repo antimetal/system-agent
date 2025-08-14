@@ -533,12 +533,6 @@ func (c *ProfilerCollector) collect(ctx context.Context) {
 }
 
 func (c *ProfilerCollector) readProfile(startTime time.Time) (*performance.ProfileStats, error) {
-	// Get stack traces map for lookups
-	stackTraces, ok := c.objs.Maps["stack_traces"]
-	if !ok {
-		return nil, errors.New("stack_traces map not found")
-	}
-
 	// Get dropped events counter
 	droppedEventsMap, ok := c.objs.Maps["dropped_events"]
 	if !ok {
