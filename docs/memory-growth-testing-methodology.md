@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document outlines the testing methodology for validating the eBPF-based memory growth monitor's functionality, performance, and accuracy. It includes test scenarios, metrics collection, and validation criteria.
+This document outlines the testing methodology for validating the RSS-stat eBPF-based memory growth monitor's functionality, performance, and accuracy using the kmem:rss_stat tracepoint. It includes test scenarios, metrics collection, and validation criteria.
 
 ## Test Environment Setup
 
@@ -26,6 +26,21 @@ sudo apt-get install linux-tools-generic bpftool
 ```
 
 ## Test Scenarios
+
+### RSS-stat Tracepoint Validation
+
+Verify that the kmem:rss_stat tracepoint is available and functioning:
+
+```bash
+# Check tracepoint availability
+sudo ls /sys/kernel/debug/tracing/events/kmem/rss_stat/
+
+# Verify tracepoint is firing
+sudo perf stat -e kmem:rss_stat -a sleep 1
+
+# Monitor RSS changes in real-time
+sudo perf trace -e kmem:rss_stat
+```
 
 ### 1. Synthetic Memory Leak Generator
 
@@ -290,11 +305,11 @@ done
 
 | Metric | Target | Test Method |
 |--------|--------|-------------|
-| CPU Overhead | <0.5% | 60-second measurement under load |
-| Memory Usage | <1MB userspace | RSS measurement |
-| Detection Latency | <5 seconds | Time to first event |
-| Event Rate | <100/sec | Ring buffer throughput |
-| Map Operations | <1000/sec | BPF map update rate |
+| CPU Overhead | To be measured | 60-second measurement under load |
+| Memory Usage | To be measured | RSS measurement |
+| Detection Latency | <10 seconds | Time to first event with 5s coalescing |
+| Event Rate | To be measured | Ring buffer throughput |
+| Map Operations | To be measured | BPF map update rate |
 
 ### Accuracy Targets
 
@@ -333,19 +348,19 @@ done
 
 ## Known Issues and Limitations
 
-### Current Implementation Issues
+### Current Implementation Notes
 
-1. **RSS Reading**: Currently using `total_vm` instead of actual RSS
-   - Impact: Memory values are virtual memory, not resident
-   - Fix: Need to read proper RSS counters from mm_struct
+1. **RSS Tracking**: Using kmem:rss_stat tracepoint for exact RSS values
+   - Provides accurate resident memory tracking
+   - Tracks per-memory-type changes (anon/file/swap/shmem)
 
 2. **Process Filtering**: No container/cgroup awareness yet
    - Impact: Cannot correlate with container limits
    - Fix: Add cgroup path resolution
 
-3. **Event Rate**: Fixed 5-second summary interval
-   - Impact: May miss short-lived spikes
-   - Fix: Configurable intervals and threshold-based events
+3. **Event Coalescing**: 5-second coalescing threshold
+   - Reduces noise from rapid RSS fluctuations
+   - Configurable intervals and threshold-based events planned
 
 ### Test Environment Limitations
 
