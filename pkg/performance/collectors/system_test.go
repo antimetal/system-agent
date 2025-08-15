@@ -218,7 +218,7 @@ func TestSystemStatsCollector_Constructor(t *testing.T) {
 				assert.Equal(t, performance.MetricTypeSystem, collector.Type())
 				assert.Equal(t, "System Activity Collector", collector.Name())
 				capabilities := collector.Capabilities()
-				assert.False(t, capabilities.RequiresRoot)
+				assert.Nil(t, capabilities.RequiredCapabilities)
 			}
 		})
 	}
@@ -445,8 +445,7 @@ func TestSystemStatsCollector_InterfaceCompliance(t *testing.T) {
 	capabilities := collector.Capabilities()
 	assert.True(t, capabilities.SupportsOneShot)
 	assert.False(t, capabilities.SupportsContinuous)
-	assert.False(t, capabilities.RequiresRoot)
-	assert.False(t, capabilities.RequiresEBPF)
+	assert.Nil(t, capabilities.RequiredCapabilities)
 	assert.Equal(t, "2.6.0", capabilities.MinKernelVersion)
 }
 

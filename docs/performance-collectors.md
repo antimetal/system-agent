@@ -23,11 +23,42 @@ type ContinuousCollector interface {
 
 ### Constructor Pattern
 All collectors must follow a consistent constructor pattern with:
-1. Absolute path validation for HostProcPath and HostSysPath
-2. Capability definition (SupportsOneShot, SupportsContinuous, RequiresRoot, etc.)
-3. Pre-computed paths for efficiency
+1. **Path validation** using `config.Validate()` with appropriate options
+2. **Capability definition** including Linux capabilities if needed
+3. **Pre-computed paths** for efficiency
 
-See `pkg/performance/collectors/load.go` for a reference implementation.
+Example constructor pattern:
+```go
+func NewMyCollector(logger logr.Logger, config performance.CollectionConfig) (*MyCollector, error) {
+    // Use centralized path validation
+    if err := config.Validate(performance.ValidateOptions{
+        RequireHostProcPath: true,
+        RequireHostSysPath:  false,
+    }); err != nil {
+        return nil, err
+    }
+
+    capabilities := performance.CollectorCapabilities{
+        SupportsOneShot:      true,
+        SupportsContinuous:   false,
+        RequiredCapabilities: nil, // or specific capabilities if needed
+        MinKernelVersion:     "2.6.0",
+    }
+
+    return &MyCollector{
+        BaseCollector: performance.NewBaseCollector(
+            performance.MetricTypeXXX,
+            "My Collector",
+            logger,
+            config,
+            capabilities,
+        ),
+        // ... collector-specific fields
+    }, nil
+}
+```
+
+See `pkg/performance/collectors/load.go` and `pkg/performance/collectors/process.go` for reference implementations.
 
 ### Compile-Time Interface Checks
 Every collector must include a compile-time interface check:
@@ -50,13 +81,30 @@ type BaseCollector struct {
 ### Capabilities System
 ```go
 type CollectorCapabilities struct {
-    SupportsOneShot    bool
-    SupportsContinuous bool
-    RequiresRoot       bool
-    RequiresEBPF       bool
-    MinKernelVersion   string
+    SupportsOneShot      bool
+    SupportsContinuous   bool
+    RequiredCapabilities []capabilities.Capability
+    MinKernelVersion     string
 }
 ```
+
+The `RequiredCapabilities` field specifies Linux capabilities needed by the collector:
+- `CAP_SYS_ADMIN` - Required for eBPF on kernels < 5.8 and various system operations
+- `CAP_BPF` - Required for eBPF programs on kernels ≥ 5.8  
+- `CAP_PERFMON` - Required for eBPF performance monitoring on kernels ≥ 5.8
+- `CAP_SYSLOG` - Required for kernel message collection
+
+#### eBPF Capability Detection
+The system automatically detects kernel version and returns appropriate capabilities:
+```go
+// For kernels ≥ 5.8
+requiredCaps := []capabilities.Capability{capabilities.CAP_BPF, capabilities.CAP_PERFMON}
+
+// For kernels < 5.8  
+requiredCaps := []capabilities.Capability{capabilities.CAP_SYS_ADMIN}
+```
+
+Use `capabilities.GetEBPFCapabilities()` to get the correct capabilities for the current kernel.
 
 ## Error Handling Strategy
 
@@ -195,12 +243,36 @@ When adding a new performance collector:
    make gen-license-headers     # Ensure license headers
    ```
 
+6. **Integration testing** (optional):
+   ```bash
+   # Test on real Linux systems using LVH (Lima Virtual Host) framework
+   make build-ebpf              # Build eBPF programs if needed
+   ./scripts/test-pr-in-vm.sh   # Test in multiple kernel versions
+   ```
+
 ## Common Collector Patterns
 
 - **Reading Single Value Files**: Use `os.ReadFile()` with `strings.TrimSpace()`
 - **Parsing Multi-Line Files**: Use `bufio.Scanner` with error checking
 - **Handling Optional Metadata**: Read without failing, log at V(2) if missing
+- **NUMA-aware Collection**: Use NUMA topology information for performance metrics
+- **Hardware vs Runtime Split**: Separate static hardware info from dynamic performance stats
 - See working examples in `pkg/performance/collectors/` directory
+
+### Recent Enhancements
+
+#### NUMA Support Improvements
+- **Split collectors**: Hardware info (one-shot) vs runtime statistics (continuous)
+- **NUMA distance matrices**: Memory access latency information
+- **NUMA balancing stats**: Automatic NUMA balancing metrics from `/proc/sys/kernel/numa_balancing_stats`
+- **Enhanced memory info**: NUMA topology integration with memory collectors
+
+#### Comprehensive vmstat Coverage  
+Enhanced system-level metrics following Brendan Gregg's 60-second methodology:
+- **Memory statistics**: Page faults, allocation failures, reclaim metrics
+- **I/O statistics**: Block device and swap I/O counters
+- **CPU statistics**: Context switches, interrupts, process creation
+- **Kernel statistics**: Memory management and scheduler metrics
 
 ## Continuous Collector Pattern
 
@@ -314,10 +386,24 @@ This pattern ensures collectors integrate well with Kubernetes controllers and o
 ## Example Collectors
 
 For complete implementation examples, see:
-- `pkg/performance/collectors/load.go` - Simple /proc/loadavg collector
-- `pkg/performance/collectors/network.go` - Complex multi-file collector
-- `pkg/performance/collectors/process.go` - Continuous collector implementation
-- `pkg/performance/collectors/cpu_info.go` - Hardware information collector
+
+### Basic Collectors
+- `pkg/performance/collectors/load.go` - Simple /proc/loadavg collector with path validation
+- `pkg/performance/collectors/memory.go` - Memory statistics from /proc/meminfo and /proc/vmstat
+
+### Advanced Collectors
+- `pkg/performance/collectors/network.go` - Complex multi-file collector with optional metadata
+- `pkg/performance/collectors/process.go` - Continuous collector with CPU percentage tracking
+- `pkg/performance/collectors/system.go` - Comprehensive vmstat metrics collector
+
+### Hardware Information Collectors
+- `pkg/performance/collectors/cpu_info.go` - CPU hardware information (one-shot)
+- `pkg/performance/collectors/memory_info.go` - Memory topology with NUMA support
+- `pkg/performance/collectors/disk_info.go` - Storage device information
+- `pkg/performance/collectors/network_info.go` - Network interface hardware details
+
+### NUMA-Aware Collectors
+- `pkg/performance/collectors/numa_stats.go` - NUMA runtime statistics and balancing metrics
 
 ## Additional Resources
 

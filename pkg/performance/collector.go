@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/antimetal/agent/pkg/performance/capabilities"
 	"github.com/go-logr/logr"
 )
 
@@ -51,11 +52,20 @@ type NewContinuousCollector func(logr.Logger, CollectionConfig) (ContinuousColle
 type NewPointCollector func(logr.Logger, CollectionConfig) (PointCollector, error)
 
 type CollectorCapabilities struct {
-	SupportsOneShot    bool
-	SupportsContinuous bool
-	RequiresRoot       bool
-	RequiresEBPF       bool
-	MinKernelVersion   string
+	SupportsOneShot      bool
+	SupportsContinuous   bool
+	RequiredCapabilities []capabilities.Capability
+	MinKernelVersion     string
+}
+
+// CanRun checks if the collector can run with current process capabilities
+func (c CollectorCapabilities) CanRun() (bool, []capabilities.Capability, error) {
+	if len(c.RequiredCapabilities) == 0 {
+		return true, nil, nil
+	}
+
+	hasAll, missing, err := capabilities.HasAllCapabilities(c.RequiredCapabilities)
+	return hasAll, missing, err
 }
 
 // BaseCollector provides common functionality for all collectors
@@ -147,11 +157,10 @@ func NewContinuousPointCollector(
 ) *ContinuousPointCollector {
 	pointCaps := pointCollector.Capabilities()
 	caps := CollectorCapabilities{
-		SupportsOneShot:    false,
-		SupportsContinuous: true,
-		RequiresRoot:       pointCaps.RequiresRoot,
-		RequiresEBPF:       pointCaps.RequiresEBPF,
-		MinKernelVersion:   pointCaps.MinKernelVersion,
+		SupportsOneShot:      false,
+		SupportsContinuous:   true,
+		RequiredCapabilities: pointCaps.RequiredCapabilities,
+		MinKernelVersion:     pointCaps.MinKernelVersion,
 	}
 	return &ContinuousPointCollector{
 		BaseContinuousCollector: NewBaseContinuousCollector(
@@ -260,11 +269,10 @@ func NewOnceContinuousCollector(
 			logger,
 			config,
 			CollectorCapabilities{
-				SupportsOneShot:    true,
-				SupportsContinuous: false,
-				RequiresRoot:       pointCaps.RequiresRoot,
-				RequiresEBPF:       pointCaps.RequiresEBPF,
-				MinKernelVersion:   pointCaps.MinKernelVersion,
+				SupportsOneShot:      true,
+				SupportsContinuous:   false,
+				RequiredCapabilities: pointCaps.RequiredCapabilities,
+				MinKernelVersion:     pointCaps.MinKernelVersion,
 			},
 		),
 	}
