@@ -11,7 +11,6 @@ package kernel_test
 import (
 	"context"
 	"os"
-	"runtime"
 	"testing"
 	"time"
 
@@ -33,10 +32,6 @@ type KernelFeature struct {
 }
 
 func TestKernelCompatibility(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("Kernel compatibility tests only run on Linux")
-	}
-
 	currentKernel, err := kernel.GetCurrentVersion()
 	require.NoError(t, err, "Failed to get current kernel version")
 
@@ -102,10 +97,6 @@ func TestKernelCompatibility(t *testing.T) {
 }
 
 func TestCollectorCompatibility(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("Collector compatibility tests only run on Linux")
-	}
-
 	currentKernel, err := kernel.GetCurrentVersion()
 	require.NoError(t, err, "Failed to get current kernel version")
 
@@ -165,9 +156,10 @@ func TestCollectorCompatibility(t *testing.T) {
 
 	for _, tc := range collectorTests {
 		t.Run(tc.name, func(t *testing.T) {
-			// Skip if we don't have root and collector requires it
-			if tc.requiresRoot && os.Geteuid() != 0 {
-				t.Skipf("Skipping %s: requires root", tc.name)
+			// Skip if collector requires root but mark it as a requirement
+			if tc.requiresRoot {
+				// Integration tests should run with proper permissions
+				t.Logf("Note: %s requires root permissions", tc.name)
 			}
 
 			// Check if kernel version is sufficient
@@ -221,9 +213,6 @@ func TestCollectorCompatibility(t *testing.T) {
 }
 
 func TestProcFileCompatibility(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("Proc file compatibility tests only run on Linux")
-	}
 
 	// Test that expected /proc files exist
 	procFiles := []struct {
