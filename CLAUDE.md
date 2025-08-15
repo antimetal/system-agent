@@ -146,6 +146,20 @@ The Antimetal Agent includes a comprehensive performance monitoring system that 
 
 For detailed performance collector development including implementation patterns, testing methodology, continuous collectors, and examples, see **[docs/performance-collectors.md](docs/performance-collectors.md)**.
 
+### Container Metrics Collection
+
+The agent supports container-level metrics via cgroup collectors:
+
+- **Automatic version detection**: Supports both cgroup v1 and v2
+- **Multi-runtime support**: Docker, containerd, CRI-O, Podman
+- **Zero-configuration**: Auto-discovers containers without runtime APIs
+- **Graceful degradation**: Handles missing files and permissions
+
+For implementation details, see:
+- **[Cgroup Compatibility Guide](docs/cgroup-compatibility.md)** - Version support and runtime compatibility matrix
+- **[Cgroup Collectors Design](docs/cgroup-collectors-design.md)** - Architecture and implementation details
+- **[Testing Guide](docs/testing-cgroup-collectors.md)** - How to test cgroup collectors
+
 ## Resource Store Architecture
 
 ### BadgerDB Integration
