@@ -25,9 +25,8 @@ import (
 
 func TestExecSnoopCollector_Integration(t *testing.T) {
 	// Remove memory limit for eBPF
-	if err := rlimit.RemoveMemlock(); err != nil {
-		t.Logf("Warning: Failed to remove memlock limit: %v", err)
-	}
+	err := rlimit.RemoveMemlock()
+	require.NoError(t, err, "Failed to remove memlock limit - integration tests require proper permissions")
 
 	logger := logr.Discard()
 	config := performance.DefaultCollectionConfig()

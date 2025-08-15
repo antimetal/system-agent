@@ -11,7 +11,6 @@ package core_test
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/antimetal/agent/pkg/ebpf/core"
@@ -25,14 +24,6 @@ import (
 )
 
 func TestEBPFProgramLoading(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("eBPF tests only run on Linux")
-	}
-
-	if os.Geteuid() != 0 {
-		t.Skip("eBPF tests require root privileges")
-	}
-
 	// Remove memory limit for eBPF
 	if err := rlimit.RemoveMemlock(); err != nil {
 		t.Logf("Warning: Failed to remove memlock limit: %v", err)
@@ -166,14 +157,6 @@ func TestEBPFProgramLoading(t *testing.T) {
 }
 
 func TestEBPFCollectorPrograms(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("eBPF tests only run on Linux")
-	}
-
-	if os.Geteuid() != 0 {
-		t.Skip("eBPF collector tests require root privileges")
-	}
-
 	currentKernel, err := kernel.GetCurrentVersion()
 	require.NoError(t, err)
 
@@ -247,4 +230,3 @@ func TestEBPFCollectorPrograms(t *testing.T) {
 		})
 	}
 }
-
