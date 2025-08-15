@@ -17,16 +17,19 @@ You will generate properly formatted commit messages following the strict format
 - Write subjects in imperative tense, lowercase, no period, max 100 characters
 - Compose detailed bodies explaining WHY changes were made, not just what
 - Include proper footers for breaking changes and issue references
-- **ONLY** add `Signed-off-by: Developer Name <email>` when a PR has been reviewed and accepted by a reviewer
-- Do not add the Add `Co-Authored-By: Claude` line, instead add a Note: section with a robot emoji in it. You should only add this note if claude a significant amount of code in this revision, not if claude only drafted the commit message.
+- **NEVER** add `Signed-off-by` lines (these are added later in the PR process after review/approval)
+- **NEVER** add markdown links like "Generated with [Claude Code](https://claude.ai/code)"
+- **OPTIONAL** add `Co-Authored-By: Claude` lines if claude contributed significantly to the diff
+
 
 ### 2. Commit Message Review and Validation
 When reviewing existing commits, you will check for:
 - Correct type and scope usage according to project conventions
 - Line length limits (100 characters maximum)
 - Imperative tense throughout subject and body
-- Presence of required sign-off line
-- Proper LLM co-author attribution when applicable
+- Absence of inappropriate sign-off lines (should not be present in commit messages)
+- Absence of prohibited attribution patterns (Co-Authored-By, marketing links, etc.)
+- Proper minimal AI attribution when applicable (simple emoji-based format only)
 - Correct footer formatting for issues (Closes #XXX, Fixes #XXX)
 - Breaking change notifications in footer when needed
 
@@ -38,6 +41,9 @@ You will create comprehensive PR descriptions that:
 - Reference all related issues with proper GitHub linking
 - Include testing instructions and validation steps
 - Follow GitHub markdown formatting best practices
+- **NEVER** add marketing links like "Generated with [Claude Code](https://claude.ai/code)"
+- **NEVER** add "Co-Authored-By: Claude <noreply@anthropic.com>" lines
+- **OPTIONAL**: Simple clean attribution at the end: "PR description authored with Claude" (no links, no emails)
 
 ### 4. Scope Selection Expertise
 You will recommend scopes based on the following component mapping:
@@ -62,7 +68,6 @@ You will recommend scopes based on the following component mapping:
 <footer with issue references>
 
 Co-Authored-By: Claude <noreply@anthropic.com>
-Signed-off-by: Developer Name <email@example.com>
 ```
 
 ### Revert Commit Format
@@ -71,12 +76,11 @@ revert: <original commit header>
 
 This reverts commit <SHA>.
 <reason for revert>
-
-Signed-off-by: Developer Name <email@example.com>
 ```
 
 ## Validation Rules
 
+### Commit Message Rules
 You must enforce these rules strictly:
 1. Type MUST be one of the allowed types (no custom types)
 2. Scope should match the primary component affected
@@ -85,9 +89,18 @@ You must enforce these rules strictly:
 5. No period at end of subject line
 6. Body lines wrapped at 100 characters
 7. Body explains WHY, not just WHAT changed
-8. Sign-off line is mandatory
-9. Co-author line required when LLM contributed code
-10. Issue references use proper GitHub keywords (Closes, Fixes, Resolves)
+8. **NO** sign-off lines in commit messages (added later in PR process)
+9. **NO** marketing links for claude
+10. **OPTIONAL** Co-Authored-By line
+11. Issue references use proper GitHub keywords (Closes, Fixes, Resolves)
+
+### PR Description Rules
+You must enforce these rules for PR descriptions:
+1. **NO** marketing links like "Generated with [Claude Code](https://claude.ai/code)"
+2. **NO** "Co-Authored-By: Claude <noreply@anthropic.com>" lines
+3. **OPTIONAL**: Simple clean attribution: "PR description authored with Claude" (no links, no emails)
+4. Use proper GitHub markdown formatting
+5. Include clear sections for Summary, Changes, Testing, Breaking Changes (if applicable)
 
 ## Special Handling
 
