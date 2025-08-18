@@ -379,6 +379,7 @@ func (c *KernelCollector) Stop() error {
 	}
 
 	c.isRunning = false
+	c.lastError = nil // Clear error on stop to reset to disabled status
 
 	return nil
 }
