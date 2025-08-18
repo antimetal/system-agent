@@ -1195,6 +1195,7 @@ func (x *NetworkInterfaceNode) GetCarrier() bool {
 }
 
 // Contains represents hierarchical containment relationship
+// Inverse of ContainedBy.
 type Contains struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Type of containment
@@ -1240,6 +1241,53 @@ func (x *Contains) GetType() ContainmentType {
 	return ContainmentType_CONTAINMENT_TYPE_UNKNOWN
 }
 
+// ContainedBy represents being contained within another component
+// Inverse of Contains.
+type ContainedBy struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Type of containment
+	Type          ContainmentType `protobuf:"varint,1,opt,name=type,proto3,enum=antimetal.hardware.v1.ContainmentType" json:"type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ContainedBy) Reset() {
+	*x = ContainedBy{}
+	mi := &file_antimetal_hardware_v1_hardware_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ContainedBy) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ContainedBy) ProtoMessage() {}
+
+func (x *ContainedBy) ProtoReflect() protoreflect.Message {
+	mi := &file_antimetal_hardware_v1_hardware_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ContainedBy.ProtoReflect.Descriptor instead.
+func (*ContainedBy) Descriptor() ([]byte, []int) {
+	return file_antimetal_hardware_v1_hardware_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ContainedBy) GetType() ContainmentType {
+	if x != nil {
+		return x.Type
+	}
+	return ContainmentType_CONTAINMENT_TYPE_UNKNOWN
+}
+
 // NUMAAffinity represents NUMA node affinity
 type NUMAAffinity struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1253,7 +1301,7 @@ type NUMAAffinity struct {
 
 func (x *NUMAAffinity) Reset() {
 	*x = NUMAAffinity{}
-	mi := &file_antimetal_hardware_v1_hardware_proto_msgTypes[9]
+	mi := &file_antimetal_hardware_v1_hardware_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1265,7 +1313,7 @@ func (x *NUMAAffinity) String() string {
 func (*NUMAAffinity) ProtoMessage() {}
 
 func (x *NUMAAffinity) ProtoReflect() protoreflect.Message {
-	mi := &file_antimetal_hardware_v1_hardware_proto_msgTypes[9]
+	mi := &file_antimetal_hardware_v1_hardware_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1278,7 +1326,7 @@ func (x *NUMAAffinity) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NUMAAffinity.ProtoReflect.Descriptor instead.
 func (*NUMAAffinity) Descriptor() ([]byte, []int) {
-	return file_antimetal_hardware_v1_hardware_proto_rawDescGZIP(), []int{9}
+	return file_antimetal_hardware_v1_hardware_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *NUMAAffinity) GetNodeId() int32 {
@@ -1308,7 +1356,7 @@ type SocketSharing struct {
 
 func (x *SocketSharing) Reset() {
 	*x = SocketSharing{}
-	mi := &file_antimetal_hardware_v1_hardware_proto_msgTypes[10]
+	mi := &file_antimetal_hardware_v1_hardware_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1320,7 +1368,7 @@ func (x *SocketSharing) String() string {
 func (*SocketSharing) ProtoMessage() {}
 
 func (x *SocketSharing) ProtoReflect() protoreflect.Message {
-	mi := &file_antimetal_hardware_v1_hardware_proto_msgTypes[10]
+	mi := &file_antimetal_hardware_v1_hardware_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1333,7 +1381,7 @@ func (x *SocketSharing) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SocketSharing.ProtoReflect.Descriptor instead.
 func (*SocketSharing) Descriptor() ([]byte, []int) {
-	return file_antimetal_hardware_v1_hardware_proto_rawDescGZIP(), []int{10}
+	return file_antimetal_hardware_v1_hardware_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *SocketSharing) GetPhysicalId() int32 {
@@ -1351,6 +1399,7 @@ func (x *SocketSharing) GetSocketId() int32 {
 }
 
 // BusConnection represents hardware bus connections
+// Inverse of ConnectedTo.
 type BusConnection struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Bus type
@@ -1363,7 +1412,7 @@ type BusConnection struct {
 
 func (x *BusConnection) Reset() {
 	*x = BusConnection{}
-	mi := &file_antimetal_hardware_v1_hardware_proto_msgTypes[11]
+	mi := &file_antimetal_hardware_v1_hardware_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1375,7 +1424,7 @@ func (x *BusConnection) String() string {
 func (*BusConnection) ProtoMessage() {}
 
 func (x *BusConnection) ProtoReflect() protoreflect.Message {
-	mi := &file_antimetal_hardware_v1_hardware_proto_msgTypes[11]
+	mi := &file_antimetal_hardware_v1_hardware_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1388,7 +1437,7 @@ func (x *BusConnection) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BusConnection.ProtoReflect.Descriptor instead.
 func (*BusConnection) Descriptor() ([]byte, []int) {
-	return file_antimetal_hardware_v1_hardware_proto_rawDescGZIP(), []int{11}
+	return file_antimetal_hardware_v1_hardware_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *BusConnection) GetBusType() BusType {
@@ -1399,6 +1448,62 @@ func (x *BusConnection) GetBusType() BusType {
 }
 
 func (x *BusConnection) GetBusAddress() string {
+	if x != nil {
+		return x.BusAddress
+	}
+	return ""
+}
+
+// ConnectedTo represents being connected to a bus
+// Inverse of BusConnection.
+type ConnectedTo struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Bus type
+	BusType BusType `protobuf:"varint,1,opt,name=bus_type,json=busType,proto3,enum=antimetal.hardware.v1.BusType" json:"bus_type,omitempty"`
+	// Optional bus address
+	BusAddress    string `protobuf:"bytes,2,opt,name=bus_address,json=busAddress,proto3" json:"bus_address,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConnectedTo) Reset() {
+	*x = ConnectedTo{}
+	mi := &file_antimetal_hardware_v1_hardware_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConnectedTo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConnectedTo) ProtoMessage() {}
+
+func (x *ConnectedTo) ProtoReflect() protoreflect.Message {
+	mi := &file_antimetal_hardware_v1_hardware_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConnectedTo.ProtoReflect.Descriptor instead.
+func (*ConnectedTo) Descriptor() ([]byte, []int) {
+	return file_antimetal_hardware_v1_hardware_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ConnectedTo) GetBusType() BusType {
+	if x != nil {
+		return x.BusType
+	}
+	return BusType_BUS_TYPE_UNKNOWN
+}
+
+func (x *ConnectedTo) GetBusAddress() string {
 	if x != nil {
 		return x.BusAddress
 	}
@@ -1488,6 +1593,8 @@ const file_antimetal_hardware_v1_hardware_proto_rawDesc = "" +
 	"oper_state\x18\b \x01(\x0e2'.antimetal.hardware.v1.OperationalStateR\toperState\x12\x18\n" +
 	"\acarrier\x18\t \x01(\bR\acarrier\"F\n" +
 	"\bContains\x12:\n" +
+	"\x04type\x18\x01 \x01(\x0e2&.antimetal.hardware.v1.ContainmentTypeR\x04type\"I\n" +
+	"\vContainedBy\x12:\n" +
 	"\x04type\x18\x01 \x01(\x0e2&.antimetal.hardware.v1.ContainmentTypeR\x04type\"C\n" +
 	"\fNUMAAffinity\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\x05R\x06nodeId\x12\x1a\n" +
@@ -1497,6 +1604,10 @@ const file_antimetal_hardware_v1_hardware_proto_rawDesc = "" +
 	"physicalId\x12\x1b\n" +
 	"\tsocket_id\x18\x02 \x01(\x05R\bsocketId\"k\n" +
 	"\rBusConnection\x129\n" +
+	"\bbus_type\x18\x01 \x01(\x0e2\x1e.antimetal.hardware.v1.BusTypeR\abusType\x12\x1f\n" +
+	"\vbus_address\x18\x02 \x01(\tR\n" +
+	"busAddress\"i\n" +
+	"\vConnectedTo\x129\n" +
 	"\bbus_type\x18\x01 \x01(\x0e2\x1e.antimetal.hardware.v1.BusTypeR\abusType\x12\x1f\n" +
 	"\vbus_address\x18\x02 \x01(\tR\n" +
 	"busAddress*\x93\x03\n" +
@@ -1575,7 +1686,7 @@ func file_antimetal_hardware_v1_hardware_proto_rawDescGZIP() []byte {
 }
 
 var file_antimetal_hardware_v1_hardware_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_antimetal_hardware_v1_hardware_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_antimetal_hardware_v1_hardware_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_antimetal_hardware_v1_hardware_proto_goTypes = []any{
 	(Architecture)(0),             // 0: antimetal.hardware.v1.Architecture
 	(InterfaceType)(0),            // 1: antimetal.hardware.v1.InterfaceType
@@ -1592,24 +1703,28 @@ var file_antimetal_hardware_v1_hardware_proto_goTypes = []any{
 	(*DiskPartitionNode)(nil),     // 12: antimetal.hardware.v1.DiskPartitionNode
 	(*NetworkInterfaceNode)(nil),  // 13: antimetal.hardware.v1.NetworkInterfaceNode
 	(*Contains)(nil),              // 14: antimetal.hardware.v1.Contains
-	(*NUMAAffinity)(nil),          // 15: antimetal.hardware.v1.NUMAAffinity
-	(*SocketSharing)(nil),         // 16: antimetal.hardware.v1.SocketSharing
-	(*BusConnection)(nil),         // 17: antimetal.hardware.v1.BusConnection
-	(*timestamppb.Timestamp)(nil), // 18: google.protobuf.Timestamp
+	(*ContainedBy)(nil),           // 15: antimetal.hardware.v1.ContainedBy
+	(*NUMAAffinity)(nil),          // 16: antimetal.hardware.v1.NUMAAffinity
+	(*SocketSharing)(nil),         // 17: antimetal.hardware.v1.SocketSharing
+	(*BusConnection)(nil),         // 18: antimetal.hardware.v1.BusConnection
+	(*ConnectedTo)(nil),           // 19: antimetal.hardware.v1.ConnectedTo
+	(*timestamppb.Timestamp)(nil), // 20: google.protobuf.Timestamp
 }
 var file_antimetal_hardware_v1_hardware_proto_depIdxs = []int32{
 	0,  // 0: antimetal.hardware.v1.SystemNode.architecture:type_name -> antimetal.hardware.v1.Architecture
-	18, // 1: antimetal.hardware.v1.SystemNode.boot_time:type_name -> google.protobuf.Timestamp
+	20, // 1: antimetal.hardware.v1.SystemNode.boot_time:type_name -> google.protobuf.Timestamp
 	3,  // 2: antimetal.hardware.v1.NetworkInterfaceNode.duplex:type_name -> antimetal.hardware.v1.DuplexMode
 	1,  // 3: antimetal.hardware.v1.NetworkInterfaceNode.type:type_name -> antimetal.hardware.v1.InterfaceType
 	4,  // 4: antimetal.hardware.v1.NetworkInterfaceNode.oper_state:type_name -> antimetal.hardware.v1.OperationalState
 	5,  // 5: antimetal.hardware.v1.Contains.type:type_name -> antimetal.hardware.v1.ContainmentType
-	2,  // 6: antimetal.hardware.v1.BusConnection.bus_type:type_name -> antimetal.hardware.v1.BusType
-	7,  // [7:7] is the sub-list for method output_type
-	7,  // [7:7] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	5,  // 6: antimetal.hardware.v1.ContainedBy.type:type_name -> antimetal.hardware.v1.ContainmentType
+	2,  // 7: antimetal.hardware.v1.BusConnection.bus_type:type_name -> antimetal.hardware.v1.BusType
+	2,  // 8: antimetal.hardware.v1.ConnectedTo.bus_type:type_name -> antimetal.hardware.v1.BusType
+	9,  // [9:9] is the sub-list for method output_type
+	9,  // [9:9] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_antimetal_hardware_v1_hardware_proto_init() }
@@ -1623,7 +1738,7 @@ func file_antimetal_hardware_v1_hardware_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_antimetal_hardware_v1_hardware_proto_rawDesc), len(file_antimetal_hardware_v1_hardware_proto_rawDesc)),
 			NumEnums:      6,
-			NumMessages:   12,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

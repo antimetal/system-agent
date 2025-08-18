@@ -10,7 +10,7 @@ managed:
     - file_option: go_package_prefix
       module: buf.build/googleapis/googleapis
 inputs:
-  - directory: ../jra3-apis/api
+  - module: buf.build/antimetal/apis
 plugins:
   - remote: buf.build/protocolbuffers/go:v1.36.6
     out: pkg/api

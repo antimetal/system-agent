@@ -1,9 +1,7 @@
-# Mark generated protobuf files as binary/generated
-pkg/api/**/*.pb.go linguist-generated=true binary
-pkg/api/**/*_grpc.pb.go linguist-generated=true binary
+# Mark generated protobuf files as binary to keep diffs clean
+*.pb.go binary
+*_grpc.pb.go binary
 
-# Alternative: Mark entire pkg/api directory as generated
-# pkg/api/** linguist-generated=true
-
-# Mark protobuf source files for proper diff handling
-*.proto diff=proto
+# Alternative: Mark as linguist-generated for GitHub stats
+*.pb.go linguist-generated
+*_grpc.pb.go linguist-generated
