@@ -9,7 +9,9 @@ package collectors
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -cflags "-I../../../ebpf/include -Wall -Werror -g -O2 -D__TARGET_ARCH_x86 -fdebug-types-section -fno-stack-protector" -target bpfel profiler ../../../ebpf/src/profiler.bpf.c -- -I../../../ebpf/include
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"os"
@@ -23,6 +25,7 @@ import (
 	"github.com/antimetal/agent/pkg/performance/capabilities"
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
+	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/go-logr/logr"
 )
@@ -124,6 +127,7 @@ type ProfilerCollector struct {
 	coreManager   *core.Manager
 	objs          *ebpf.Collection
 	perfLinks     []link.Link
+	ringReader    *ringbuf.Reader
 	outputChan    chan any
 	stopChan      chan struct{}
 	wg            sync.WaitGroup
@@ -137,7 +141,9 @@ type ProfilerCollector struct {
 	resolvedEventConfig *PerfEventConfig // Resolved event configuration
 
 	// Statistics
-	droppedSamples uint64 // Atomic counter for dropped samples
+	droppedSamples  uint64 // Atomic counter for dropped samples
+	eventsProcessed uint64 // Atomic counter for processed events
+	ringBufferFull  uint64 // Atomic counter for ring buffer full events
 }
 
 // NewProfiler creates a new profiler collector that requires Setup() before use
@@ -370,8 +376,22 @@ func (c *ProfilerCollector) Start(ctx context.Context) (<-chan any, error) {
 		c.perfLinks = append(c.perfLinks, perfLink)
 	}
 
+	// Set up ring buffer reader
+	eventsMap, ok := c.objs.Maps["events"]
+	if !ok {
+		c.cleanup()
+		return nil, errors.New("events ring buffer map not found")
+	}
+
+	c.ringReader, err = ringbuf.NewReader(eventsMap)
+	if err != nil {
+		c.cleanup()
+		return nil, fmt.Errorf("creating ring buffer reader: %w", err)
+	}
+
 	c.outputChan = make(chan any, c.channelSize)
-	c.wg.Add(1)
+	c.wg.Add(2) // One for ring buffer reader, one for periodic collection
+	go c.readRingBuffer(ctx)
 	go c.collect(ctx)
 
 	c.SetStatus(performance.CollectorStatusActive)
@@ -400,6 +420,12 @@ func (c *ProfilerCollector) Stop() error {
 }
 
 func (c *ProfilerCollector) cleanup() {
+	// Close ring buffer reader
+	if c.ringReader != nil {
+		c.ringReader.Close()
+		c.ringReader = nil
+	}
+
 	// Close perf links
 	for _, link := range c.perfLinks {
 		if link != nil {
@@ -412,6 +438,54 @@ func (c *ProfilerCollector) cleanup() {
 	if c.objs != nil {
 		c.objs.Close()
 		c.objs = nil
+	}
+}
+
+// readRingBuffer continuously reads events from the ring buffer
+func (c *ProfilerCollector) readRingBuffer(ctx context.Context) {
+	defer c.wg.Done()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-c.stopChan:
+			return
+		default:
+			record, err := c.ringReader.Read()
+			if err != nil {
+				if errors.Is(err, ringbuf.ErrClosed) {
+					return
+				}
+				c.Logger().Error(err, "reading from ring buffer")
+				continue
+			}
+
+			// Parse the event
+			if len(record.RawSample) < 32 {
+				c.Logger().Error(nil, "event too small", "size", len(record.RawSample))
+				continue
+			}
+
+			// Parse event using binary.Read for proper alignment
+			var event ProfileEvent
+			reader := bytes.NewReader(record.RawSample)
+			if err := binary.Read(reader, binary.LittleEndian, &event); err != nil {
+				c.Logger().Error(err, "parsing event")
+				continue
+			}
+
+			atomic.AddUint64(&c.eventsProcessed, 1)
+
+			// Process event (we'll aggregate in collect method)
+			// For now, just count the events
+			if event.Flags&ProfileFlagUserStackTruncated != 0 {
+				c.Logger().V(2).Info("user stack truncated", "pid", event.PID)
+			}
+			if event.Flags&ProfileFlagKernelStackTruncated != 0 {
+				c.Logger().V(2).Info("kernel stack truncated", "pid", event.PID)
+			}
+		}
 	}
 }
 
@@ -437,6 +511,9 @@ func (c *ProfilerCollector) collect(ctx context.Context) {
 				continue
 			}
 
+			// Add ring buffer statistics to existing profile
+			profile.LostSamples = atomic.LoadUint64(&c.ringBufferFull)
+
 			select {
 			case c.outputChan <- profile:
 			case <-ctx.Done():
@@ -448,21 +525,34 @@ func (c *ProfilerCollector) collect(ctx context.Context) {
 				atomic.AddUint64(&c.droppedSamples, 1)
 				c.Logger().V(1).Info("dropping profile, channel full")
 			}
+
+			// Reset start time for next collection
+			startTime = time.Now()
 		}
 	}
 }
 
 func (c *ProfilerCollector) readProfile(startTime time.Time) (*performance.ProfileStats, error) {
-	// Get maps
-	stackTraces, ok := c.objs.Maps["stack_traces"]
+	// Get dropped events counter
+	droppedEventsMap, ok := c.objs.Maps["dropped_events"]
 	if !ok {
-		return nil, errors.New("stack_traces map not found")
+		c.Logger().V(1).Info("dropped_events map not found")
 	}
 
-	stackCounts, ok := c.objs.Maps["stack_counts"]
-	if !ok {
-		return nil, errors.New("stack_counts map not found")
+	// Check BPF dropped events counter
+	var bpfDropped uint64
+	if droppedEventsMap != nil {
+		var zero uint32
+		var droppedPerCPU []uint64
+		if err := droppedEventsMap.Lookup(&zero, &droppedPerCPU); err == nil {
+			for _, v := range droppedPerCPU {
+				bpfDropped += v
+			}
+		}
 	}
+
+	// Read stack traces from BPF maps
+	stacks, processes := c.readStackTraces()
 
 	profile := &performance.ProfileStats{
 		CollectionTime: startTime,
@@ -471,89 +561,18 @@ func (c *ProfilerCollector) readProfile(startTime time.Time) (*performance.Profi
 		EventType:      c.resolvedEventConfig.Type,
 		EventConfig:    c.resolvedEventConfig.Config,
 		SamplePeriod:   c.resolvedEventConfig.SamplePeriod,
-		DroppedSamples: atomic.LoadUint64(&c.droppedSamples),
-		Processes:      make(map[int32]performance.ProfileProcess),
+		DroppedSamples: bpfDropped,
+		SampleCount:    atomic.LoadUint64(&c.eventsProcessed),
+		Stacks:         stacks,
+		Processes:      processes,
 	}
 
-	// Read all stack counts
-	var key StackKeyEvent
-	var value StackCountEvent
-	iter := stackCounts.Iterate()
-
-	for iter.Next(&key, &value) {
-		// Read user and kernel stacks
-		userStack := make([]uint64, MaxStackDepth)
-		if key.UserStackId >= 0 {
-			if err := stackTraces.Lookup(uint32(key.UserStackId), &userStack); err != nil {
-				c.Logger().V(2).Info("failed to lookup user stack", "id", key.UserStackId, "error", err)
-			}
-		}
-
-		kernelStack := make([]uint64, MaxStackDepth)
-		if key.KernelStackId >= 0 {
-			if err := stackTraces.Lookup(uint32(key.KernelStackId), &kernelStack); err != nil {
-				c.Logger().V(2).Info("failed to lookup kernel stack", "id", key.KernelStackId, "error", err)
-			}
-		}
-
-		// Trim stacks to actual size
-		userStack = trimStack(userStack)
-		kernelStack = trimStack(kernelStack)
-
-		// Create stack entry
-		stack := performance.ProfileStack{
-			ID:          uint32(len(profile.Stacks)), // Simple incrementing ID
-			UserStack:   userStack,
-			KernelStack: kernelStack,
-			PID:         key.PID,
-			TID:         key.TID,
-			CPU:         int32(value.Cpu),
-			SampleCount: value.Count,
-		}
-
-		profile.Stacks = append(profile.Stacks, stack)
-		profile.SampleCount += value.Count
-
-		// Update process info
-		if proc, exists := profile.Processes[key.PID]; exists {
-			proc.SampleCount += value.Count
-			proc.TopStacks = append(proc.TopStacks, stack.ID)
-			profile.Processes[key.PID] = proc
-		} else {
-			// For now, we'll use a placeholder for command name
-			// In a real implementation, we'd read from /proc/PID/comm
-			profile.Processes[key.PID] = performance.ProfileProcess{
-				PID:         key.PID,
-				Command:     fmt.Sprintf("pid-%d", key.PID),
-				SampleCount: value.Count,
-				TopStacks:   []uint32{stack.ID},
-				ThreadCount: 1,
-			}
-		}
-	}
-
-	if err := iter.Err(); err != nil {
-		return nil, fmt.Errorf("iterating stack counts: %w", err)
-	}
-
-	// Calculate percentages
-	for i := range profile.Stacks {
-		profile.Stacks[i].Percentage = float64(profile.Stacks[i].SampleCount) / float64(profile.SampleCount) * 100
-	}
-
-	for pid, proc := range profile.Processes {
-		proc.Percentage = float64(proc.SampleCount) / float64(profile.SampleCount) * 100
-		profile.Processes[pid] = proc
-	}
-
-	// Clear maps for next collection
-	iter = stackCounts.Iterate()
-	var deleteValue StackCountEvent
-	for iter.Next(&key, &deleteValue) {
-		if err := stackCounts.Delete(key); err != nil {
-			c.Logger().V(2).Info("Failed to delete stack count entry", "error", err)
-		}
-	}
+	c.Logger().V(1).Info("profile collection",
+		"events_processed", profile.SampleCount,
+		"stacks_collected", len(stacks),
+		"processes", len(processes),
+		"bpf_dropped", bpfDropped,
+		"duration", profile.Duration)
 
 	return profile, nil
 }
@@ -565,6 +584,76 @@ func trimStack(stack []uint64) []uint64 {
 		}
 	}
 	return stack
+}
+
+// readStackTraces reads accumulated stack traces from BPF maps
+func (c *ProfilerCollector) readStackTraces() ([]performance.ProfileStack, map[int32]performance.ProfileProcess) {
+	stacks := []performance.ProfileStack{}
+	processes := make(map[int32]performance.ProfileProcess)
+
+	// Read stack counts map if available
+	stackCountsMap, ok := c.objs.Maps["stack_counts"]
+	if !ok {
+		c.Logger().V(2).Info("stack_counts map not found")
+		return stacks, processes
+	}
+
+	// Read user and kernel stack trace maps
+	userStacksMap, hasUserStacks := c.objs.Maps["user_stacks"]
+	kernelStacksMap, hasKernelStacks := c.objs.Maps["kernel_stacks"]
+
+	if !hasUserStacks && !hasKernelStacks {
+		c.Logger().V(2).Info("no stack trace maps found")
+		return stacks, processes
+	}
+
+	// Iterate through stack counts to build profile data
+	var stackKey StackKeyEvent
+	var stackCount StackCountEvent
+	iter := stackCountsMap.Iterate()
+
+	for iter.Next(&stackKey, &stackCount) {
+		profileStack := performance.ProfileStack{
+			PID:         stackKey.PID,
+			TID:         stackKey.TID,
+			CPU:         int32(stackCount.Cpu),
+			SampleCount: stackCount.Count,
+		}
+
+		// Read user stack if available
+		if hasUserStacks && stackKey.UserStackId >= 0 {
+			var userStack [MaxStackDepth]uint64
+			if err := userStacksMap.Lookup(&stackKey.UserStackId, &userStack); err == nil {
+				profileStack.UserStack = trimStack(userStack[:])
+			}
+		}
+
+		// Read kernel stack if available
+		if hasKernelStacks && stackKey.KernelStackId >= 0 {
+			var kernelStack [MaxStackDepth]uint64
+			if err := kernelStacksMap.Lookup(&stackKey.KernelStackId, &kernelStack); err == nil {
+				profileStack.KernelStack = trimStack(kernelStack[:])
+			}
+		}
+
+		// Update process info
+		if _, exists := processes[stackKey.PID]; !exists {
+			// TODO: Read actual command name from /proc or BPF comm map
+			processes[stackKey.PID] = performance.ProfileProcess{
+				PID:         stackKey.PID,
+				Command:     fmt.Sprintf("pid-%d", stackKey.PID),
+				SampleCount: stackCount.Count,
+			}
+		} else {
+			proc := processes[stackKey.PID]
+			proc.SampleCount += stackCount.Count
+			processes[stackKey.PID] = proc
+		}
+
+		stacks = append(stacks, profileStack)
+	}
+
+	return stacks, processes
 }
 
 // GetEventSummary returns statistics about available perf events
