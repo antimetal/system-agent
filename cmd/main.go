@@ -262,7 +262,11 @@ func main() {
 		setupLog.Error(err, "unable to start hardware manager")
 		os.Exit(1)
 	}
-	defer hwManager.Stop()
+	defer func() {
+		if err := hwManager.Stop(); err != nil {
+			setupLog.Error(err, "error stopping hardware manager")
+		}
+	}()
 
 	// Setup Kubernetes Collector Controller
 	if enableK8sController {
