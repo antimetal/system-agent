@@ -183,7 +183,7 @@ func TestBuilder_BuildFromSnapshot(t *testing.T) {
 
 	// Verify specific resource details
 	for _, r := range mockStore.resources {
-		assert.Equal(t, resourcev1.Provider_PROVIDER_HARDWARE, r.Metadata.Provider)
+		assert.Equal(t, resourcev1.Provider_PROVIDER_ANTIMETAL, r.Metadata.Provider)
 		assert.NotEmpty(t, r.Metadata.Name)
 		assert.NotNil(t, r.Spec)
 
