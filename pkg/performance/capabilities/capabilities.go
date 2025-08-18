@@ -7,6 +7,8 @@
 package capabilities
 
 import (
+	"fmt"
+
 	"github.com/antimetal/agent/pkg/kernel"
 )
 
@@ -55,6 +57,15 @@ func (c Capability) String() string {
 	default:
 		return "UNKNOWN"
 	}
+}
+
+// MissingCapabilityError represents a missing capability error
+type MissingCapabilityError struct {
+	Capability Capability
+}
+
+func (e MissingCapabilityError) Error() string {
+	return fmt.Sprintf("missing capability: %s", e.Capability.String())
 }
 
 // GetEBPFCapabilities returns the capabilities required for eBPF programs
