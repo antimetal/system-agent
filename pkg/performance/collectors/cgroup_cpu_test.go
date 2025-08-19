@@ -29,25 +29,25 @@ func TestCgroupCPUCollector_Constructor(t *testing.T) {
 		{
 			name: "valid absolute path",
 			config: performance.CollectionConfig{
-				HostCgroupPath: "/sys/fs/cgroup",
+				HostSysPath: "/sys",
 			},
 			wantErr: false,
 		},
 		{
 			name: "invalid relative path",
 			config: performance.CollectionConfig{
-				HostCgroupPath: "sys/fs/cgroup",
+				HostSysPath: "sys",
 			},
 			wantErr: true,
-			errMsg:  "HostCgroupPath must be an absolute path",
+			errMsg:  "HostSysPath must be an absolute path",
 		},
 		{
 			name: "empty path",
 			config: performance.CollectionConfig{
-				HostCgroupPath: "",
+				HostSysPath: "",
 			},
 			wantErr: true,
-			errMsg:  "HostCgroupPath is required but not provided",
+			errMsg:  "HostSysPath is required but not provided",
 		},
 	}
 
@@ -69,13 +69,14 @@ func TestCgroupCPUCollector_Constructor(t *testing.T) {
 
 func TestCgroupCPUCollector_CgroupV1(t *testing.T) {
 	tmpDir := t.TempDir()
-	cgroupPath := filepath.Join(tmpDir, "cgroup")
+	cgroupPath := filepath.Join(tmpDir, "fs", "cgroup")
+	require.NoError(t, os.MkdirAll(cgroupPath, 0755))
 
 	// Create cgroup v1 structure
 	setupCgroupV1CPU(t, cgroupPath)
 
 	config := performance.CollectionConfig{
-		HostCgroupPath: cgroupPath,
+		HostSysPath: tmpDir,
 	}
 
 	collector, err := collectors.NewCgroupCPUCollector(logr.Discard(), config)
@@ -108,13 +109,14 @@ func TestCgroupCPUCollector_CgroupV1(t *testing.T) {
 
 func TestCgroupCPUCollector_CgroupV2(t *testing.T) {
 	tmpDir := t.TempDir()
-	cgroupPath := filepath.Join(tmpDir, "cgroup")
+	cgroupPath := filepath.Join(tmpDir, "fs", "cgroup")
+	require.NoError(t, os.MkdirAll(cgroupPath, 0755))
 
 	// Create cgroup v2 structure
 	setupCgroupV2(t, cgroupPath)
 
 	config := performance.CollectionConfig{
-		HostCgroupPath: cgroupPath,
+		HostSysPath: tmpDir,
 	}
 
 	collector, err := collectors.NewCgroupCPUCollector(logr.Discard(), config)
@@ -147,10 +149,10 @@ func TestCgroupCPUCollector_CgroupV2(t *testing.T) {
 
 func TestCgroupCPUCollector_MissingCgroup(t *testing.T) {
 	tmpDir := t.TempDir()
-	cgroupPath := filepath.Join(tmpDir, "nonexistent")
+	// Don't create the fs/cgroup directory to simulate missing cgroup
 
 	config := performance.CollectionConfig{
-		HostCgroupPath: cgroupPath,
+		HostSysPath: tmpDir,
 	}
 
 	collector, err := collectors.NewCgroupCPUCollector(logr.Discard(), config)
@@ -163,7 +165,8 @@ func TestCgroupCPUCollector_MissingCgroup(t *testing.T) {
 
 func TestCgroupCPUCollector_PartialData(t *testing.T) {
 	tmpDir := t.TempDir()
-	cgroupPath := filepath.Join(tmpDir, "cgroup")
+	cgroupPath := filepath.Join(tmpDir, "fs", "cgroup")
+	require.NoError(t, os.MkdirAll(cgroupPath, 0755))
 
 	// Create cgroup v1 structure with partial data
 	cpuPath := filepath.Join(cgroupPath, "cpu", "docker", "abc123def456789")
@@ -178,7 +181,7 @@ throttled_time 1000000000`)
 	require.NoError(t, os.MkdirAll(filepath.Join(cgroupPath, "cpu"), 0755))
 
 	config := performance.CollectionConfig{
-		HostCgroupPath: cgroupPath,
+		HostSysPath: tmpDir,
 	}
 
 	collector, err := collectors.NewCgroupCPUCollector(logr.Discard(), config)

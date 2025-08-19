@@ -37,8 +37,6 @@ const (
 	MetricTypeMemoryInfo  MetricType = "memory_info"
 	MetricTypeDiskInfo    MetricType = "disk_info"
 	MetricTypeNetworkInfo MetricType = "network_info"
-	// Alerts
-	MetricTypeProcessMemoryGrowth MetricType = "process_memory_growth"
 )
 
 // CollectorStatus represents the operational status of a collector
@@ -343,7 +341,6 @@ type CollectionConfig struct {
 	HostProcPath      string // Path to /proc (useful for containers)
 	HostSysPath       string // Path to /sys (useful for containers)
 	HostDevPath       string // Path to /dev (useful for containers)
-	HostCgroupPath    string // Path to /sys/fs/cgroup (useful for containers)
 	TopProcessCount   int    // Number of top processes to collect (by CPU usage)
 }
 
@@ -372,10 +369,9 @@ func DefaultCollectionConfig() CollectionConfig {
 			MetricTypeNetworkInfo: true,
 			MetricTypeNUMAStats:   true,
 		},
-		HostProcPath:   "/proc",
-		HostSysPath:    "/sys",
-		HostDevPath:    "/dev",
-		HostCgroupPath: "/sys/fs/cgroup",
+		HostProcPath: "/proc",
+		HostSysPath:  "/sys",
+		HostDevPath:  "/dev",
 	}
 }
 
@@ -398,17 +394,13 @@ func (c *CollectionConfig) ApplyDefaults() {
 	if c.HostDevPath == "" {
 		c.HostDevPath = defaults.HostDevPath
 	}
-	if c.HostCgroupPath == "" {
-		c.HostCgroupPath = defaults.HostCgroupPath
-	}
 }
 
 // ValidateOptions specifies validation requirements for CollectionConfig
 type ValidateOptions struct {
-	RequireHostProcPath   bool
-	RequireHostSysPath    bool
-	RequireHostDevPath    bool
-	RequireHostCgroupPath bool
+	RequireHostProcPath bool
+	RequireHostSysPath  bool
+	RequireHostDevPath  bool
 }
 
 // Validate ensures that all configured paths are absolute paths and that required paths are non-empty.
@@ -425,9 +417,6 @@ func (c *CollectionConfig) Validate(opt ValidateOptions) error {
 	if opt.RequireHostDevPath && c.HostDevPath == "" {
 		return fmt.Errorf("HostDevPath is required but not provided")
 	}
-	if opt.RequireHostCgroupPath && c.HostCgroupPath == "" {
-		return fmt.Errorf("HostCgroupPath is required but not provided")
-	}
 
 	// Check all non-empty paths are absolute
 	if c.HostProcPath != "" && !filepath.IsAbs(c.HostProcPath) {
@@ -438,9 +427,6 @@ func (c *CollectionConfig) Validate(opt ValidateOptions) error {
 	}
 	if c.HostDevPath != "" && !filepath.IsAbs(c.HostDevPath) {
 		return fmt.Errorf("HostDevPath must be an absolute path, got: %q", c.HostDevPath)
-	}
-	if c.HostCgroupPath != "" && !filepath.IsAbs(c.HostCgroupPath) {
-		return fmt.Errorf("HostCgroupPath must be an absolute path, got: %q", c.HostCgroupPath)
 	}
 	return nil
 }

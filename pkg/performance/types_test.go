@@ -42,10 +42,9 @@ func TestCollectionConfig_ApplyDefaults(t *testing.T) {
 					MetricTypeNetworkInfo: true,
 					MetricTypeNUMAStats:   true,
 				},
-				HostProcPath:   "/proc",
-				HostSysPath:    "/sys",
-				HostDevPath:    "/dev",
-				HostCgroupPath: "/sys/fs/cgroup",
+				HostProcPath: "/proc",
+				HostSysPath:  "/sys",
+				HostDevPath:  "/dev",
 			},
 		},
 		{
@@ -76,10 +75,9 @@ func TestCollectionConfig_ApplyDefaults(t *testing.T) {
 					MetricTypeNetworkInfo: true,
 					MetricTypeNUMAStats:   true,
 				},
-				HostProcPath:   "/custom/proc",   // User value kept
-				HostSysPath:    "/sys",           // Default applied
-				HostDevPath:    "/dev",           // Default applied
-				HostCgroupPath: "/sys/fs/cgroup", // Default applied
+				HostProcPath: "/custom/proc", // User value kept
+				HostSysPath:  "/sys",         // Default applied
+				HostDevPath:  "/dev",         // Default applied
 			},
 		},
 		{
@@ -96,10 +94,9 @@ func TestCollectionConfig_ApplyDefaults(t *testing.T) {
 					MetricTypeLoad: false, // User override
 					MetricTypeCPU:  true,  // User value
 				},
-				HostProcPath:   "/proc",
-				HostSysPath:    "/sys",
-				HostDevPath:    "/dev",
-				HostCgroupPath: "/sys/fs/cgroup",
+				HostProcPath: "/proc",
+				HostSysPath:  "/sys",
+				HostDevPath:  "/dev",
 			},
 		},
 	}
@@ -121,9 +118,6 @@ func TestCollectionConfig_ApplyDefaults(t *testing.T) {
 			}
 			if config.HostDevPath != tt.expected.HostDevPath {
 				t.Errorf("HostDevPath = %v, want %v", config.HostDevPath, tt.expected.HostDevPath)
-			}
-			if config.HostCgroupPath != tt.expected.HostCgroupPath {
-				t.Errorf("HostCgroupPath = %v, want %v", config.HostCgroupPath, tt.expected.HostCgroupPath)
 			}
 
 			// Check EnabledCollectors map

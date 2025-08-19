@@ -66,7 +66,7 @@ type CgroupMemoryCollector struct {
 
 // NewCgroupMemoryCollector creates a new cgroup memory collector
 func NewCgroupMemoryCollector(logger logr.Logger, config performance.CollectionConfig) (*CgroupMemoryCollector, error) {
-	if err := config.Validate(performance.ValidateOptions{RequireHostCgroupPath: true}); err != nil {
+	if err := config.Validate(performance.ValidateOptions{RequireHostSysPath: true}); err != nil {
 		return nil, err
 	}
 
@@ -77,6 +77,9 @@ func NewCgroupMemoryCollector(logger logr.Logger, config performance.CollectionC
 		MinKernelVersion:     "2.6.24", // When cgroups were introduced
 	}
 
+	// Construct cgroup path from sys path
+	cgroupPath := filepath.Join(config.HostSysPath, "fs", "cgroup")
+
 	return &CgroupMemoryCollector{
 		BaseCollector: performance.NewBaseCollector(
 			performance.MetricTypeCgroupMemory,
@@ -85,8 +88,8 @@ func NewCgroupMemoryCollector(logger logr.Logger, config performance.CollectionC
 			config,
 			capabilities,
 		),
-		cgroupPath: config.HostCgroupPath,
-		discovery:  NewContainerDiscovery(config.HostCgroupPath),
+		cgroupPath: cgroupPath,
+		discovery:  NewContainerDiscovery(cgroupPath),
 	}, nil
 }
 
