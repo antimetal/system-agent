@@ -31,7 +31,7 @@ func TestProfileEvent_Encoding(t *testing.T) {
 	}{
 		{
 			name: "basic event",
-			event: ProfileEvent{
+			event: collectors.ProfileEvent{
 				Timestamp:     1234567890,
 				PID:           1234,
 				TID:           5678,
@@ -43,7 +43,7 @@ func TestProfileEvent_Encoding(t *testing.T) {
 		},
 		{
 			name: "event with flags",
-			event: ProfileEvent{
+			event: collectors.ProfileEvent{
 				Timestamp:     9876543210,
 				PID:           9999,
 				TID:           8888,
@@ -55,7 +55,7 @@ func TestProfileEvent_Encoding(t *testing.T) {
 		},
 		{
 			name: "max values",
-			event: ProfileEvent{
+			event: collectors.ProfileEvent{
 				Timestamp:     ^uint64(0), // Max uint64
 				PID:           2147483647, // Max int32
 				TID:           2147483647, // Max int32

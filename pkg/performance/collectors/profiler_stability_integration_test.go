@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/antimetal/agent/pkg/performance"
+	"github.com/antimetal/agent/pkg/performance/collectors"
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

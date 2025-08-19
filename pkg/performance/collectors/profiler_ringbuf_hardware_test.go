@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/antimetal/agent/pkg/performance/collectors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
