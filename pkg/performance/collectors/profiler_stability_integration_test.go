@@ -5,12 +5,8 @@
 // https://polyformproject.org/wp-content/uploads/2020/06/PolyForm-Shield-1.0.0.txt
 
 //go:build integration
-// +build integration
 
-// Copyright 2024 Antimetal LLC
-// SPDX-License-Identifier: PolyForm-Shield-1.0.0
-
-package collectors
+package collectors_test
 
 import (
 	"context"
@@ -46,16 +42,16 @@ func TestProfiler_MemoryStability_Integration(t *testing.T) {
 		HostSysPath: "/sys",
 	}
 
-	profiler, err := NewProfiler(logger, config)
+	profiler, err := collectors.NewProfiler(logger, config)
 	require.NoError(t, err)
 	defer profiler.Stop()
 
 	// Setup with CPU clock event (software, works everywhere)
-	setupConfig := ProfilerConfig{
-		Event: PerfEventConfig{
+	setupConfig := collectors.ProfilerConfig{
+		Event: collectors.PerfEventConfig{
 			Name:         "cpu-clock",
-			Type:         PERF_TYPE_SOFTWARE,
-			Config:       PERF_COUNT_SW_CPU_CLOCK,
+			Type:         collectors.PERF_TYPE_SOFTWARE,
+			Config:       collectors.PERF_COUNT_SW_CPU_CLOCK,
 			SamplePeriod: 1000000, // 1ms
 		},
 	}
@@ -142,16 +138,16 @@ func TestProfiler_HeavyLoad_Integration(t *testing.T) {
 		HostSysPath: "/sys",
 	}
 
-	profiler, err := NewProfiler(logger, config)
+	profiler, err := collectors.NewProfiler(logger, config)
 	require.NoError(t, err)
 	defer profiler.Stop()
 
 	// Setup with high frequency sampling
-	setupConfig := ProfilerConfig{
-		Event: PerfEventConfig{
+	setupConfig := collectors.ProfilerConfig{
+		Event: collectors.PerfEventConfig{
 			Name:         "cpu-clock",
-			Type:         PERF_TYPE_SOFTWARE,
-			Config:       PERF_COUNT_SW_CPU_CLOCK,
+			Type:         collectors.PERF_TYPE_SOFTWARE,
+			Config:       collectors.PERF_COUNT_SW_CPU_CLOCK,
 			SamplePeriod: 100000, // 100 microseconds - 10KHz
 		},
 	}

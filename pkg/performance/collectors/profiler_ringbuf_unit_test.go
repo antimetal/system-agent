@@ -4,22 +4,21 @@
 // LICENSE file or at:
 // https://polyformproject.org/wp-content/uploads/2020/06/PolyForm-Shield-1.0.0.txt
 
-//go:build !integration
-
-package collectors
+package collectors_test
 
 import (
 	"bytes"
 	"encoding/binary"
 	"testing"
 
+	"github.com/antimetal/agent/pkg/performance/collectors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // TestProfileEvent_Size verifies the ProfileEvent struct is exactly 32 bytes
 func TestProfileEvent_Size(t *testing.T) {
-	var event ProfileEvent
+	var event collectors.ProfileEvent
 	size := binary.Size(event)
 	assert.Equal(t, 32, size, "ProfileEvent should be exactly 32 bytes")
 }
@@ -28,7 +27,7 @@ func TestProfileEvent_Size(t *testing.T) {
 func TestProfileEvent_Encoding(t *testing.T) {
 	tests := []struct {
 		name  string
-		event ProfileEvent
+		event collectors.ProfileEvent
 	}{
 		{
 			name: "basic event",
@@ -51,7 +50,7 @@ func TestProfileEvent_Encoding(t *testing.T) {
 				UserStackID:   -1, // Invalid stack
 				KernelStackID: -1,
 				CPU:           7,
-				Flags:         ProfileFlagUserStackTruncated | ProfileFlagKernelStackTruncated,
+				Flags:         collectors.ProfileFlagUserStackTruncated | collectors.ProfileFlagKernelStackTruncated,
 			},
 		},
 		{
@@ -79,7 +78,7 @@ func TestProfileEvent_Encoding(t *testing.T) {
 			assert.Equal(t, 32, buf.Len(), "encoded event should be 32 bytes")
 
 			// Decode
-			var decoded ProfileEvent
+			var decoded collectors.ProfileEvent
 			err = binary.Read(buf, binary.LittleEndian, &decoded)
 			require.NoError(t, err)
 
@@ -104,7 +103,7 @@ func TestProfileEvent_Parse(t *testing.T) {
 	binary.LittleEndian.PutUint32(raw[28:32], 0)        // Flags
 
 	// Parse using binary.Read
-	var event ProfileEvent
+	var event collectors.ProfileEvent
 	reader := bytes.NewReader(raw)
 	err := binary.Read(reader, binary.LittleEndian, &event)
 	require.NoError(t, err)
@@ -137,28 +136,28 @@ func TestProfileEvent_Flags(t *testing.T) {
 		},
 		{
 			name:    "user truncated",
-			flags:   ProfileFlagUserStackTruncated,
+			flags:   collectors.ProfileFlagUserStackTruncated,
 			hasUser: true,
 			hasKern: false,
 			hasCol:  false,
 		},
 		{
 			name:    "kernel truncated",
-			flags:   ProfileFlagKernelStackTruncated,
+			flags:   collectors.ProfileFlagKernelStackTruncated,
 			hasUser: false,
 			hasKern: true,
 			hasCol:  false,
 		},
 		{
 			name:    "collision",
-			flags:   ProfileFlagStackCollision,
+			flags:   collectors.ProfileFlagStackCollision,
 			hasUser: false,
 			hasKern: false,
 			hasCol:  true,
 		},
 		{
 			name:    "all flags",
-			flags:   ProfileFlagUserStackTruncated | ProfileFlagKernelStackTruncated | ProfileFlagStackCollision,
+			flags:   collectors.ProfileFlagUserStackTruncated | collectors.ProfileFlagKernelStackTruncated | collectors.ProfileFlagStackCollision,
 			hasUser: true,
 			hasKern: true,
 			hasCol:  true,
@@ -167,13 +166,13 @@ func TestProfileEvent_Flags(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			event := ProfileEvent{Flags: tt.flags}
+			event := collectors.ProfileEvent{Flags: tt.flags}
 
-			assert.Equal(t, tt.hasUser, event.Flags&ProfileFlagUserStackTruncated != 0,
+			assert.Equal(t, tt.hasUser, event.Flags&collectors.ProfileFlagUserStackTruncated != 0,
 				"user stack truncated flag")
-			assert.Equal(t, tt.hasKern, event.Flags&ProfileFlagKernelStackTruncated != 0,
+			assert.Equal(t, tt.hasKern, event.Flags&collectors.ProfileFlagKernelStackTruncated != 0,
 				"kernel stack truncated flag")
-			assert.Equal(t, tt.hasCol, event.Flags&ProfileFlagStackCollision != 0,
+			assert.Equal(t, tt.hasCol, event.Flags&collectors.ProfileFlagStackCollision != 0,
 				"stack collision flag")
 		})
 	}
@@ -195,7 +194,7 @@ func BenchmarkProfileEvent_Parse(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		var event ProfileEvent
+		var event collectors.ProfileEvent
 		reader := bytes.NewReader(raw)
 		_ = binary.Read(reader, binary.LittleEndian, &event)
 	}
@@ -203,7 +202,7 @@ func BenchmarkProfileEvent_Parse(b *testing.B) {
 
 // BenchmarkProfileEvent_Encode benchmarks encoding events to bytes
 func BenchmarkProfileEvent_Encode(b *testing.B) {
-	event := ProfileEvent{
+	event := collectors.ProfileEvent{
 		Timestamp:     1234567890,
 		PID:           1234,
 		TID:           5678,
@@ -235,7 +234,7 @@ func BenchmarkProfileEvent_ZeroAllocationParse(b *testing.B) {
 	binary.LittleEndian.PutUint32(raw[28:32], 0)
 
 	// Pre-allocate event
-	var event ProfileEvent
+	var event collectors.ProfileEvent
 
 	b.ResetTimer()
 	b.ReportAllocs()

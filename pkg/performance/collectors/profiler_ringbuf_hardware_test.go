@@ -5,12 +5,8 @@
 // https://polyformproject.org/wp-content/uploads/2020/06/PolyForm-Shield-1.0.0.txt
 
 //go:build hardware
-// +build hardware
 
-// Copyright 2024 Antimetal LLC
-// SPDX-License-Identifier: PolyForm-Shield-1.0.0
-
-package collectors
+package collectors_test
 
 import (
 	"context"
