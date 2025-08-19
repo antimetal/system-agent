@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/antimetal/agent/pkg/containers"
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/go-logr/logr"
 )
@@ -55,7 +56,7 @@ var _ performance.PointCollector = (*CgroupCPUCollector)(nil)
 type CgroupCPUCollector struct {
 	performance.BaseCollector
 	cgroupPath string
-	discovery  *ContainerDiscovery
+	discovery  *containers.Discovery
 }
 
 // NewCgroupCPUCollector creates a new cgroup CPU collector
@@ -83,7 +84,7 @@ func NewCgroupCPUCollector(logger logr.Logger, config performance.CollectionConf
 			capabilities,
 		),
 		cgroupPath: cgroupPath,
-		discovery:  NewContainerDiscovery(cgroupPath),
+		discovery:  containers.NewDiscovery(cgroupPath),
 	}, nil
 }
 
@@ -113,7 +114,7 @@ func (c *CgroupCPUCollector) Collect(ctx context.Context) (any, error) {
 		default:
 		}
 
-		stat, err := c.collectContainerStats(container, version)
+		stat, err := c.collectContainerStats(container)
 		if err != nil {
 			// Log error but continue with other containers
 			c.Logger().V(1).Info("Failed to collect stats for container",
@@ -128,13 +129,13 @@ func (c *CgroupCPUCollector) Collect(ctx context.Context) (any, error) {
 }
 
 // collectContainerStats collects CPU stats for a single container
-func (c *CgroupCPUCollector) collectContainerStats(container ContainerPath, version int) (performance.CgroupCPUStats, error) {
+func (c *CgroupCPUCollector) collectContainerStats(container containers.Container) (performance.CgroupCPUStats, error) {
 	stats := performance.CgroupCPUStats{
 		ContainerID: container.ID,
 		CgroupPath:  container.CgroupPath,
 	}
 
-	if version == 1 {
+	if container.CgroupVersion == 1 {
 		// Cgroup v1: Read from separate cpu and cpuacct controllers
 		if err := c.readCgroupV1Stats(&stats, container); err != nil {
 			return stats, err
@@ -160,7 +161,7 @@ func (c *CgroupCPUCollector) collectContainerStats(container ContainerPath, vers
 // - All files are treated as optional - we read what's available
 // - Missing files are silently ignored to support partial data collection
 // - This allows graceful degradation when some cgroup files are unavailable
-func (c *CgroupCPUCollector) readCgroupV1Stats(stats *performance.CgroupCPUStats, container ContainerPath) error {
+func (c *CgroupCPUCollector) readCgroupV1Stats(stats *performance.CgroupCPUStats, container containers.Container) error {
 	// Read CPU throttling stats
 	cpuStatPath := filepath.Join(container.CgroupPath, "cpu.stat")
 	if data, err := os.ReadFile(cpuStatPath); err == nil {
@@ -211,7 +212,7 @@ func (c *CgroupCPUCollector) readCgroupV1Stats(stats *performance.CgroupCPUStats
 // - cpu.stat is critical - returns error if unavailable (contains usage data)
 // - Other files (cpu.max, cpu.weight) are optional and silently ignored if missing
 // - This ensures we have at least basic usage data for v2 containers
-func (c *CgroupCPUCollector) readCgroupV2Stats(stats *performance.CgroupCPUStats, container ContainerPath) error {
+func (c *CgroupCPUCollector) readCgroupV2Stats(stats *performance.CgroupCPUStats, container containers.Container) error {
 	// Read cpu.stat which contains usage and throttling info
 	cpuStatPath := filepath.Join(container.CgroupPath, "cpu.stat")
 	if data, err := os.ReadFile(cpuStatPath); err == nil {
