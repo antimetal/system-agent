@@ -18,10 +18,9 @@ Key capabilities:
 - **Multiple validation signals** for high-confidence detection
 - **Zero network overhead** - analysis happens in-kernel
 
-For detailed documentation, see:
-- [Memory Monitor Architecture](docs/memory-monitor-architecture.md)
-- [Memory Growth Monitor Whitepaper](docs/memory-growth-monitor-whitepaper.md)
-- [Implementation Guide](docs/memory-monitor-implementation.md)
+📚 **Documentation**: See the [Memory Monitoring Wiki](https://github.com/antimetal/system-agent/wiki/Memory-Monitoring) for comprehensive documentation.
+
+**Note**: This feature is currently in development on the `mem_monitor` branch.
 
 ### Kubernetes Resource Monitoring
 
