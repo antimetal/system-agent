@@ -2,6 +2,34 @@
 
 Component that connects your infrastructure to the [Antimetal](https://antimetal.com) platform.
 
+## Features
+
+### Memory Growth Monitoring (eBPF-based)
+
+The Antimetal Agent includes an advanced **multi-detector memory leak detection system** that uses eBPF technology to identify memory leaks before they cause OOM kills. The system employs three complementary detection algorithms:
+
+- **Linear Regression Detector** - Statistical trend analysis for steady growth patterns
+- **RSS Component Ratio Detector** - Distinguishes heap leaks from cache growth
+- **Multi-Factor Threshold Detector** - Industry-proven heuristics from Google, Microsoft, and Facebook
+
+Key capabilities:
+- **<0.1% CPU overhead** in production environments
+- **2-10 minute advance warning** before OOM events
+- **Multiple validation signals** for high-confidence detection
+- **Zero network overhead** - analysis happens in-kernel
+
+📚 **Documentation**: See the [Memory Monitoring Wiki](https://github.com/antimetal/system-agent/wiki/Memory-Monitoring) for comprehensive documentation.
+
+**Note**: This feature is currently in development on the `mem_monitor` branch.
+
+### Kubernetes Resource Monitoring
+
+The agent watches and collects Kubernetes resources, providing real-time visibility into your cluster's state through the Antimetal platform.
+
+### Performance Metrics Collection
+
+Comprehensive system performance monitoring from `/proc` and `/sys` filesystems, including CPU, memory, disk, and network metrics.
+
 ## Contributing
 
 If you want to contribute, refer to our [DEVELOPING](./docs/DEVELOPING.md) docs.

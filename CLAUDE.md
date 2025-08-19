@@ -323,7 +323,7 @@ func TestEBPFFeature(t *testing.T) {
 
 ## eBPF Development
 
-The Antimetal Agent supports eBPF-based collectors for deep kernel observability using CO-RE (Compile Once - Run Everywhere) technology for portability across kernel versions 4.18+.
+The Antimetal Agent supports eBPF-based collectors for deep kernel observability using CO-RE (Compile Once - Run Everywhere) technology for portability across kernel versions 5.8+.
 
 **Key commands:**
 - `make build-ebpf` - Build eBPF programs with CO-RE support

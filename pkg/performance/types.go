@@ -31,6 +31,8 @@ const (
 	MetricTypeDiskInfo    MetricType = "disk_info"
 	MetricTypeNetworkInfo MetricType = "network_info"
 	MetricTypeNUMAStats   MetricType = "numa_stats"
+	// Alerts
+	MetricTypeProcessMemoryGrowth MetricType = "process_memory_growth"
 )
 
 // CollectorStatus represents the operational status of a collector

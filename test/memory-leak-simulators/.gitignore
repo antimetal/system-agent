@@ -1,0 +1,26 @@
+# Compiled binaries
+vsz_divergence
+monotonic_growth
+anon_ratio
+combined_leak
+cache_growth
+*_x64
+*_x86_64
+*_arm64
+
+# Debug symbols
+*.dSYM/
+
+# Archives
+*.tar.gz
+*.tar
+*.zip
+
+# Build artifacts
+*.o
+*.a
+*.so
+
+# Test output
+test-output.tmp
+ebpf-output.log
