@@ -115,6 +115,33 @@ make build-and-load-image
 ```
 This will build a new image with your changes, load that image into the cluster, and restart the agent pods to use the new build.
 
+## Hardware Graph Development
+
+The agent includes a hardware graph feature that discovers and represents physical hardware as nodes and relationships in the resource graph. This enables infrastructure visibility alongside Kubernetes and cloud resources.
+
+### Overview
+- **Hardware Discovery**: Collects hardware information from `/proc` and `/sys` filesystems
+- **Graph Building**: Converts hardware data into graph nodes and relationships
+- **Resource Store Integration**: Stores hardware topology using the same RDF triplet pattern as K8s resources
+
+### Key Components
+- `internal/hardware/manager.go` - Orchestrates periodic hardware discovery
+- `internal/hardware/graph/builder.go` - Constructs hardware graph from collector data
+- `pkg/api/hardware/v1/` - Protobuf definitions for hardware nodes and relationships
+
+### Documentation
+- [Hardware Graph Architecture](./HARDWARE_GRAPH.md) - Complete feature documentation
+- [Hardware Graph Development](./HARDWARE_GRAPH_DEVELOPMENT.md) - Developer guide for extending hardware support
+
+### Testing Hardware Graph
+```bash
+# Run hardware graph tests
+go test ./internal/hardware/... -v
+
+# Test with coverage
+go test ./internal/hardware/... -cover
+```
+
 ## Cleanup
 
 - Undeploy the agent from the cluster:
