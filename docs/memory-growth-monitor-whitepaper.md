@@ -1,8 +1,24 @@
-# An eBPF-Based Approach to Early Memory Leak Detection
+# Multi-Detector eBPF Memory Leak Detection System
 
 ## Executive Summary
 
-The Antimetal Agent's Process Memory Growth Monitor will use eBPF technology to track trends in RSS in production systems before they cause OOM kills. By leveraging the kernel's `rss_stat` tracepoint (available in Linux 5.5+), the system provides accurate, low-overhead monitoring with 90% fewer events than traditional approaches while maintaining complete visibility into memory growth patterns.
+The Antimetal Agent's Memory Growth Monitor implements a sophisticated **three-detector approach** to memory leak detection, combining complementary eBPF-based algorithms for robust, production-ready monitoring. By leveraging the kernel's `kmem:rss_stat` tracepoint (available in Linux 5.5+), the system provides accurate, low-overhead monitoring with multiple validation signals, achieving <0.1% CPU overhead while maintaining complete visibility into memory growth patterns.
+
+## Multi-Detector Architecture
+
+The system employs three independent detection algorithms, each targeting different aspects of memory leak behavior:
+
+1. **Linear Regression Detector** - Statistical trend analysis for steady growth patterns
+2. **RSS Component Ratio Detector** - Memory composition analysis to distinguish heap leaks from cache growth  
+3. **Multi-Factor Threshold Detector** - Scientifically-backed heuristics from industry research
+
+These detectors operate simultaneously on the same kernel events, providing multiple validation signals that dramatically improve detection accuracy while minimizing false positives. Each detector can trigger independently, but their combined signals provide the highest confidence leak detection.
+
+For detailed architecture documentation, see [Memory Monitor Architecture](memory-monitor-architecture.md).
+
+## Linear Regression Detector Overview
+
+This whitepaper focuses primarily on the Linear Regression Detector, one of three detection methods in the system. The Linear Regression Detector uses statistical analysis to identify steady memory growth trends indicative of slow leaks.
 
 ## Motivation
 
@@ -51,9 +67,11 @@ This approach transforms memory management from reactive firefighting to proacti
 
 ## Solution Architecture
 
+**Note**: This section describes the Linear Regression Detector specifically. For information about the RSS Ratio and Threshold detectors, see their respective documentation in [docs/detectors/](detectors/).
+
 ### Core Innovation: RSS-Accurate eBPF Monitoring
 
-Our solution leverages the kernel's `rss_stat` tracepoint to achieve:
+The Linear Regression Detector leverages the kernel's `rss_stat` tracepoint to achieve:
 
 - **Direct RSS measurement** - Exact values, no approximations
 - **Low rate of event processing** - 1-100 events/sec vs 10-1000 with page faults
@@ -491,18 +509,42 @@ void* leak_thread(void* arg) {
 - Object-level leak detection
 - Stack trace collection for leak sources
 
+## Complete Multi-Detector System
+
+While this whitepaper has focused on the Linear Regression Detector, the complete Memory Growth Monitor system includes two additional detection methods:
+
+### RSS Component Ratio Detector
+- Analyzes memory composition (anonymous vs file-backed)
+- Distinguishes heap leaks from cache growth
+- Detects when anonymous memory exceeds 80% of RSS
+- See [RSS Ratio Detector Documentation](detectors/rss-ratio-detector.md)
+
+### Multi-Factor Threshold Detector  
+- Implements scientifically-backed thresholds from industry research
+- Monitors VSZ/RSS divergence, monotonic growth duration, and page fault rates
+- Uses weighted confidence scoring for high-accuracy detection
+- See [Threshold Detector Documentation](detectors/threshold-detector.md)
+
+### Combined Detection Capabilities
+
+The three-detector system provides:
+- **Multiple validation signals** for high-confidence leak detection
+- **Complementary coverage** of different leak patterns
+- **Robust false positive prevention** through cross-validation
+- **Comprehensive insights** into memory behavior
+
 ## Conclusion
 
-The Process Memory Growth Monitor represents a significant advancement in production memory leak detection. By leveraging the kernel's `rss_stat` tracepoint with intelligent MB-resolution sampling, we achieve:
+The Multi-Detector Memory Growth Monitor represents a significant advancement in production memory leak detection. By combining three complementary detection algorithms leveraging the kernel's `kmem:rss_stat` tracepoint, we achieve:
 
-- **<0.1% CPU overhead** in production environments
+- **<0.1% CPU overhead** across all three detectors
 - **100% accuracy** in RSS measurement
+- **Multiple validation signals** for confident detection
 - **3+ hour** historical visibility for slow leaks
 - **2-10 minute** advance warning before OOM events
-- **Natural noise filtering** with 1MB threshold
-- **1-100 events/sec** processing rate per process
+- **Comprehensive coverage** of leak patterns
 
-This solution provides operations teams with accurate, actionable insights while maintaining negligible overhead suitable for production deployment at scale.
+This solution provides operations teams with accurate, actionable insights while maintaining negligible overhead suitable for production deployment at scale. The multi-detector approach ensures robust detection with minimal false positives, making it ideal for production environments where reliability is critical.
 
 ## Technical Appendix
 
