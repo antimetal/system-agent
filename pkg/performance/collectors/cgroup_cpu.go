@@ -65,11 +65,10 @@ func NewCgroupCPUCollector(logger logr.Logger, config performance.CollectionConf
 	}
 
 	capabilities := performance.CollectorCapabilities{
-		SupportsOneShot:    true,
-		SupportsContinuous: false,
-		RequiresRoot:       false,
-		RequiresEBPF:       false,
-		MinKernelVersion:   "2.6.24", // When cgroups were introduced
+		SupportsOneShot:      true,
+		SupportsContinuous:   false,
+		RequiredCapabilities: nil,      // Cgroup files are typically world-readable
+		MinKernelVersion:     "2.6.24", // When cgroups were introduced
 	}
 
 	return &CgroupCPUCollector{
@@ -110,7 +109,7 @@ func (c *CgroupCPUCollector) Collect(ctx context.Context) (any, error) {
 			return stats, ctx.Err()
 		default:
 		}
-		
+
 		stat, err := c.collectContainerStats(container, version)
 		if err != nil {
 			// Log error but continue with other containers
