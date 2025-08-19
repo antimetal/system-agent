@@ -130,8 +130,8 @@ The agent includes a hardware graph feature that discovers and represents physic
 - `pkg/api/hardware/v1/` - Protobuf definitions for hardware nodes and relationships
 
 ### Documentation
-- [Hardware Graph Architecture](./HARDWARE_GRAPH.md) - Complete feature documentation
-- [Hardware Graph Development](./HARDWARE_GRAPH_DEVELOPMENT.md) - Developer guide for extending hardware support
+- [Hardware Discovery](https://github.com/antimetal/agent/wiki/Hardware-Discovery) - Complete feature documentation
+- [Hardware Development Guide](https://github.com/antimetal/agent/wiki/Hardware-Development-Guide) - Developer guide for extending hardware support
 
 ### Testing Hardware Graph
 ```bash

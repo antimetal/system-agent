@@ -28,10 +28,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	"github.com/antimetal/agent/internal/hardware"
 	"github.com/antimetal/agent/internal/intake"
 	k8sagent "github.com/antimetal/agent/internal/kubernetes/agent"
 	"github.com/antimetal/agent/internal/kubernetes/cluster"
 	"github.com/antimetal/agent/internal/kubernetes/scheme"
+	"github.com/antimetal/agent/pkg/performance"
 	"github.com/antimetal/agent/pkg/resource/store"
 )
 
@@ -231,6 +233,40 @@ func main() {
 		setupLog.Error(err, "unable to register intake worker")
 		os.Exit(1)
 	}
+
+	// Setup Performance Manager (for hardware discovery)
+	perfManager, err := performance.NewManager(performance.ManagerOptions{
+		Logger:      mgr.GetLogger().WithName("performance-manager"),
+		NodeName:    os.Getenv("NODE_NAME"),
+		ClusterName: "",
+	})
+	if err != nil {
+		setupLog.Error(err, "unable to create performance manager")
+		os.Exit(1)
+	}
+
+	// Setup Hardware Manager
+	hwManager, err := hardware.NewManager(
+		mgr.GetLogger().WithName("hardware-manager"),
+		hardware.ManagerConfig{
+			Store:              rsrcStore,
+			PerformanceManager: perfManager,
+			UpdateInterval:     5 * time.Minute,
+		},
+	)
+	if err != nil {
+		setupLog.Error(err, "unable to create hardware manager")
+		os.Exit(1)
+	}
+	if err := hwManager.Start(); err != nil {
+		setupLog.Error(err, "unable to start hardware manager")
+		os.Exit(1)
+	}
+	defer func() {
+		if err := hwManager.Stop(); err != nil {
+			setupLog.Error(err, "error stopping hardware manager")
+		}
+	}()
 
 	// Setup Kubernetes Collector Controller
 	if enableK8sController {

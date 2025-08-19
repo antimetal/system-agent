@@ -1,0 +1,7 @@
+# Mark generated protobuf files as binary to keep diffs clean
+*.pb.go binary
+*_grpc.pb.go binary
+
+# Alternative: Mark as linguist-generated for GitHub stats
+*.pb.go linguist-generated
+*_grpc.pb.go linguist-generated

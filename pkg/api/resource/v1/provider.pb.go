@@ -37,6 +37,7 @@ const (
 	Provider_PROVIDER_GCP        Provider = 2
 	Provider_PROVIDER_AZURE      Provider = 3
 	Provider_PROVIDER_KUBERNETES Provider = 4
+	Provider_PROVIDER_ANTIMETAL  Provider = 5
 )
 
 // Enum value maps for Provider.
@@ -47,6 +48,7 @@ var (
 		2: "PROVIDER_GCP",
 		3: "PROVIDER_AZURE",
 		4: "PROVIDER_KUBERNETES",
+		5: "PROVIDER_ANTIMETAL",
 	}
 	Provider_value = map[string]int32{
 		"PROVIDER_OTHER":      0,
@@ -54,6 +56,7 @@ var (
 		"PROVIDER_GCP":        2,
 		"PROVIDER_AZURE":      3,
 		"PROVIDER_KUBERNETES": 4,
+		"PROVIDER_ANTIMETAL":  5,
 	}
 )
 
@@ -145,13 +148,14 @@ const file_resource_v1_provider_proto_rawDesc = "" +
 	"\x0fProviderAccount\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x01 \x01(\tR\taccountId\x12!\n" +
-	"\faccount_name\x18\x02 \x01(\tR\vaccountName*o\n" +
+	"\faccount_name\x18\x02 \x01(\tR\vaccountName*\x87\x01\n" +
 	"\bProvider\x12\x12\n" +
 	"\x0ePROVIDER_OTHER\x10\x00\x12\x10\n" +
 	"\fPROVIDER_AWS\x10\x01\x12\x10\n" +
 	"\fPROVIDER_GCP\x10\x02\x12\x12\n" +
 	"\x0ePROVIDER_AZURE\x10\x03\x12\x17\n" +
-	"\x13PROVIDER_KUBERNETES\x10\x04B\xa8\x01\n" +
+	"\x13PROVIDER_KUBERNETES\x10\x04\x12\x16\n" +
+	"\x12PROVIDER_ANTIMETAL\x10\x05B\xa8\x01\n" +
 	"\x0fcom.resource.v1B\rProviderProtoP\x01Z9github.com/antimetal/agent/pkg/api/resource/v1;resourcev1\xa2\x02\x03RXX\xaa\x02\vResource.V1\xca\x02\vResource\\V1\xe2\x02\x17Resource\\V1\\GPBMetadata\xea\x02\fResource::V1b\x06proto3"
 
 var (

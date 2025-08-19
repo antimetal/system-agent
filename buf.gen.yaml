@@ -10,7 +10,7 @@ managed:
     - file_option: go_package_prefix
       module: buf.build/googleapis/googleapis
 inputs:
-  - module: buf.build/antimetal/apis:dbffaf570ef04659be63a1e994b5624a
+  - module: buf.build/antimetal/apis:c1de0dd203de4e84a37a56a7f75d8e19
 plugins:
   - remote: buf.build/protocolbuffers/go:v1.36.6
     out: pkg/api
