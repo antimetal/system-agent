@@ -76,10 +76,10 @@ func TestCollectionConfig_ApplyDefaults(t *testing.T) {
 					MetricTypeNetworkInfo: true,
 					MetricTypeNUMAStats:   true,
 				},
-				HostProcPath:   "/custom/proc",      // User value kept
-				HostSysPath:    "/sys",              // Default applied
-				HostDevPath:    "/dev",              // Default applied
-				HostCgroupPath: "/sys/fs/cgroup",    // Default applied
+				HostProcPath:   "/custom/proc",   // User value kept
+				HostSysPath:    "/sys",           // Default applied
+				HostDevPath:    "/dev",           // Default applied
+				HostCgroupPath: "/sys/fs/cgroup", // Default applied
 			},
 		},
 		{
