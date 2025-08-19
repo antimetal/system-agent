@@ -2,9 +2,28 @@
 
 Component that connects your infrastructure to the [Antimetal](https://antimetal.com) platform.
 
+## Documentation
+
+📚 **[View the complete documentation in our Wiki](https://github.com/antimetal/agent/wiki)**
+
+The wiki contains comprehensive guides for:
+- Architecture and system design
+- Installation and configuration
+- Performance collectors reference
+- Hardware discovery features
+- Testing and development guides
+
 ## Contributing
 
 If you want to contribute, refer to our [DEVELOPING](./docs/DEVELOPING.md) docs.
+
+### Developer Quick References
+
+The `/docs` directory contains quick references for developers:
+- [DEVELOPING.md](./docs/DEVELOPING.md) - Development setup and workflow
+- [performance-collectors.md](./docs/performance-collectors.md) - Collector implementation guide
+- [ebpf-development.md](./docs/ebpf-development.md) - eBPF program development
+- [COMMIT_MESSAGE_GUIDELINES.md](./docs/COMMIT_MESSAGE_GUIDELINES.md) - Commit conventions
 
 ## Helm chart
 
