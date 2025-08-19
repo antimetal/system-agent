@@ -81,8 +81,6 @@ spec:
           value: /host/sys
         - name: HOST_DEV
           value: /host/dev
-        - name: HOST_CGROUP
-          value: /host/cgroup
         volumeMounts:
         - name: data
           mountPath: /var/lib/antimetal
@@ -94,9 +92,6 @@ spec:
           readOnly: true
         - name: dev
           mountPath: /host/dev
-          readOnly: true
-        - name: cgroup
-          mountPath: /host/cgroup
           readOnly: true
         securityContext:
           allowPrivilegeEscalation: false
@@ -139,8 +134,4 @@ spec:
       - name: dev
         hostPath:
           path: /dev
-          type: Directory
-      - name: cgroup
-        hostPath:
-          path: /sys/fs/cgroup
           type: Directory

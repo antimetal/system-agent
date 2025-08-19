@@ -155,10 +155,7 @@ The agent supports container-level metrics via cgroup collectors:
 - **Zero-configuration**: Auto-discovers containers without runtime APIs
 - **Graceful degradation**: Handles missing files and permissions
 
-For implementation details, see:
-- **[Cgroup Compatibility Guide](docs/cgroup-compatibility.md)** - Version support and runtime compatibility matrix
-- **[Cgroup Collectors Design](docs/cgroup-collectors-design.md)** - Architecture and implementation details
-- **[Testing Guide](docs/testing-cgroup-collectors.md)** - How to test cgroup collectors
+For implementation details, see the system-agent wiki documentation on cgroup collectors.
 
 ## Resource Store Architecture
 
