@@ -116,7 +116,20 @@ if [ -n "$COVERAGE_FILE" ] && [ -f "$COVERAGE_FILE" ] && command -v go >/dev/nul
     fi
     
     echo "" >> $GITHUB_STEP_SUMMARY
-    echo "📊 Download coverage artifacts for detailed reports" >> $GITHUB_STEP_SUMMARY
+    
+    # Add link to coverage artifact if we're in GitHub Actions
+    if [ -n "$GITHUB_RUN_ID" ] && [ -n "$GITHUB_REPOSITORY" ]; then
+        echo "### 📊 Coverage Reports" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "[📥 Download Combined Coverage Report](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}#artifacts)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "The **coverage-combined** artifact contains:" >> $GITHUB_STEP_SUMMARY
+        echo "- 📄 `coverage-all.html` - Interactive HTML coverage report" >> $GITHUB_STEP_SUMMARY
+        echo "- 📊 `COVERAGE.md` - Coverage summary" >> $GITHUB_STEP_SUMMARY
+        echo "- 🔍 `coverage-all.out` - Raw coverage data" >> $GITHUB_STEP_SUMMARY
+    else
+        echo "📊 Download coverage artifacts for detailed reports" >> $GITHUB_STEP_SUMMARY
+    fi
     echo "" >> $GITHUB_STEP_SUMMARY
 fi
 

@@ -57,7 +57,20 @@ if [ -n "$UNIT_COV" ] || [ -n "$INT_COV" ]; then
   fi
   
   echo "" >> coverage/COVERAGE.md
-  echo "📊 View \`coverage-all.html\` for detailed line-by-line coverage" >> coverage/COVERAGE.md
+  echo "### 📊 How to View Coverage Reports" >> coverage/COVERAGE.md
+  echo "" >> coverage/COVERAGE.md
+  echo "1. **HTML Report**: Open \`coverage-all.html\` in a browser for interactive line-by-line coverage" >> coverage/COVERAGE.md
+  echo "2. **Raw Data**: Use \`go tool cover -func=coverage-all.out\` to see function-level coverage" >> coverage/COVERAGE.md
+  echo "" >> coverage/COVERAGE.md
+  
+  # If we're in GitHub Actions, output to job summary too
+  if [ -n "$GITHUB_STEP_SUMMARY" ]; then
+    echo "### ✅ Coverage Merged Successfully" >> $GITHUB_STEP_SUMMARY
+    echo "" >> $GITHUB_STEP_SUMMARY
+    if [ -f coverage/coverage-all.out ]; then
+      echo "**Combined Test Coverage: $TOTAL_PCT**" >> $GITHUB_STEP_SUMMARY
+    fi
+  fi
 else
   echo "No coverage files found to merge"
   exit 0
