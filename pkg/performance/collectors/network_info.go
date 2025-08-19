@@ -80,11 +80,10 @@ func NewNetworkInfoCollector(logger logr.Logger, config performance.CollectionCo
 	}
 
 	capabilities := performance.CollectorCapabilities{
-		SupportsOneShot:    true,
-		SupportsContinuous: false,
-		RequiresRoot:       false,
-		RequiresEBPF:       false,
-		MinKernelVersion:   "2.6.0",
+		SupportsOneShot:      true,
+		SupportsContinuous:   false,
+		RequiredCapabilities: nil, // No special capabilities required
+		MinKernelVersion:     "2.6.0",
 	}
 
 	return &NetworkInfoCollector{

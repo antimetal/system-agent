@@ -8,10 +8,12 @@ package performance
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
+	"github.com/antimetal/agent/pkg/performance/capabilities"
 	"github.com/go-logr/logr"
 )
 
@@ -51,11 +53,35 @@ type NewContinuousCollector func(logr.Logger, CollectionConfig) (ContinuousColle
 type NewPointCollector func(logr.Logger, CollectionConfig) (PointCollector, error)
 
 type CollectorCapabilities struct {
-	SupportsOneShot    bool
-	SupportsContinuous bool
-	RequiresRoot       bool
-	RequiresEBPF       bool
-	MinKernelVersion   string
+	SupportsOneShot      bool
+	SupportsContinuous   bool
+	RequiredCapabilities []capabilities.Capability
+	MinKernelVersion     string
+}
+
+// CanRun checks if the collector can run with current process capabilities
+// Returns nil if all capabilities are present, otherwise returns an error
+// with all missing capabilities joined together
+func (c CollectorCapabilities) CanRun() error {
+	if len(c.RequiredCapabilities) == 0 {
+		return nil
+	}
+
+	hasAll, missing, err := capabilities.HasAllCapabilities(c.RequiredCapabilities)
+	if err != nil {
+		return err
+	}
+
+	if !hasAll && len(missing) > 0 {
+		errs := make([]error, len(missing))
+		for i, cap := range missing {
+			errs[i] = capabilities.MissingCapabilityError{Capability: cap}
+		}
+		// Always use errors.Join even for single error to simplify unwrapping
+		return errors.Join(errs...)
+	}
+
+	return nil
 }
 
 // BaseCollector provides common functionality for all collectors
@@ -147,11 +173,10 @@ func NewContinuousPointCollector(
 ) *ContinuousPointCollector {
 	pointCaps := pointCollector.Capabilities()
 	caps := CollectorCapabilities{
-		SupportsOneShot:    false,
-		SupportsContinuous: true,
-		RequiresRoot:       pointCaps.RequiresRoot,
-		RequiresEBPF:       pointCaps.RequiresEBPF,
-		MinKernelVersion:   pointCaps.MinKernelVersion,
+		SupportsOneShot:      false,
+		SupportsContinuous:   true,
+		RequiredCapabilities: pointCaps.RequiredCapabilities,
+		MinKernelVersion:     pointCaps.MinKernelVersion,
 	}
 	return &ContinuousPointCollector{
 		BaseContinuousCollector: NewBaseContinuousCollector(
@@ -260,11 +285,10 @@ func NewOnceContinuousCollector(
 			logger,
 			config,
 			CollectorCapabilities{
-				SupportsOneShot:    true,
-				SupportsContinuous: false,
-				RequiresRoot:       pointCaps.RequiresRoot,
-				RequiresEBPF:       pointCaps.RequiresEBPF,
-				MinKernelVersion:   pointCaps.MinKernelVersion,
+				SupportsOneShot:      true,
+				SupportsContinuous:   false,
+				RequiredCapabilities: pointCaps.RequiredCapabilities,
+				MinKernelVersion:     pointCaps.MinKernelVersion,
 			},
 		),
 	}
