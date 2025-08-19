@@ -29,6 +29,13 @@ if [ -n "$UNIT_TEST_FILE" ] && [ -f "$UNIT_TEST_FILE" ]; then
     elif grep -q "FAIL" "$UNIT_TEST_FILE"; then
         echo "  - Status: FAILED" >> $GITHUB_STEP_SUMMARY
     fi
+    
+    # Extract coverage percentage if available
+    COVERAGE_LINE=$(grep -E "^total:.*[0-9]+\.[0-9]+%" "$UNIT_TEST_FILE" | tail -1)
+    if [ -n "$COVERAGE_LINE" ]; then
+        COVERAGE_PCT=$(echo "$COVERAGE_LINE" | grep -oE "[0-9]+\.[0-9]+%" | tail -1)
+        echo "  - Coverage: **$COVERAGE_PCT**" >> $GITHUB_STEP_SUMMARY
+    fi
 else
     echo "⚠️ Unit test results not found" >> $GITHUB_STEP_SUMMARY
     echo "  - Searched in: ${TEST_RESULTS_DIR}" >> $GITHUB_STEP_SUMMARY
@@ -85,11 +92,31 @@ echo "- **eBPF Tests**: Run in VMs with CAP_SYS_ADMIN capability" >> $GITHUB_STE
 echo "" >> $GITHUB_STEP_SUMMARY
 
 # Check if coverage report exists
-COVERAGE_FILE=$(find "${TEST_RESULTS_DIR}" -name "coverage.out" -type f | head -1 || true)
-if [ -n "$COVERAGE_FILE" ] && [ -f "$COVERAGE_FILE" ]; then
-    echo "## Coverage Report" >> $GITHUB_STEP_SUMMARY
+COVERAGE_FILE=$(find "${TEST_RESULTS_DIR}" -name "coverage-unit.out" -o -name "coverage-integration.out" -type f | head -1 || true)
+if [ -n "$COVERAGE_FILE" ] && [ -f "$COVERAGE_FILE" ] && command -v go >/dev/null 2>&1; then
+    echo "## Coverage Details" >> $GITHUB_STEP_SUMMARY
     echo "" >> $GITHUB_STEP_SUMMARY
-    echo "✅ Coverage report generated - Download artifacts to view detailed coverage" >> $GITHUB_STEP_SUMMARY
+    
+    # Process unit coverage if exists
+    UNIT_COVERAGE=$(find "${TEST_RESULTS_DIR}" -name "coverage-unit.out" -type f | head -1)
+    if [ -n "$UNIT_COVERAGE" ] && [ -f "$UNIT_COVERAGE" ]; then
+        COVERAGE_PCT=$(go tool cover -func="$UNIT_COVERAGE" 2>/dev/null | grep "^total:" | awk '{print $3}')
+        if [ -n "$COVERAGE_PCT" ]; then
+            echo "### Unit Test Coverage: $COVERAGE_PCT" >> $GITHUB_STEP_SUMMARY
+        fi
+    fi
+    
+    # Process integration coverage if exists
+    INT_COVERAGE=$(find "${TEST_RESULTS_DIR}" -name "coverage-integration.out" -type f | head -1)
+    if [ -n "$INT_COVERAGE" ] && [ -f "$INT_COVERAGE" ]; then
+        COVERAGE_PCT=$(go tool cover -func="$INT_COVERAGE" 2>/dev/null | grep "^total:" | awk '{print $3}')
+        if [ -n "$COVERAGE_PCT" ]; then
+            echo "### Integration Test Coverage: $COVERAGE_PCT" >> $GITHUB_STEP_SUMMARY
+        fi
+    fi
+    
+    echo "" >> $GITHUB_STEP_SUMMARY
+    echo "📊 Download coverage artifacts for detailed reports" >> $GITHUB_STEP_SUMMARY
     echo "" >> $GITHUB_STEP_SUMMARY
 fi
 
