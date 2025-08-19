@@ -126,12 +126,16 @@ vet: generate ## Run go vet against code.
 test: test-unit test-integration ## Run all tests (unit and integration).
 
 .PHONY: test-unit
-test-unit: generate ## Run unit tests only.
-	go test ./... -v -timeout 30s
+test-unit: generate ## Run unit tests with coverage.
+	@mkdir -p coverage
+	go test ./... -v -timeout 30s -coverprofile=coverage/coverage-unit.out -covermode=atomic
+	@echo "Unit test coverage saved to coverage/coverage-unit.out"
 
 .PHONY: test-integration
-test-integration: generate manifests build-ebpf ## Run integration tests.
-	EBPF_BUILD_DIR=$(EBPF_BUILD_DIR) ANTIMETAL_BPF_PATH=$(EBPF_BUILD_DIR) go test -tags integration ./... -v -timeout 60s
+test-integration: generate manifests build-ebpf ## Run integration tests with coverage.
+	@mkdir -p coverage
+	EBPF_BUILD_DIR=$(EBPF_BUILD_DIR) ANTIMETAL_BPF_PATH=$(EBPF_BUILD_DIR) go test -tags integration ./... -v -timeout 60s -coverprofile=coverage/coverage-integration.out -covermode=atomic
+	@echo "Integration test coverage saved to coverage/coverage-integration.out"
 
 .PHONY: lint
 lint: golangci-lint generate ## Run golangci-lint linter & yamllint.

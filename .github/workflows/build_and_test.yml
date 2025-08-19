@@ -157,6 +157,13 @@ jobs:
         echo "" >> unit-test-results.txt
         echo "=== Test Summary ===" >> unit-test-results.txt
         echo "Time: $(date)" >> unit-test-results.txt
+        
+        # Display coverage summary
+        if [ -f coverage/coverage-unit.out ]; then
+          echo "" >> unit-test-results.txt
+          echo "=== Coverage Summary ===" >> unit-test-results.txt
+          go tool cover -func=coverage/coverage-unit.out | tail -n 5 >> unit-test-results.txt
+        fi
 
     - name: Upload test results
       uses: actions/upload-artifact@v4
@@ -165,6 +172,15 @@ jobs:
         name: unit-test-results
         path: unit-test-results.txt
         retention-days: 7
+        if-no-files-found: warn
+
+    - name: Upload coverage reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: unit-coverage
+        path: coverage/coverage-unit.out
+        retention-days: 30
         if-no-files-found: warn
 
   # Build artifacts separately to avoid rebuilding for each kernel version.
