@@ -8,9 +8,12 @@
 
 package capabilities
 
-// HasAllCapabilities on non-Linux systems always returns true
+// HasAllCapabilities on non-Linux systems always returns false
 // since capabilities are a Linux-specific concept
 func HasAllCapabilities(required []Capability) (bool, []Capability, error) {
-	// On non-Linux systems, we assume all capabilities are available
-	return true, nil, nil
+	// On non-Linux systems, capabilities don't exist, so we return false with all requested capabilities as missing
+	if len(required) == 0 {
+		return true, nil, nil
+	}
+	return false, required, nil
 }

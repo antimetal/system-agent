@@ -144,11 +144,7 @@ The Antimetal Agent includes a comprehensive performance monitoring system that 
 - Graceful degradation for optional data
 - Comprehensive testing with mock filesystems
 
-### eBPF ProfilerCollector
-
-The ProfilerCollector provides CPU profiling using eBPF with unified configuration supporting both predefined and discovered perf events. Key features include event enumeration, cross-platform compatibility, and comprehensive validation.
-
-For detailed performance collector development including implementation patterns, testing methodology, continuous collectors, and examples, see **[docs/performance-collectors.md](docs/performance-collectors.md)**. For eBPF profiler usage and perf event enumeration, see **[docs/perf-event-enumeration.md](docs/perf-event-enumeration.md)**.
+For detailed performance collector development including implementation patterns, testing methodology, continuous collectors, and examples, see **[docs/performance-collectors.md](docs/performance-collectors.md)**.
 
 ## Resource Store Architecture
 
@@ -272,6 +268,33 @@ kubectl describe deployment -n antimetal-system agent
 - **KIND clusters** for K8s integration
 - **Mock intake service** for gRPC testing
 - **BadgerDB in-memory** for storage testing
+
+#### Integration Test Environment Assumptions
+Integration tests (files with `//go:build integration` tag) should always assume:
+- **Linux environment**: Never check `runtime.GOOS` - integration tests only run on Linux
+- **Proper permissions**: Never check `os.Geteuid()` - assume tests have required permissions (root, CAP_BPF, etc.)
+- **Required capabilities**: Use `require.NoError()` for permission-related operations rather than skipping
+- **Kernel features**: Check kernel version for feature availability, but don't skip for OS type
+
+Example of correct integration test setup:
+```go
+//go:build integration
+
+func TestEBPFFeature(t *testing.T) {
+    // NO: if runtime.GOOS != "linux" { t.Skip() }
+    // NO: if os.Geteuid() != 0 { t.Skip() }
+    
+    // YES: Assume Linux and proper permissions
+    err := rlimit.RemoveMemlock()
+    require.NoError(t, err, "Failed to remove memlock - integration tests require proper permissions")
+    
+    // YES: Check kernel version for feature support
+    kernel, _ := GetCurrentVersion()
+    if !kernel.IsAtLeast(5, 8) {
+        t.Skip("Feature requires kernel 5.8+")
+    }
+}
+```
 
 ### Performance Testing
 - **Benchmarks** for critical paths

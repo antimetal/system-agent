@@ -7,23 +7,24 @@
 package performance
 
 import (
+	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"os"
-	"runtime"
+	"slices"
 
 	"github.com/antimetal/agent/pkg/performance/capabilities"
-	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
 )
 
 var (
 	registry              = make(map[MetricType]NewContinuousCollector)
 	unavailableCollectors = make(map[MetricType]UnavailableCollector)
-	registryLogger        = stdr.New(log.New(os.Stderr, "[performance.registry] ", log.LstdFlags))
+	registryLogger        = stdr.New(log.New(os.Stderr, "[performance/registry] ", log.LstdFlags))
 )
 
-// UnavailableCollector represents a collector that cannot run on this platform
+// UnavailableCollector tracks collectors that cannot run on the current platform
 type UnavailableCollector struct {
 	MetricType           MetricType
 	Reason               string
@@ -33,43 +34,15 @@ type UnavailableCollector struct {
 }
 
 // Register adds a NewCollector factory to the global registry for metricType.
-// collector is used to create new collector instances with the provided logger and
-// configuration.
+// It checks if the collector can run on the current platform based on capabilities.
+// If the collector cannot run due to missing capabilities, it is tracked in the
+// unavailable collectors list with the reason, and an error is logged.
 //
 // This function is usually called during package initialization (typically in init() functions)
 // to register collector implementations before they can be instantiated by performance.Manager.
 //
-// On non-Linux platforms, this is a no-op to allow unit tests to run on macOS/Windows.
-// It will panic if a collector for the given metricType is already registered on Linux.
+// It will panic if a collector for the given metricType is already registered.
 func Register(metricType MetricType, collector NewContinuousCollector) {
-	// No-op on non-Linux platforms
-	if runtime.GOOS != "linux" {
-		registryLogger.V(1).Info("Skipping collector registration on non-Linux platform",
-			"metric_type", metricType, "platform", runtime.GOOS)
-		return
-	}
-
-	_, exists := registry[metricType]
-	if exists {
-		panic(fmt.Sprintf("Collector for %s already registered", metricType))
-	}
-	registry[metricType] = collector
-}
-
-// TryRegister attempts to register a collector after checking if it can run on the current platform.
-// If the collector cannot run due to missing capabilities or incompatible platform, it is tracked
-// in the unavailable collectors list with the reason.
-//
-// On non-Linux platforms, this is a no-op to allow unit tests to run on macOS/Windows.
-// This function is called during package initialization and will not panic on capability failures.
-func TryRegister(metricType MetricType, collector NewContinuousCollector) {
-	// No-op on non-Linux platforms
-	if runtime.GOOS != "linux" {
-		registryLogger.V(1).Info("Skipping collector registration on non-Linux platform",
-			"metric_type", metricType, "platform", runtime.GOOS)
-		return
-	}
-
 	// Check if already registered
 	if _, exists := registry[metricType]; exists {
 		panic(fmt.Sprintf("Collector for %s already registered", metricType))
@@ -98,44 +71,61 @@ func TryRegister(metricType MetricType, collector NewContinuousCollector) {
 	// Get collector capabilities
 	caps := tempCollector.Capabilities()
 
-	// Check if collector can run with current capabilities
-	canRun, missing, err := caps.CanRun()
-	if err != nil {
-		unavailableCollectors[metricType] = UnavailableCollector{
-			MetricType: metricType,
-			Reason:     fmt.Sprintf("Failed to check capabilities: %v", err),
-		}
-		registryLogger.Info("Failed to check collector capabilities",
-			"metric_type", metricType, "error", err.Error())
-		return
+	// Get current kernel version for debugging
+	var currentKernelVersion string
+	if kv, err := capabilities.DetectKernelVersion(); err == nil {
+		currentKernelVersion = fmt.Sprintf("%s", kv)
 	}
 
-	if !canRun {
-		unavailableCollectors[metricType] = UnavailableCollector{
-			MetricType:          metricType,
-			Reason:              "Missing required capabilities",
-			MissingCapabilities: missing,
-			MinKernelVersion:    caps.MinKernelVersion,
+	err = caps.CanRun()
+	if err != nil {
+		var missing []capabilities.Capability
+
+		if unwrapper, ok := err.(interface{ Unwrap() []error }); ok {
+			for _, e := range unwrapper.Unwrap() {
+				var capErr capabilities.MissingCapabilityError
+				if errors.As(e, &capErr) {
+					missing = append(missing, capErr.Capability)
+				}
+			}
 		}
 
-		capNames := make([]string, len(missing))
-		for i, cap := range missing {
-			capNames[i] = cap.String()
-		}
+		if len(missing) > 0 {
+			unavailableCollectors[metricType] = UnavailableCollector{
+				MetricType:           metricType,
+				Reason:               err.Error(),
+				MissingCapabilities:  missing,
+				MinKernelVersion:     caps.MinKernelVersion,
+				CurrentKernelVersion: currentKernelVersion,
+			}
 
-		registryLogger.Info("Collector requires additional capabilities",
-			"metric_type", metricType,
-			"missing_capabilities", capNames,
-			"min_kernel_version", caps.MinKernelVersion)
+			capNames := make([]string, len(missing))
+			for i, cap := range missing {
+				capNames[i] = cap.String()
+			}
+
+			registryLogger.Info("Collector requires additional capabilities",
+				"metric_type", metricType,
+				"missing_capabilities", capNames,
+				"min_kernel_version", caps.MinKernelVersion)
+		} else {
+			unavailableCollectors[metricType] = UnavailableCollector{
+				MetricType:           metricType,
+				Reason:               fmt.Sprintf("Failed to check capabilities: %v", err),
+				CurrentKernelVersion: currentKernelVersion,
+			}
+			registryLogger.Info("Failed to check collector capabilities",
+				"metric_type", metricType, "error", err.Error())
+		}
 		return
 	}
 
 	// All checks passed, register the collector
 	registry[metricType] = collector
-	registryLogger.V(1).Info("Successfully registered collector", "metric_type", metricType)
+	registryLogger.V(1).Info("Collector registered successfully", "metric_type", metricType)
 }
 
-// GetCollector retrieves the collector factory function from the global registry for metricType.
+// GetCollector returns the collector factory for the given metric type.
 // The returned factory function can be used to create new collector instances.
 func GetCollector(metricType MetricType) (NewContinuousCollector, error) {
 	collector, exists := registry[metricType]
@@ -148,48 +138,30 @@ func GetCollector(metricType MetricType) (NewContinuousCollector, error) {
 // GetAvailableCollectors returns a list of metric types for collectors that are registered
 // and can run on the current platform.
 func GetAvailableCollectors() []MetricType {
-	types := make([]MetricType, 0, len(registry))
-	for metricType := range registry {
-		types = append(types, metricType)
-	}
-	return types
+	return slices.Collect(maps.Keys(registry))
 }
 
 // GetUnavailableCollectors returns information about collectors that cannot run on the
 // current platform due to missing capabilities or other requirements.
 func GetUnavailableCollectors() map[MetricType]UnavailableCollector {
-	// Return a copy to prevent external modification
-	result := make(map[MetricType]UnavailableCollector, len(unavailableCollectors))
-	for k, v := range unavailableCollectors {
-		result[k] = v
-	}
-	return result
+	return unavailableCollectors
 }
 
-// GetCollectorStatus returns detailed status information for a specific collector type.
-// It returns whether the collector is available, and if not, why it cannot run.
-func GetCollectorStatus(metricType MetricType) (available bool, reason string) {
+// GetCollectorStatus returns whether a collector is available and a reason string.
+// If the collector is available, the reason will be "available".
+// If the collector is unavailable, the reason will describe why.
+// If the collector doesn't exist, the reason will be "not found".
+func GetCollectorStatus(metricType MetricType) (bool, string) {
+	// Check if it's available
 	if _, exists := registry[metricType]; exists {
-		return true, "Collector is registered and available"
+		return true, "available"
 	}
 
+	// Check if it's unavailable with a known reason
 	if unavail, exists := unavailableCollectors[metricType]; exists {
-		reason = unavail.Reason
-		if len(unavail.MissingCapabilities) > 0 {
-			capNames := make([]string, len(unavail.MissingCapabilities))
-			for i, cap := range unavail.MissingCapabilities {
-				capNames[i] = cap.String()
-			}
-			reason = fmt.Sprintf("%s (missing: %v)", reason, capNames)
-		}
-		return false, reason
+		return false, unavail.Reason
 	}
 
-	return false, "Collector not found"
-}
-
-// SetRegistryLogger allows setting a custom logger for the registry.
-// This should be called before any collectors are registered.
-func SetRegistryLogger(logger logr.Logger) {
-	registryLogger = logger
+	// Not found at all
+	return false, "not found"
 }

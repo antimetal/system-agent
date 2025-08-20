@@ -12,6 +12,9 @@
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
+# Coverage reports directory
+coverage/
+
 # Dependency directories (remove the comment below to include it)
 vendor/
 
@@ -42,11 +45,3 @@ internal/ebpf/*/
 # Generated type definitions from eBPF headers
 pkg/performance/collectors/*_types.go
 test-reports/
-
-# Test artifacts and CI results
-coverage-report/
-test-results-*/
-unit-test-results/
-test-artifacts*/
-cover.out
-*.test

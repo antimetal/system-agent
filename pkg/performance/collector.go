@@ -8,6 +8,7 @@ package performance
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -59,13 +60,28 @@ type CollectorCapabilities struct {
 }
 
 // CanRun checks if the collector can run with current process capabilities
-func (c CollectorCapabilities) CanRun() (bool, []capabilities.Capability, error) {
+// Returns nil if all capabilities are present, otherwise returns an error
+// with all missing capabilities joined together
+func (c CollectorCapabilities) CanRun() error {
 	if len(c.RequiredCapabilities) == 0 {
-		return true, nil, nil
+		return nil
 	}
 
 	hasAll, missing, err := capabilities.HasAllCapabilities(c.RequiredCapabilities)
-	return hasAll, missing, err
+	if err != nil {
+		return err
+	}
+
+	if !hasAll && len(missing) > 0 {
+		errs := make([]error, len(missing))
+		for i, cap := range missing {
+			errs[i] = capabilities.MissingCapabilityError{Capability: cap}
+		}
+		// Always use errors.Join even for single error to simplify unwrapping
+		return errors.Join(errs...)
+	}
+
+	return nil
 }
 
 // BaseCollector provides common functionality for all collectors
