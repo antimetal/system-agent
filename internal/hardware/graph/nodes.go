@@ -249,10 +249,10 @@ func (b *Builder) createCPUCoreNode(core *performance.CPUCore) (*resourcev1.Reso
 func (b *Builder) createMemoryModuleNode(memInfo *performance.MemoryInfo) (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
 	// Create memory module spec
 	memSpec := &hardwarev1.MemoryModuleNode{
-		TotalBytes:              memInfo.TotalBytes,
-		NumaEnabled:             memInfo.NUMAEnabled,
-		NumaBalancingAvailable:  memInfo.NUMABalancingAvailable,
-		NumaNodeCount:           int32(len(memInfo.NUMANodes)),
+		TotalBytes:             memInfo.TotalBytes,
+		NumaEnabled:            memInfo.NUMAEnabled,
+		NumaBalancingAvailable: memInfo.NUMABalancingAvailable,
+		NumaNodeCount:          int32(len(memInfo.NUMANodes)),
 	}
 
 	// Marshal the spec
@@ -343,15 +343,15 @@ func (b *Builder) createNUMANode(numa *performance.NUMANode) (*resourcev1.Resour
 func (b *Builder) createDiskDeviceNode(disk *performance.DiskInfo) (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
 	// Create disk device spec
 	diskSpec := &hardwarev1.DiskDeviceNode{
-		Device:              disk.Device,
-		Model:               disk.Model,
-		Vendor:              disk.Vendor,
-		SizeBytes:           disk.SizeBytes,
-		Rotational:          disk.Rotational,
-		BlockSize:           uint32(disk.BlockSize),
-		PhysicalBlockSize:   uint32(disk.PhysicalBlockSize),
-		Scheduler:           disk.Scheduler,
-		QueueDepth:          uint32(disk.QueueDepth),
+		Device:            disk.Device,
+		Model:             disk.Model,
+		Vendor:            disk.Vendor,
+		SizeBytes:         disk.SizeBytes,
+		Rotational:        disk.Rotational,
+		BlockSize:         uint32(disk.BlockSize),
+		PhysicalBlockSize: uint32(disk.PhysicalBlockSize),
+		Scheduler:         disk.Scheduler,
+		QueueDepth:        uint32(disk.QueueDepth),
 	}
 
 	// Marshal the spec
@@ -475,17 +475,17 @@ func (b *Builder) createNetworkInterfaceNode(iface *performance.NetworkInfo) (*r
 
 	// Create network interface spec
 	netSpec := &hardwarev1.NetworkInterfaceNode{
-		Interface:       iface.Interface,
-		MacAddress:      iface.MACAddress,
-		Speed:           iface.Speed,
-		Duplex:          duplexMode,
-		Mtu:             uint32(iface.MTU),
-		Driver:          iface.Driver,
-		Type:            ifaceType,
-		Ipv4Addresses:   []string{}, // TODO: Add IP address collection to NetworkInfo
-		Ipv6Addresses:   []string{}, // TODO: Add IP address collection to NetworkInfo
-		OperState:       operState,
-		Carrier:         iface.Carrier,
+		Interface:     iface.Interface,
+		MacAddress:    iface.MACAddress,
+		Speed:         iface.Speed,
+		Duplex:        duplexMode,
+		Mtu:           uint32(iface.MTU),
+		Driver:        iface.Driver,
+		Type:          ifaceType,
+		Ipv4Addresses: []string{}, // TODO: Add IP address collection to NetworkInfo
+		Ipv6Addresses: []string{}, // TODO: Add IP address collection to NetworkInfo
+		OperState:     operState,
+		Carrier:       iface.Carrier,
 	}
 
 	// Marshal the spec

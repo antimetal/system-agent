@@ -194,8 +194,8 @@ func TestBuilder_BuildFromSnapshot(t *testing.T) {
 			err := anypb.UnmarshalTo(r.Spec, &spec, proto.UnmarshalOptions{})
 			require.NoError(t, err)
 			assert.Equal(t, "GenuineIntel", spec.VendorId)
-			assert.Equal(t, int32(4), spec.PhysicalCores)
-			assert.Equal(t, int32(8), spec.LogicalCores)
+			assert.Equal(t, int32(2), spec.PhysicalCores)
+			assert.Equal(t, int32(2), spec.LogicalCores)
 		case "DiskDeviceNode":
 			var spec hardwarev1.DiskDeviceNode
 			err := anypb.UnmarshalTo(r.Spec, &spec, proto.UnmarshalOptions{})

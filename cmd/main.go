@@ -41,26 +41,27 @@ var (
 	setupLog logr.Logger
 
 	// CLI Options
-	intakeAddr           string
-	intakeAPIKey         string
-	intakeSecure         bool
-	metricsAddr          string
-	metricsSecure        bool
-	metricsCertDir       string
-	metricsCertName      string
-	metricsKeyName       string
-	enableLeaderElection bool
-	probeAddr            string
-	enableHTTP2          bool
-	enableK8sController  bool
-	kubernetesProvider   string
-	eksAccountID         string
-	eksRegion            string
-	eksClusterName       string
-	eksAutodiscover      bool
-	maxStreamAge         time.Duration
-	pprofAddr            string
-	dataDir              string
+	intakeAddr             string
+	intakeAPIKey           string
+	intakeSecure           bool
+	metricsAddr            string
+	metricsSecure          bool
+	metricsCertDir         string
+	metricsCertName        string
+	metricsKeyName         string
+	enableLeaderElection   bool
+	probeAddr              string
+	enableHTTP2            bool
+	enableK8sController    bool
+	kubernetesProvider     string
+	eksAccountID           string
+	eksRegion              string
+	eksClusterName         string
+	eksAutodiscover        bool
+	maxStreamAge           time.Duration
+	pprofAddr              string
+	dataDir                string
+	hardwareUpdateInterval time.Duration
 )
 
 func init() {
@@ -110,6 +111,8 @@ func init() {
 		"The address the pprof server binds to. Set this to '0' to disable the pprof server")
 	flag.StringVar(&dataDir, "data-directory", "/var/lib/antimetal",
 		"The directory where the agent will place its persistent data files. Set to empty string for in-memory mode.")
+	flag.DurationVar(&hardwareUpdateInterval, "hardware-update-interval", 5*time.Minute,
+		"Interval for hardware topology discovery updates")
 
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
@@ -251,7 +254,7 @@ func main() {
 		hardware.ManagerConfig{
 			Store:              rsrcStore,
 			PerformanceManager: perfManager,
-			UpdateInterval:     5 * time.Minute,
+			UpdateInterval:     hardwareUpdateInterval,
 		},
 	)
 	if err != nil {
