@@ -139,7 +139,7 @@ monitor_collectors() {
 verify_mounts() {
     header "Verifying Cgroup Mounts in Agent Pod"
     
-    POD=$(${KUBECTL} get pods -n ${NAMESPACE} -l app=agent -o jsonpath='{.items[0].metadata.name}')
+    POD=$(${KUBECTL} get pods -n ${NAMESPACE} -l app.kubernetes.io/name=agent -o jsonpath='{.items[0].metadata.name}')
     
     info "Agent pod: ${POD}"
     
@@ -162,7 +162,7 @@ verify_mounts() {
 check_container_metrics() {
     header "Checking Container Metrics"
     
-    POD=$(${KUBECTL} get pods -n ${NAMESPACE} -l app=agent -o jsonpath='{.items[0].metadata.name}')
+    POD=$(${KUBECTL} get pods -n ${NAMESPACE} -l app.kubernetes.io/name=agent -o jsonpath='{.items[0].metadata.name}')
     
     # Get container IDs for our test workloads
     info "Finding test container cgroups..."
