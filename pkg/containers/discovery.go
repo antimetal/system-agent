@@ -100,11 +100,11 @@ func (d *Discovery) DiscoverContainers(subsystem string, version int) ([]Contain
 // This is useful when multiple container runtimes are present that may use different cgroup versions.
 func (d *Discovery) DiscoverAllContainers() ([]Container, error) {
 	var allContainers []Container
-	
+
 	// Try cgroup v2
 	v2Containers := d.scanCgroupV2Directory(d.cgroupPath, 2)
 	allContainers = append(allContainers, v2Containers...)
-	
+
 	// Try cgroup v1 (check cpu subsystem as it's most commonly used)
 	v1Path := filepath.Join(d.cgroupPath, "cpu")
 	if _, err := os.Stat(v1Path); err == nil {
@@ -120,7 +120,7 @@ func (d *Discovery) DiscoverAllContainers() ([]Container, error) {
 			}
 		}
 	}
-	
+
 	return allContainers, nil
 }
 
@@ -128,15 +128,16 @@ func (d *Discovery) scanCgroupV1Directory(basePath string, cgroupVersion int) []
 	var containers []Container
 
 	// Common cgroup v1 patterns for different runtimes
-	runtimePaths := map[string]string{
-		"docker":     filepath.Join(basePath, "docker"),
-		"containerd": filepath.Join(basePath, "system.slice"),
-		"crio":       filepath.Join(basePath, "crio"),
-		"podman":     filepath.Join(basePath, "machine.slice"),
+	searchPaths := []string{
+		filepath.Join(basePath, "docker"),
+		filepath.Join(basePath, "containerd"),
+		filepath.Join(basePath, "system.slice"),
+		filepath.Join(basePath, "crio"),
+		filepath.Join(basePath, "machine.slice"),
 	}
 
-	for runtime, runtimePath := range runtimePaths {
-		filepath.Walk(runtimePath, func(path string, info os.FileInfo, err error) error {
+	for _, searchPath := range searchPaths {
+		filepath.Walk(searchPath, func(path string, info os.FileInfo, err error) error {
 			if err != nil || !info.IsDir() {
 				return nil
 			}
@@ -144,6 +145,8 @@ func (d *Discovery) scanCgroupV1Directory(basePath string, cgroupVersion int) []
 			// Extract container ID from the path
 			relativePath := strings.TrimPrefix(path, basePath)
 			if containerID := ExtractContainerID(relativePath); containerID != "" {
+				// Detect runtime from the actual path content, not the search directory
+				runtime := detectRuntimeFromPath(relativePath)
 				containers = append(containers, Container{
 					ID:            containerID,
 					Runtime:       runtime,
@@ -268,6 +271,15 @@ func ExtractContainerID(name string) string {
 					return id
 				}
 			}
+		}
+	}
+
+	// Check if the last path component is a container ID (for Kubernetes pods)
+	// This handles paths like /kubepods.slice/kubepods-pod123.slice/<container-id>
+	if len(parts) > 0 {
+		lastPart := parts[len(parts)-1]
+		if IsHexString(lastPart) && len(lastPart) >= MinContainerIDLength {
+			return lastPart
 		}
 	}
 

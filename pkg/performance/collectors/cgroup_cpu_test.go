@@ -236,6 +236,9 @@ func setupCgroupV2(t *testing.T, basePath string) {
 	dockerPath := filepath.Join(basePath, "system.slice", "docker-abc123def456.scope")
 	require.NoError(t, os.MkdirAll(dockerPath, 0755))
 
+	// Add cgroup.procs to indicate this is a container
+	createFile(t, filepath.Join(dockerPath, "cgroup.procs"), "1234\n5678\n")
+
 	createFile(t, filepath.Join(dockerPath, "cpu.stat"), `usage_usec 150000000
 user_usec 120000000
 system_usec 30000000
@@ -249,6 +252,9 @@ throttled_usec 7500000`)
 	kubePath := filepath.Join(basePath, "kubepods.slice", "kubepods-pod123.slice",
 		"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	require.NoError(t, os.MkdirAll(kubePath, 0755))
+
+	// Add cgroup.procs to indicate this is a container
+	createFile(t, filepath.Join(kubePath, "cgroup.procs"), "9012\n3456\n")
 
 	createFile(t, filepath.Join(kubePath, "cpu.stat"), `usage_usec 200000000
 nr_periods 2000

@@ -30,25 +30,25 @@ func TestCgroupMemoryCollector_Constructor(t *testing.T) {
 		{
 			name: "valid absolute path",
 			config: performance.CollectionConfig{
-				HostCgroupPath: "/sys/fs/cgroup",
+				HostSysPath: "/sys",
 			},
 			wantErr: false,
 		},
 		{
 			name: "invalid relative path",
 			config: performance.CollectionConfig{
-				HostCgroupPath: "sys/fs/cgroup",
+				HostSysPath: "sys",
 			},
 			wantErr: true,
-			errMsg:  "HostCgroupPath must be an absolute path",
+			errMsg:  "HostSysPath must be an absolute path",
 		},
 		{
 			name: "empty path",
 			config: performance.CollectionConfig{
-				HostCgroupPath: "",
+				HostSysPath: "",
 			},
 			wantErr: true,
-			errMsg:  "HostCgroupPath is required but not provided",
+			errMsg:  "HostSysPath is required but not provided",
 		},
 	}
 
@@ -70,13 +70,13 @@ func TestCgroupMemoryCollector_Constructor(t *testing.T) {
 
 func TestCgroupMemoryCollector_CgroupV1(t *testing.T) {
 	tmpDir := t.TempDir()
-	cgroupPath := filepath.Join(tmpDir, "cgroup")
+	cgroupPath := filepath.Join(tmpDir, "fs", "cgroup")
 
 	// Create cgroup v1 structure
 	setupCgroupV1Memory(t, cgroupPath)
 
 	config := performance.CollectionConfig{
-		HostCgroupPath: cgroupPath,
+		HostSysPath: tmpDir,
 	}
 
 	collector, err := collectors.NewCgroupMemoryCollector(logr.Discard(), config)
@@ -108,13 +108,13 @@ func TestCgroupMemoryCollector_CgroupV1(t *testing.T) {
 
 func TestCgroupMemoryCollector_CgroupV2(t *testing.T) {
 	tmpDir := t.TempDir()
-	cgroupPath := filepath.Join(tmpDir, "cgroup")
+	cgroupPath := filepath.Join(tmpDir, "fs", "cgroup")
 
 	// Create cgroup v2 structure
 	setupCgroupV2Memory(t, cgroupPath)
 
 	config := performance.CollectionConfig{
-		HostCgroupPath: cgroupPath,
+		HostSysPath: tmpDir,
 	}
 
 	collector, err := collectors.NewCgroupMemoryCollector(logr.Discard(), config)
@@ -149,10 +149,9 @@ func TestCgroupMemoryCollector_CgroupV2(t *testing.T) {
 
 func TestCgroupMemoryCollector_MissingCgroup(t *testing.T) {
 	tmpDir := t.TempDir()
-	cgroupPath := filepath.Join(tmpDir, "nonexistent")
 
 	config := performance.CollectionConfig{
-		HostCgroupPath: cgroupPath,
+		HostSysPath: tmpDir,
 	}
 
 	collector, err := collectors.NewCgroupMemoryCollector(logr.Discard(), config)
@@ -165,7 +164,7 @@ func TestCgroupMemoryCollector_MissingCgroup(t *testing.T) {
 
 func TestCgroupMemoryCollector_PartialData(t *testing.T) {
 	tmpDir := t.TempDir()
-	cgroupPath := filepath.Join(tmpDir, "cgroup")
+	cgroupPath := filepath.Join(tmpDir, "fs", "cgroup")
 
 	// Create cgroup v1 structure with partial data
 	memPath := filepath.Join(cgroupPath, "memory", "docker", "abc123def456789")
@@ -181,7 +180,7 @@ swap 0`)
 	require.NoError(t, os.MkdirAll(filepath.Join(cgroupPath, "memory"), 0755))
 
 	config := performance.CollectionConfig{
-		HostCgroupPath: cgroupPath,
+		HostSysPath: tmpDir,
 	}
 
 	collector, err := collectors.NewCgroupMemoryCollector(logr.Discard(), config)
@@ -203,7 +202,7 @@ swap 0`)
 
 func TestCgroupMemoryCollector_OOMCondition(t *testing.T) {
 	tmpDir := t.TempDir()
-	cgroupPath := filepath.Join(tmpDir, "cgroup")
+	cgroupPath := filepath.Join(tmpDir, "fs", "cgroup")
 
 	// Create container under OOM
 	memPath := filepath.Join(cgroupPath, "memory", "docker", "fedcba987654321")
@@ -221,7 +220,7 @@ oom_kill 10`)
 	require.NoError(t, os.MkdirAll(filepath.Join(cgroupPath, "memory"), 0755))
 
 	config := performance.CollectionConfig{
-		HostCgroupPath: cgroupPath,
+		HostSysPath: tmpDir,
 	}
 
 	collector, err := collectors.NewCgroupMemoryCollector(logr.Discard(), config)
@@ -280,6 +279,9 @@ func setupCgroupV2Memory(t *testing.T, basePath string) {
 	dockerPath := filepath.Join(basePath, "system.slice", "docker-abc123def456.scope")
 	require.NoError(t, os.MkdirAll(dockerPath, 0755))
 
+	// Add cgroup.procs to indicate this is a container
+	createMemoryFile(t, filepath.Join(dockerPath, "cgroup.procs"), "1234\n5678\n")
+
 	createMemoryFile(t, filepath.Join(dockerPath, "memory.stat"), `anon 1073741824
 file 536870912
 file_mapped 134217728
@@ -300,6 +302,9 @@ oom_kill 3`)
 	kubePath := filepath.Join(basePath, "kubepods.slice", "kubepods-pod123.slice",
 		"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	require.NoError(t, os.MkdirAll(kubePath, 0755))
+
+	// Add cgroup.procs to indicate this is a container
+	createMemoryFile(t, filepath.Join(kubePath, "cgroup.procs"), "9012\n3456\n")
 
 	createMemoryFile(t, filepath.Join(kubePath, "memory.stat"), `anon 2147483648
 file 1073741824`)

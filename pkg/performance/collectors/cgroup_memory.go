@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/antimetal/agent/pkg/containers"
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/go-logr/logr"
 )
@@ -61,7 +62,7 @@ var _ performance.PointCollector = (*CgroupMemoryCollector)(nil)
 type CgroupMemoryCollector struct {
 	performance.BaseCollector
 	cgroupPath string
-	discovery  *ContainerDiscovery
+	discovery  *containers.Discovery
 }
 
 // NewCgroupMemoryCollector creates a new cgroup memory collector
@@ -89,7 +90,7 @@ func NewCgroupMemoryCollector(logger logr.Logger, config performance.CollectionC
 			capabilities,
 		),
 		cgroupPath: cgroupPath,
-		discovery:  NewContainerDiscovery(cgroupPath),
+		discovery:  containers.NewDiscovery(cgroupPath),
 	}, nil
 }
 
@@ -119,7 +120,7 @@ func (c *CgroupMemoryCollector) Collect(ctx context.Context) (any, error) {
 		default:
 		}
 
-		stat, err := c.collectContainerStats(container, version)
+		stat, err := c.collectContainerStats(container)
 		if err != nil {
 			// Log error but continue with other containers
 			c.Logger().V(1).Info("Failed to collect stats for container",
@@ -134,13 +135,13 @@ func (c *CgroupMemoryCollector) Collect(ctx context.Context) (any, error) {
 }
 
 // collectContainerStats collects memory stats for a single container
-func (c *CgroupMemoryCollector) collectContainerStats(container ContainerPath, version int) (performance.CgroupMemoryStats, error) {
+func (c *CgroupMemoryCollector) collectContainerStats(container containers.Container) (performance.CgroupMemoryStats, error) {
 	stats := performance.CgroupMemoryStats{
 		ContainerID: container.ID,
 		CgroupPath:  container.CgroupPath,
 	}
 
-	if version == 1 {
+	if container.CgroupVersion == 1 {
 		// Cgroup v1: Read from memory controller files
 		if err := c.readCgroupV1Stats(&stats, container); err != nil {
 			return stats, err
@@ -169,7 +170,7 @@ func (c *CgroupMemoryCollector) collectContainerStats(container ContainerPath, v
 // - memory.stat is critical - returns error if unavailable (primary data source)
 // - Other files are optional for graceful degradation
 // - This ensures we at least have basic memory breakdown if stat file exists
-func (c *CgroupMemoryCollector) readCgroupV1Stats(stats *performance.CgroupMemoryStats, container ContainerPath) error {
+func (c *CgroupMemoryCollector) readCgroupV1Stats(stats *performance.CgroupMemoryStats, container containers.Container) error {
 	// Read memory.stat for detailed breakdown
 	statPath := filepath.Join(container.CgroupPath, "memory.stat")
 	if data, err := os.ReadFile(statPath); err == nil {
@@ -226,7 +227,7 @@ func (c *CgroupMemoryCollector) readCgroupV1Stats(stats *performance.CgroupMemor
 // - memory.stat is critical - returns error if unavailable (primary data source)
 // - Other files (memory.current, memory.max, memory.events) are optional
 // - This ensures consistency with v1 behavior while leveraging v2 features when available
-func (c *CgroupMemoryCollector) readCgroupV2Stats(stats *performance.CgroupMemoryStats, container ContainerPath) error {
+func (c *CgroupMemoryCollector) readCgroupV2Stats(stats *performance.CgroupMemoryStats, container containers.Container) error {
 	// Read memory.stat for detailed breakdown
 	statPath := filepath.Join(container.CgroupPath, "memory.stat")
 	if data, err := os.ReadFile(statPath); err == nil {
