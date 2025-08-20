@@ -18,8 +18,6 @@ import (
 const (
 	// minContainerIDLength is the minimum length for a valid container ID (first 12 chars of full ID)
 	minContainerIDLength = 12
-	// kubernetesContainerIDLength is the expected length of a Kubernetes container ID
-	kubernetesContainerIDLength = 64
 )
 
 // Container represents a discovered container with its cgroup location and runtime information.
@@ -137,7 +135,7 @@ func (d *Discovery) scanCgroupV1Directory(basePath string, cgroupVersion int) []
 	}
 
 	for _, searchPath := range searchPaths {
-		filepath.Walk(searchPath, func(path string, info os.FileInfo, err error) error {
+		_ = filepath.Walk(searchPath, func(path string, info os.FileInfo, err error) error {
 			if err != nil || !info.IsDir() {
 				return nil
 			}
@@ -191,7 +189,7 @@ func (d *Discovery) scanCgroupV1Directory(basePath string, cgroupVersion int) []
 func (d *Discovery) scanCgroupV2Directory(basePath string, cgroupVersion int) []Container {
 	var containers []Container
 
-	filepath.Walk(basePath, func(path string, info os.FileInfo, err error) error {
+	_ = filepath.Walk(basePath, func(path string, info os.FileInfo, err error) error {
 		if err != nil || !info.IsDir() {
 			return nil
 		}
