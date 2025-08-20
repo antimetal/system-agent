@@ -251,7 +251,7 @@ func detectRuntimeFromPath(path string) string {
 // ExtractContainerID extracts a container ID from a cgroup path component.
 // It handles various runtime-specific naming patterns.
 func ExtractContainerID(name string) string {
-	// Handle systemd scope units (docker-<id>.scope, crio-<id>.scope, cri-containerd-<id>.scope)
+	// Handle systemd scope units (docker-<id>.scope, crio-<id>.scope, cri-containerd-<id>.scope, libpod-<id>.scope)
 	if strings.HasSuffix(name, ".scope") {
 		// Remove the .scope suffix
 		nameWithoutScope := strings.TrimSuffix(name, ".scope")
@@ -267,7 +267,7 @@ func ExtractContainerID(name string) string {
 			}
 		}
 
-		// Handle simple runtime prefixes (docker-<id>, containerd-<id>)
+		// Handle simple runtime prefixes (docker-<id>, containerd-<id>, libpod-<id>)
 		parts := strings.SplitN(nameWithoutScope, "-", 2)
 		if len(parts) == 2 {
 			id := parts[1]
@@ -285,10 +285,10 @@ func ExtractContainerID(name string) string {
 		}
 	}
 
-	// Handle directory-based paths (/docker/<id>, /containerd/<id>)
+	// Handle directory-based paths (/docker/<id>, /containerd/<id>, /podman/<id>)
 	parts := strings.Split(name, "/")
 	for i, part := range parts {
-		if part == "docker" || part == "containerd" || part == "crio" {
+		if part == "docker" || part == "containerd" || part == "crio" || part == "podman" {
 			if i+1 < len(parts) {
 				id := parts[i+1]
 				if IsHexString(id) && len(id) >= minContainerIDLength {

@@ -200,6 +200,16 @@ func TestExtractContainerID(t *testing.T) {
 			expected: "abc123def456789",
 		},
 		{
+			name:     "podman libpod format",
+			input:    "libpod-abc123def456789.scope",
+			expected: "abc123def456789",
+		},
+		{
+			name:     "podman directory format",
+			input:    "/podman/abc123def456789",
+			expected: "abc123def456789",
+		},
+		{
 			name:     "no match",
 			input:    "random-string",
 			expected: "",
