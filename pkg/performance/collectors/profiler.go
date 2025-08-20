@@ -75,7 +75,15 @@ func NewProfilerCollector(logger logr.Logger, config performance.CollectionConfi
 // Start begins continuous CPU profiling
 func (p *ProfilerCollector) Start(ctx context.Context) (<-chan any, error) {
 	// TODO: Implement full eBPF profiler with ring buffer streaming
-	// For now, return an error to indicate this is not yet implemented
+	// For now, return an error indicating event enumeration is available but full implementation is pending
+	
+	// Demonstrate perf event enumeration functionality
+	if availableEvents, enumErr := p.GetAvailableEventNames(); enumErr == nil && len(availableEvents) > 0 {
+		return nil, fmt.Errorf("eBPF profiler implementation pending - requires vmlinux.h and eBPF build system.\n"+
+			"Available events on this system: %v\n"+
+			"Use software events like 'cpu-clock' or 'task-clock' when implementation is complete", availableEvents)
+	}
+	
 	return nil, errors.New("eBPF profiler implementation pending - requires vmlinux.h and eBPF build system")
 }
 
@@ -83,4 +91,29 @@ func (p *ProfilerCollector) Start(ctx context.Context) (<-chan any, error) {
 func (p *ProfilerCollector) Stop() error {
 	// TODO: Implement cleanup
 	return nil
+}
+
+// EnumerateAvailableEvents returns all perf events available on this system
+func (p *ProfilerCollector) EnumerateAvailableEvents() ([]PerfEventInfo, error) {
+	return EnumerateAvailablePerfEvents()
+}
+
+// GetAvailableEventNames returns just the names of available perf events
+func (p *ProfilerCollector) GetAvailableEventNames() ([]string, error) {
+	return GetAvailablePerfEventNames()
+}
+
+// GetEventSummary returns a categorized summary of available perf events
+func (p *ProfilerCollector) GetEventSummary() (*PerfEventSummary, error) {
+	return GetPerfEventSummary()
+}
+
+// FindEventByName looks up a perf event by name with helpful error messages
+func (p *ProfilerCollector) FindEventByName(name string) (*PerfEventInfo, error) {
+	return FindPerfEventByName(name)
+}
+
+// ValidateEvent checks if a specific event is supported on this system
+func (p *ProfilerCollector) ValidateEvent(eventType uint32, config uint64) bool {
+	return isPerfEventAvailable(eventType, config)
 }
