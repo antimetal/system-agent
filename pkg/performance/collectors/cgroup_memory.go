@@ -264,7 +264,14 @@ func (c *CgroupMemoryCollector) readCgroupV2Stats(stats *performance.CgroupMemor
 		c.parseMemoryEvents(string(data), stats)
 	}
 
-	// Note: v2 doesn't have max_usage_in_bytes equivalent
+	// Read peak memory usage (kernel 5.19+)
+	// This is the v2 equivalent of v1's max_usage_in_bytes
+	peakPath := filepath.Join(container.CgroupPath, "memory.peak")
+	if data, err := os.ReadFile(peakPath); err == nil {
+		if peak, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); err == nil {
+			stats.MaxUsageBytes = peak
+		}
+	}
 
 	return nil
 }
