@@ -11,7 +11,6 @@ package collectors
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/antimetal/agent/pkg/performance/capabilities"
