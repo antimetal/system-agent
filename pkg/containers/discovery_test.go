@@ -195,7 +195,7 @@ func TestExtractContainerID(t *testing.T) {
 			expected: "abc123def456789",
 		},
 		{
-			name:     "containerd format",
+			name:     "cri-containerd format",
 			input:    "cri-containerd-abc123def456789.scope",
 			expected: "abc123def456789",
 		},

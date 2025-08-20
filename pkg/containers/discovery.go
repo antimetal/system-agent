@@ -16,10 +16,10 @@ import (
 )
 
 const (
-	// MinContainerIDLength is the minimum length for a valid container ID (first 12 chars of full ID)
-	MinContainerIDLength = 12
-	// KubernetesContainerIDLength is the expected length of a Kubernetes container ID
-	KubernetesContainerIDLength = 64
+	// minContainerIDLength is the minimum length for a valid container ID (first 12 chars of full ID)
+	minContainerIDLength = 12
+	// kubernetesContainerIDLength is the expected length of a Kubernetes container ID
+	kubernetesContainerIDLength = 64
 )
 
 // Container represents a discovered container with its cgroup location and runtime information.
@@ -225,13 +225,22 @@ func (d *Discovery) scanCgroupV2Directory(basePath string, cgroupVersion int) []
 // detectRuntimeFromPath attempts to identify the container runtime from the cgroup path
 func detectRuntimeFromPath(path string) string {
 	path = strings.ToLower(path)
+
+	// Check for CRI (Container Runtime Interface) prefixes first
+	// These indicate Kubernetes-managed containers
+	if strings.Contains(path, "cri-containerd") {
+		return "cri-containerd"
+	}
+	if strings.Contains(path, "cri-o") || strings.Contains(path, "crio") {
+		return "cri-o"
+	}
+
+	// Check for standalone runtimes
 	switch {
 	case strings.Contains(path, "docker"):
 		return "docker"
 	case strings.Contains(path, "containerd"):
 		return "containerd"
-	case strings.Contains(path, "crio"):
-		return "crio"
 	case strings.Contains(path, "podman"):
 		return "podman"
 	default:
@@ -242,21 +251,36 @@ func detectRuntimeFromPath(path string) string {
 // ExtractContainerID extracts a container ID from a cgroup path component.
 // It handles various runtime-specific naming patterns.
 func ExtractContainerID(name string) string {
-	// Handle systemd scope units (docker-<id>.scope, crio-<id>.scope)
+	// Handle systemd scope units (docker-<id>.scope, crio-<id>.scope, cri-containerd-<id>.scope)
 	if strings.HasSuffix(name, ".scope") {
-		parts := strings.SplitN(name, "-", 2)
-		if len(parts) == 2 {
-			id := strings.TrimSuffix(parts[1], ".scope")
-			// For nested paths like cri-containerd-<id>.scope
-			if idx := strings.LastIndex(id, "-"); idx > 0 {
-				possibleID := id[idx+1:]
-				if IsHexString(possibleID) && len(possibleID) >= MinContainerIDLength {
+		// Remove the .scope suffix
+		nameWithoutScope := strings.TrimSuffix(name, ".scope")
+
+		// Handle CRI prefixes (cri-containerd-<id>, cri-o-<id>)
+		if strings.HasPrefix(nameWithoutScope, "cri-") {
+			// Extract everything after the last dash
+			if idx := strings.LastIndex(nameWithoutScope, "-"); idx > 0 {
+				possibleID := nameWithoutScope[idx+1:]
+				if IsHexString(possibleID) && len(possibleID) >= minContainerIDLength {
 					return possibleID
 				}
 			}
-			// Simple case: docker-<id>.scope
-			if IsHexString(id) && len(id) >= MinContainerIDLength {
+		}
+
+		// Handle simple runtime prefixes (docker-<id>, containerd-<id>)
+		parts := strings.SplitN(nameWithoutScope, "-", 2)
+		if len(parts) == 2 {
+			id := parts[1]
+			// Check if this is a direct container ID
+			if IsHexString(id) && len(id) >= minContainerIDLength {
 				return id
+			}
+			// For nested paths, check the last segment
+			if idx := strings.LastIndex(id, "-"); idx > 0 {
+				possibleID := id[idx+1:]
+				if IsHexString(possibleID) && len(possibleID) >= minContainerIDLength {
+					return possibleID
+				}
 			}
 		}
 	}
@@ -267,7 +291,7 @@ func ExtractContainerID(name string) string {
 		if part == "docker" || part == "containerd" || part == "crio" {
 			if i+1 < len(parts) {
 				id := parts[i+1]
-				if IsHexString(id) && len(id) >= MinContainerIDLength {
+				if IsHexString(id) && len(id) >= minContainerIDLength {
 					return id
 				}
 			}
@@ -278,13 +302,13 @@ func ExtractContainerID(name string) string {
 	// This handles paths like /kubepods.slice/kubepods-pod123.slice/<container-id>
 	if len(parts) > 0 {
 		lastPart := parts[len(parts)-1]
-		if IsHexString(lastPart) && len(lastPart) >= MinContainerIDLength {
+		if IsHexString(lastPart) && len(lastPart) >= minContainerIDLength {
 			return lastPart
 		}
 	}
 
 	// Check if the name itself is a container ID
-	if IsHexString(name) && len(name) >= MinContainerIDLength {
+	if IsHexString(name) && len(name) >= minContainerIDLength {
 		return name
 	}
 
