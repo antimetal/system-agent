@@ -35,15 +35,7 @@ func DefaultProfilerConfig() *ProfilerConfig {
 	}
 }
 
-// PerfEventInfo contains metadata about a perf event (stub implementation)
-type PerfEventInfo struct {
-	Name        string
-	Type        uint32
-	Config      uint64
-	Description string
-	Available   bool
-	PMURequired bool
-}
+// PerfEventInfo is defined in profiler_perf_events_stub.go
 
 // ProfilerStatistics contains runtime statistics for the profiler (stub implementation)
 type ProfilerStatistics struct {
