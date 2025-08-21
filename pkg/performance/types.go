@@ -16,21 +16,27 @@ import (
 type MetricType string
 
 const (
-	MetricTypeLoad    MetricType = "load"
-	MetricTypeMemory  MetricType = "memory"
-	MetricTypeCPU     MetricType = "cpu"
-	MetricTypeProcess MetricType = "process"
-	MetricTypeDisk    MetricType = "disk"
-	MetricTypeNetwork MetricType = "network"
-	MetricTypeTCP     MetricType = "tcp"
-	MetricTypeKernel  MetricType = "kernel"
-	MetricTypeSystem  MetricType = "system"
+	// Runtime System Statistics
+	MetricTypeLoad      MetricType = "load"
+	MetricTypeMemory    MetricType = "memory"
+	MetricTypeCPU       MetricType = "cpu"
+	MetricTypeProcess   MetricType = "process"
+	MetricTypeDisk      MetricType = "disk"
+	MetricTypeNetwork   MetricType = "network"
+	MetricTypeTCP       MetricType = "tcp"
+	MetricTypeKernel    MetricType = "kernel"
+	MetricTypeSystem    MetricType = "system"
+	MetricTypeNUMAStats MetricType = "numa_stats"
+	// Runtime Container Statistics
+	MetricTypeCgroupCPU     MetricType = "cgroup_cpu"
+	MetricTypeCgroupMemory  MetricType = "cgroup_memory"
+	MetricTypeCgroupIO      MetricType = "cgroup_io"      // Future
+	MetricTypeCgroupNetwork MetricType = "cgroup_network" // Future
 	// Hardware configuration collectors
 	MetricTypeCPUInfo     MetricType = "cpu_info"
 	MetricTypeMemoryInfo  MetricType = "memory_info"
 	MetricTypeDiskInfo    MetricType = "disk_info"
 	MetricTypeNetworkInfo MetricType = "network_info"
-	MetricTypeNUMAStats   MetricType = "numa_stats"
 )
 
 // CollectorStatus represents the operational status of a collector
@@ -343,6 +349,7 @@ func DefaultCollectionConfig() CollectionConfig {
 	return CollectionConfig{
 		Interval: time.Second,
 		EnabledCollectors: map[MetricType]bool{
+			// Runtime system resource collectors
 			MetricTypeLoad:    true,
 			MetricTypeMemory:  true,
 			MetricTypeCPU:     true,
@@ -352,6 +359,9 @@ func DefaultCollectionConfig() CollectionConfig {
 			MetricTypeTCP:     true,
 			MetricTypeSystem:  true,
 			MetricTypeKernel:  true,
+			// Runtime container resource collectors
+			MetricTypeCgroupCPU:    true,
+			MetricTypeCgroupMemory: true,
 			// Hardware configuration collectors
 			MetricTypeCPUInfo:     true,
 			MetricTypeMemoryInfo:  true,
@@ -562,4 +572,73 @@ type NUMANodeStatistics struct {
 	InterleaveHit uint64 // Interleaved memory successfully allocated here
 	LocalNode     uint64 // Memory allocated here while process was running here
 	OtherNode     uint64 // Memory allocated here while process was on other node
+}
+
+// CgroupCPUStats represents CPU resource usage and throttling for a container
+type CgroupCPUStats struct {
+	// Container identification
+	ContainerID   string
+	ContainerName string // If available from runtime
+	CgroupPath    string
+
+	// CPU usage
+	UsageNanos   uint64  // Total CPU time consumed in nanoseconds
+	UsagePercent float64 // Calculated CPU usage percentage
+
+	// CPU throttling (from cpu.stat)
+	NrPeriods     uint64 // Number of enforcement periods
+	NrThrottled   uint64 // Number of times throttled
+	ThrottledTime uint64 // Total time throttled in nanoseconds
+
+	// CPU limits
+	CpuShares   uint64 // Relative weight (cpu.shares)
+	CpuQuotaUs  int64  // Quota in microseconds per period (-1 if unlimited)
+	CpuPeriodUs uint64 // Period length in microseconds
+
+	// Calculated metrics
+	ThrottlePercent float64 // Percentage of periods throttled
+}
+
+// CgroupMemoryStats represents memory usage and pressure for a container
+type CgroupMemoryStats struct {
+	// Container identification
+	ContainerID   string
+	ContainerName string
+	CgroupPath    string
+
+	// Memory usage (from memory.stat)
+	RSS        uint64 // Resident set size
+	Cache      uint64 // Page cache memory
+	MappedFile uint64 // Memory mapped files
+	Swap       uint64 // Swap usage
+
+	// Detailed breakdown
+	ActiveAnon   uint64 // Active anonymous pages
+	InactiveAnon uint64 // Inactive anonymous pages
+	ActiveFile   uint64 // Active file cache
+	InactiveFile uint64 // Inactive file cache
+
+	// Memory limits
+	LimitBytes    uint64 // Memory limit (memory.limit_in_bytes)
+	UsageBytes    uint64 // Current usage (memory.usage_in_bytes)
+	MaxUsageBytes uint64 // Peak usage (memory.max_usage_in_bytes)
+
+	// Memory pressure
+	FailCount    uint64 // Number of times limit was hit
+	OOMKillCount uint64 // Number of OOM kills
+	UnderOOM     bool   // Currently under OOM
+
+	// Calculated metrics
+	UsagePercent float64 // Usage as percentage of limit
+	CachePercent float64 // Cache as percentage of total usage
+}
+
+// ContainerInfo provides container runtime metadata
+type ContainerInfo struct {
+	ID        string
+	Name      string
+	Runtime   string // docker, containerd, cri-o
+	State     string // running, paused, stopped
+	StartedAt time.Time
+	Labels    map[string]string
 }
