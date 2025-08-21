@@ -208,6 +208,12 @@ type ProcessStats struct {
 	InvoluntaryCtxt uint64 // nonvoluntary_ctxt_switches
 }
 
+// ProcessSnapshot contains a collection of process statistics at a specific point in time
+type ProcessSnapshot struct {
+	Timestamp time.Time     // When the snapshot was taken
+	Processes []ProcessStats // All processes in the snapshot
+}
+
 // DiskStats represents disk I/O statistics from /proc/diskstats
 type DiskStats struct {
 	// Device identification
