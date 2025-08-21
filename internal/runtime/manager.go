@@ -16,7 +16,6 @@ import (
 	"github.com/antimetal/agent/pkg/containers"
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/antimetal/agent/pkg/resource"
-	runtimev1 "github.com/antimetal/agent/pkg/api/antimetal/runtime/v1"
 	"github.com/go-logr/logr"
 )
 

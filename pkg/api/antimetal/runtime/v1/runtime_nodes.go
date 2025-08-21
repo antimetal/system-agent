@@ -10,6 +10,27 @@ import (
 	"time"
 )
 
+// CgroupVersion defines the supported cgroup versions.
+type CgroupVersion int32
+
+const (
+	CgroupVersionUnknown CgroupVersion = 0
+	CgroupVersionV1      CgroupVersion = 1
+	CgroupVersionV2      CgroupVersion = 2
+)
+
+// String returns the string representation of CgroupVersion
+func (v CgroupVersion) String() string {
+	switch v {
+	case CgroupVersionV1:
+		return "v1"
+	case CgroupVersionV2:
+		return "v2"
+	default:
+		return "unknown"
+	}
+}
+
 // ContainerRuntime defines the supported container runtime implementations.
 type ContainerRuntime int32
 

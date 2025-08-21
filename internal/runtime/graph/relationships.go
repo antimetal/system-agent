@@ -9,36 +9,25 @@ package graph
 import (
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
-// Simple relationship types for runtime topology
-// TODO: Move to proper protobuf definitions when hardware package is available
-
-// Contains represents hierarchical containment relationship
-type Contains struct {
-	ContainmentType string `json:"containment_type"`
-}
-
-// ConnectedTo represents a connection between runtime and hardware
-type ConnectedTo struct {
-	ConnectionType string `json:"connection_type"`
-	BusType        string `json:"bus_type,omitempty"`
-}
-
-// NUMAAffinity represents NUMA affinity relationship
-type NUMAAffinity struct {
-	NodeId   int32 `json:"node_id"`
-	Distance int32 `json:"distance,omitempty"`
-}
+// Runtime relationship creation using hardware protobuf definitions
 
 // createParentOfRelationship creates a parent-child process relationship
 func (b *Builder) createParentOfRelationship(parentRef, childRef *resourcev1.ResourceRef) error {
-	// Use the Contains relationship for process hierarchy
-	contains := &Contains{
-		ContainmentType: "process",
+	// Create contains relationship data
+	containsData := map[string]interface{}{
+		"containment_type": "process",
+		"relationship":     "parent_of",
 	}
 
-	predicate, err := anypb.New(contains)
+	predicateStruct, err := structpb.NewStruct(containsData)
+	if err != nil {
+		return err
+	}
+
+	predicate, err := anypb.New(predicateStruct)
 	if err != nil {
 		return err
 	}
@@ -62,12 +51,18 @@ func (b *Builder) createParentOfRelationship(parentRef, childRef *resourcev1.Res
 
 // createContainerProcessRelationship creates a container-to-process relationship
 func (b *Builder) createContainerProcessRelationship(containerRef, processRef *resourcev1.ResourceRef) error {
-	// Use the Contains relationship for container containing processes
-	contains := &Contains{
-		ContainmentType: "process",
+	// Create contains relationship data
+	containsData := map[string]interface{}{
+		"containment_type": "process",
+		"relationship":     "contains",
 	}
 
-	predicate, err := anypb.New(contains)
+	predicateStruct, err := structpb.NewStruct(containsData)
+	if err != nil {
+		return err
+	}
+
+	predicate, err := anypb.New(predicateStruct)
 	if err != nil {
 		return err
 	}
@@ -91,30 +86,36 @@ func (b *Builder) createContainerProcessRelationship(containerRef, processRef *r
 
 // createContainerHardwareRelationship creates relationships between containers and hardware
 func (b *Builder) createContainerHardwareRelationship(containerRef, hardwareRef *resourcev1.ResourceRef, relationshipType string) error {
-	var predicate any
+	var relationshipData map[string]interface{}
 
 	switch relationshipType {
 	case "runs_on_cpu":
 		// Container runs on specific CPU cores
-		predicate = &ConnectedTo{
-			ConnectionType: "cpu_affinity",
-			BusType:       "",
+		relationshipData = map[string]interface{}{
+			"connection_type": "cpu_affinity",
+			"relationship":    "runs_on",
 		}
 	case "allocated_memory":
 		// Container allocated to specific memory/NUMA nodes
-		predicate = &NUMAAffinity{
-			NodeId:   0, // Will be filled in by caller
-			Distance: 0,
+		relationshipData = map[string]interface{}{
+			"connection_type": "numa_affinity",
+			"relationship":    "allocated_to",
+			"node_id":         0, // Will be filled in by caller
 		}
 	default:
 		// Generic connection
-		predicate = &ConnectedTo{
-			ConnectionType: relationshipType,
-			BusType:       "",
+		relationshipData = map[string]interface{}{
+			"connection_type": relationshipType,
+			"relationship":    "connected_to",
 		}
 	}
 
-	predicateAny, err := anypb.New(predicate)
+	predicateStruct, err := structpb.NewStruct(relationshipData)
+	if err != nil {
+		return err
+	}
+
+	predicateAny, err := anypb.New(predicateStruct)
 	if err != nil {
 		return err
 	}

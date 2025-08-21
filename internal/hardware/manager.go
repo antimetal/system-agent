@@ -14,6 +14,7 @@ import (
 
 	"github.com/antimetal/agent/internal/hardware/graph"
 	"github.com/antimetal/agent/pkg/performance"
+	"github.com/antimetal/agent/pkg/performance/collectors"
 	"github.com/antimetal/agent/pkg/resource"
 	"github.com/go-logr/logr"
 )
@@ -28,6 +29,10 @@ type Manager struct {
 	interval   time.Duration
 	lastUpdate time.Time
 	mu         sync.RWMutex
+
+	ctx    context.Context
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
 }
 
 // ManagerConfig contains configuration for the hardware manager
@@ -55,44 +60,57 @@ func NewManager(logger logr.Logger, config ManagerConfig) (*Manager, error) {
 		interval = 5 * time.Minute
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	return &Manager{
 		logger:      logger.WithName("hardware-manager"),
 		store:       config.Store,
 		perfManager: config.PerformanceManager,
 		builder:     graph.NewBuilder(logger, config.Store),
 		interval:    interval,
+		ctx:         ctx,
+		cancel:      cancel,
 	}, nil
 }
 
 // Start begins hardware discovery and graph building
-// Implements controller-runtime's Runnable interface
-func (m *Manager) Start(ctx context.Context) error {
+func (m *Manager) Start() error {
 	m.logger.Info("Starting hardware manager", "interval", m.interval)
 
 	// Do an initial hardware discovery
-	if err := m.updateHardwareGraph(ctx); err != nil {
+	if err := m.updateHardwareGraph(); err != nil {
 		m.logger.Error(err, "Failed initial hardware discovery")
 		// Don't fail startup on initial discovery error
 	}
 
-	// Run periodic updates until context is cancelled
-	m.runPeriodicUpdates(ctx)
+	// Start the periodic update goroutine
+	m.wg.Add(1)
+	go m.runPeriodicUpdates()
 
 	return nil
 }
 
+// Stop stops the hardware manager
+func (m *Manager) Stop() error {
+	m.logger.Info("Stopping hardware manager")
+	m.cancel()
+	m.wg.Wait()
+	return nil
+}
+
 // runPeriodicUpdates runs periodic hardware graph updates
-func (m *Manager) runPeriodicUpdates(ctx context.Context) {
+func (m *Manager) runPeriodicUpdates() {
+	defer m.wg.Done()
+
 	ticker := time.NewTicker(m.interval)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-ctx.Done():
-			m.logger.Info("Stopping hardware manager")
+		case <-m.ctx.Done():
 			return
 		case <-ticker.C:
-			if err := m.updateHardwareGraph(ctx); err != nil {
+			if err := m.updateHardwareGraph(); err != nil {
 				m.logger.Error(err, "Failed to update hardware graph")
 			}
 		}
@@ -100,20 +118,20 @@ func (m *Manager) runPeriodicUpdates(ctx context.Context) {
 }
 
 // updateHardwareGraph collects hardware info and updates the graph
-func (m *Manager) updateHardwareGraph(ctx context.Context) error {
+func (m *Manager) updateHardwareGraph() error {
 	m.logger.V(1).Info("Updating hardware graph")
 
 	// Collect a snapshot of all hardware information
-	snapshot, err := m.collectHardwareSnapshot(ctx)
+	snapshot, err := m.collectHardwareSnapshot()
 	if err != nil {
 		return fmt.Errorf("failed to collect hardware snapshot: %w", err)
 	}
 
 	// Build the hardware graph from the snapshot
-	buildCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 	defer cancel()
 
-	if err := m.builder.BuildFromSnapshot(buildCtx, snapshot); err != nil {
+	if err := m.builder.BuildFromSnapshot(ctx, snapshot); err != nil {
 		return fmt.Errorf("failed to build hardware graph: %w", err)
 	}
 
@@ -122,14 +140,15 @@ func (m *Manager) updateHardwareGraph(ctx context.Context) error {
 	m.lastUpdate = time.Now()
 	m.mu.Unlock()
 
-	m.logger.V(1).Info("Hardware graph updated successfully")
+	m.logger.Info("Hardware graph updated successfully")
 	return nil
 }
 
 // collectHardwareSnapshot collects all hardware information into a snapshot
-func (m *Manager) collectHardwareSnapshot(ctx context.Context) (*performance.Snapshot, error) {
+func (m *Manager) collectHardwareSnapshot() (*performance.Snapshot, error) {
 	// Create collectors with the config from performance manager
 	config := m.perfManager.GetConfig()
+	ctx := context.Background()
 
 	// Initialize the snapshot
 	snapshot := &performance.Snapshot{
@@ -144,89 +163,117 @@ func (m *Manager) collectHardwareSnapshot(ctx context.Context) (*performance.Sna
 
 	startTime := time.Now()
 
-	// Define hardware collectors we need from the registry
-	// These are all registered as OnceContinuousCollectors for one-shot collection
-	hardwareMetrics := []performance.MetricType{
-		performance.MetricTypeCPUInfo,
-		performance.MetricTypeMemoryInfo,
-		performance.MetricTypeDiskInfo,
-		performance.MetricTypeNetworkInfo,
-		performance.MetricTypeNUMAStats,
+	// Collect hardware-related information
+	// We need: CPUInfo, MemoryInfo, DiskInfo, NetworkInfo, NUMAStats
+
+	// CPU Information
+	cpuStartTime := time.Now()
+	if cpuInfoCollector, err := collectors.NewCPUInfoCollector(m.logger, config); err == nil {
+		if cpuInfo, err := cpuInfoCollector.Collect(ctx); err == nil {
+			snapshot.Metrics.CPUInfo = cpuInfo.(*performance.CPUInfo)
+			snapshot.CollectorRun.CollectorStats[performance.MetricTypeCPUInfo] = performance.CollectorStat{
+				Status:   performance.CollectorStatusActive,
+				Duration: time.Since(cpuStartTime),
+				Data:     cpuInfo,
+			}
+		} else {
+			m.logger.Error(err, "Failed to collect CPU info")
+			snapshot.CollectorRun.CollectorStats[performance.MetricTypeCPUInfo] = performance.CollectorStat{
+				Status:   performance.CollectorStatusFailed,
+				Duration: time.Since(cpuStartTime),
+				Error:    err,
+			}
+		}
+	} else {
+		m.logger.Error(err, "Failed to create CPU info collector")
 	}
 
-	// Collect from each available collector using the registry
-	for _, metricType := range hardwareMetrics {
-		collectorStartTime := time.Now()
-
-		// Get collector factory from registry
-		factory, err := performance.GetCollector(metricType)
-		if err != nil {
-			// Check if it's unavailable due to platform constraints
-			available, reason := performance.GetCollectorStatus(metricType)
-			if !available {
-				m.logger.V(1).Info("Collector not available",
-					"metric_type", metricType, "reason", reason)
-			} else {
-				m.logger.Error(err, "Failed to get collector from registry",
-					"metric_type", metricType)
+	// Memory Information
+	memStartTime := time.Now()
+	if memInfoCollector, err := collectors.NewMemoryInfoCollector(m.logger, config); err == nil {
+		if memInfo, err := memInfoCollector.Collect(ctx); err == nil {
+			snapshot.Metrics.MemoryInfo = memInfo.(*performance.MemoryInfo)
+			snapshot.CollectorRun.CollectorStats[performance.MetricTypeMemoryInfo] = performance.CollectorStat{
+				Status:   performance.CollectorStatusActive,
+				Duration: time.Since(memStartTime),
+				Data:     memInfo,
 			}
-			continue
-		}
-
-		// Create the continuous collector instance
-		collector, err := factory(m.logger, config)
-		if err != nil {
-			m.logger.Error(err, "Failed to create collector",
-				"metric_type", metricType)
-			snapshot.CollectorRun.CollectorStats[metricType] = performance.CollectorStat{
+		} else {
+			m.logger.Error(err, "Failed to collect memory info")
+			snapshot.CollectorRun.CollectorStats[performance.MetricTypeMemoryInfo] = performance.CollectorStat{
 				Status:   performance.CollectorStatusFailed,
-				Duration: time.Since(collectorStartTime),
+				Duration: time.Since(memStartTime),
 				Error:    err,
 			}
-			continue
 		}
+	} else {
+		m.logger.Error(err, "Failed to create memory info collector")
+	}
 
-		// Start the collector - for OnceContinuousCollector this does a one-shot collection
-		dataChan, err := collector.Start(ctx)
-		if err != nil {
-			m.logger.Error(err, "Failed to start collector",
-				"metric_type", metricType)
-			snapshot.CollectorRun.CollectorStats[metricType] = performance.CollectorStat{
+	// Disk Information
+	diskStartTime := time.Now()
+	if diskInfoCollector, err := collectors.NewDiskInfoCollector(m.logger, config); err == nil {
+		if diskInfo, err := diskInfoCollector.Collect(ctx); err == nil {
+			snapshot.Metrics.DiskInfo = diskInfo.([]performance.DiskInfo)
+			snapshot.CollectorRun.CollectorStats[performance.MetricTypeDiskInfo] = performance.CollectorStat{
+				Status:   performance.CollectorStatusActive,
+				Duration: time.Since(diskStartTime),
+				Data:     diskInfo,
+			}
+		} else {
+			m.logger.Error(err, "Failed to collect disk info")
+			snapshot.CollectorRun.CollectorStats[performance.MetricTypeDiskInfo] = performance.CollectorStat{
 				Status:   performance.CollectorStatusFailed,
-				Duration: time.Since(collectorStartTime),
+				Duration: time.Since(diskStartTime),
 				Error:    err,
 			}
-			continue
 		}
+	} else {
+		m.logger.Error(err, "Failed to create disk info collector")
+	}
 
-		// Read the one-shot data from the channel
-		data := <-dataChan
-
-		// Store the collected data in the snapshot based on type
-		switch metricType {
-		case performance.MetricTypeCPUInfo:
-			snapshot.Metrics.CPUInfo = data.(*performance.CPUInfo)
-		case performance.MetricTypeMemoryInfo:
-			snapshot.Metrics.MemoryInfo = data.(*performance.MemoryInfo)
-		case performance.MetricTypeDiskInfo:
-			snapshot.Metrics.DiskInfo = data.([]performance.DiskInfo)
-		case performance.MetricTypeNetworkInfo:
-			snapshot.Metrics.NetworkInfo = data.([]performance.NetworkInfo)
-		case performance.MetricTypeNUMAStats:
-			snapshot.Metrics.NUMAStats = data.(*performance.NUMAStatistics)
+	// Network Information
+	netStartTime := time.Now()
+	if netInfoCollector, err := collectors.NewNetworkInfoCollector(m.logger, config); err == nil {
+		if netInfo, err := netInfoCollector.Collect(ctx); err == nil {
+			snapshot.Metrics.NetworkInfo = netInfo.([]performance.NetworkInfo)
+			snapshot.CollectorRun.CollectorStats[performance.MetricTypeNetworkInfo] = performance.CollectorStat{
+				Status:   performance.CollectorStatusActive,
+				Duration: time.Since(netStartTime),
+				Data:     netInfo,
+			}
+		} else {
+			m.logger.Error(err, "Failed to collect network info")
+			snapshot.CollectorRun.CollectorStats[performance.MetricTypeNetworkInfo] = performance.CollectorStat{
+				Status:   performance.CollectorStatusFailed,
+				Duration: time.Since(netStartTime),
+				Error:    err,
+			}
 		}
+	} else {
+		m.logger.Error(err, "Failed to create network info collector")
+	}
 
-		snapshot.CollectorRun.CollectorStats[metricType] = performance.CollectorStat{
-			Status:   performance.CollectorStatusActive,
-			Duration: time.Since(collectorStartTime),
-			Data:     data,
+	// NUMA Statistics
+	numaStartTime := time.Now()
+	if numaCollector, err := collectors.NewNUMAStatsCollector(m.logger, config); err == nil {
+		if numaStats, err := numaCollector.Collect(ctx); err == nil {
+			snapshot.Metrics.NUMAStats = numaStats.(*performance.NUMAStatistics)
+			snapshot.CollectorRun.CollectorStats[performance.MetricTypeNUMAStats] = performance.CollectorStat{
+				Status:   performance.CollectorStatusActive,
+				Duration: time.Since(numaStartTime),
+				Data:     numaStats,
+			}
+		} else {
+			m.logger.Error(err, "Failed to collect NUMA stats")
+			snapshot.CollectorRun.CollectorStats[performance.MetricTypeNUMAStats] = performance.CollectorStat{
+				Status:   performance.CollectorStatusFailed,
+				Duration: time.Since(numaStartTime),
+				Error:    err,
+			}
 		}
-
-		// Stop the collector to clean up resources
-		if err := collector.Stop(); err != nil {
-			m.logger.V(1).Info("Error stopping collector",
-				"metric_type", metricType, "error", err)
-		}
+	} else {
+		m.logger.Error(err, "Failed to create NUMA stats collector")
 	}
 
 	snapshot.CollectorRun.Duration = time.Since(startTime)
@@ -245,6 +292,6 @@ func (m *Manager) GetLastUpdateTime() time.Time {
 }
 
 // ForceUpdate triggers an immediate hardware graph update
-func (m *Manager) ForceUpdate(ctx context.Context) error {
-	return m.updateHardwareGraph(ctx)
+func (m *Manager) ForceUpdate() error {
+	return m.updateHardwareGraph()
 }

@@ -33,6 +33,7 @@ import (
 	k8sagent "github.com/antimetal/agent/internal/kubernetes/agent"
 	"github.com/antimetal/agent/internal/kubernetes/cluster"
 	"github.com/antimetal/agent/internal/kubernetes/scheme"
+	"github.com/antimetal/agent/internal/runtime"
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/antimetal/agent/pkg/resource/store"
 )
@@ -62,6 +63,8 @@ var (
 	pprofAddr              string
 	dataDir                string
 	hardwareUpdateInterval time.Duration
+	runtimeUpdateInterval  time.Duration
+	cgroupPath             string
 )
 
 func init() {
@@ -113,6 +116,9 @@ func init() {
 		"The directory where the agent will place its persistent data files. Set to empty string for in-memory mode.")
 	flag.DurationVar(&hardwareUpdateInterval, "hardware-update-interval", 5*time.Minute,
 		"Interval for hardware topology discovery updates")
+	flag.DurationVar(&runtimeUpdateInterval, "runtime-update-interval", 30*time.Second,
+		"Interval for runtime (container/process) topology discovery updates")
+	flag.StringVar(&cgroupPath, "cgroup-path", "/sys/fs/cgroup", "Path to the cgroup filesystem root")
 
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
@@ -237,7 +243,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Setup Performance Manager (for hardware discovery)
+	// Setup Performance Manager (for hardware and runtime discovery)
 	perfManager, err := performance.NewManager(performance.ManagerOptions{
 		Logger:      mgr.GetLogger().WithName("performance-manager"),
 		NodeName:    os.Getenv("NODE_NAME"),
@@ -265,6 +271,30 @@ func main() {
 		setupLog.Error(err, "unable to register hardware manager")
 		os.Exit(1)
 	}
+
+	// Setup Runtime Manager
+	rtManager, err := runtime.NewManager(
+		mgr.GetLogger().WithName("runtime-manager"),
+		runtime.ManagerConfig{
+			Store:              rsrcStore,
+			PerformanceManager: perfManager,
+			UpdateInterval:     runtimeUpdateInterval,
+			CgroupPath:         cgroupPath,
+		},
+	)
+	if err != nil {
+		setupLog.Error(err, "unable to create runtime manager")
+		os.Exit(1)
+	}
+	if err := rtManager.Start(); err != nil {
+		setupLog.Error(err, "unable to start runtime manager")
+		os.Exit(1)
+	}
+	defer func() {
+		if err := rtManager.Stop(); err != nil {
+			setupLog.Error(err, "error stopping runtime manager")
+		}
+	}()
 
 	// Setup Kubernetes Collector Controller
 	if enableK8sController {

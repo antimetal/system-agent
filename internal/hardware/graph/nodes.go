@@ -62,16 +62,11 @@ func (b *Builder) getSystemInfo() (arch hardwarev1.Architecture, bootTime time.T
 	return
 }
 
-// getOSInfo reads OS information from os-release files according to freedesktop.org standard
+// getOSInfo reads OS information from /etc/os-release
 func getOSInfo() string {
-	// Try /etc/os-release first (primary location per freedesktop.org spec)
 	file, err := os.Open("/etc/os-release")
 	if err != nil {
-		// Fall back to /usr/lib/os-release (secondary location)
-		file, err = os.Open("/usr/lib/os-release")
-		if err != nil {
-			return "Linux" // Final fallback
-		}
+		return "Linux" // Fallback
 	}
 	defer file.Close()
 
@@ -89,49 +84,12 @@ func getOSInfo() string {
 	return "Linux" // Fallback
 }
 
-// getMachineID reads the OS-specific machine ID from /etc/machine-id
-// This is distinct from the hardware UUID and hostname
-func getMachineID() string {
-	// Try /etc/machine-id (OS-specific identifier)
-	if data, err := os.ReadFile("/etc/machine-id"); err == nil {
-		if id := strings.TrimSpace(string(data)); id != "" {
-			return id
-		}
-	}
-
-	// Fall back to system UUID if machine-id not available
-	if data, err := os.ReadFile("/sys/class/dmi/id/product_uuid"); err == nil {
-		if uuid := strings.TrimSpace(string(data)); uuid != "" {
-			return uuid
-		}
-	}
-
-	return "unknown"
-}
-
-// getSystemUUID reads the hardware UUID from DMI
-func getSystemUUID() string {
-	// Try /sys/class/dmi/id/product_uuid (hardware-based, requires root)
-	if data, err := os.ReadFile("/sys/class/dmi/id/product_uuid"); err == nil {
-		if uuid := strings.TrimSpace(string(data)); uuid != "" {
-			return uuid
-		}
-	}
-	return ""
-}
-
 // createSystemNode creates the root system node representing the machine
 func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
 	// Get system information
 	arch, bootTime, kernelVersion, osInfo := b.getSystemInfo()
 
-	// Get machine ID for unique identification (OS-specific)
-	machineID := getMachineID()
-
-	// Get system UUID (hardware-specific)
-	systemUUID := getSystemUUID()
-
-	// Get hostname (network identifier)
+	// Get hostname
 	hostname, err := os.Hostname()
 	if err != nil {
 		b.logger.Error(err, "Failed to get hostname, using 'unknown'")
@@ -153,28 +111,16 @@ func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.Resource
 		return nil, nil, fmt.Errorf("failed to marshal system spec: %w", err)
 	}
 
-	// Build tags list
-	tags := []*resourcev1.Tag{
-		{Key: "hostname", Value: hostname},
-		{Key: "machine-id", Value: machineID},
-	}
-
-	// Add system UUID tag if available
-	if systemUUID != "" {
-		tags = append(tags, &resourcev1.Tag{Key: "system-uuid", Value: systemUUID})
-	}
-
-	// Create resource with machine ID as the name (globally unique)
+	// Create resource
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
 			Kind: "SystemNode",
 			Type: string(systemSpec.ProtoReflect().Descriptor().FullName()),
 		},
 		Metadata: &resourcev1.ResourceMeta{
-			Provider:   resourcev1.Provider_PROVIDER_ANTIMETAL,
-			ProviderId: machineID,
-			Name:       machineID, // Use machine ID as name (globally unique)
-			Tags:       tags,
+			Provider:   resourcev1.Provider_PROVIDER_KUBERNETES,
+			ProviderId: hostname,
+			Name:       hostname,
 		},
 		Spec: specAny,
 	}
@@ -182,7 +128,7 @@ func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.Resource
 	// Create reference
 	ref := &resourcev1.ResourceRef{
 		TypeUrl: string(systemSpec.ProtoReflect().Descriptor().FullName()),
-		Name:    hostname, // Keep hostname for readability, machine ID is in ProviderId
+		Name:    hostname,
 	}
 
 	return resource, ref, nil
@@ -242,7 +188,7 @@ func (b *Builder) createCPUPackageNode(cpuInfo *performance.CPUInfo, physicalID 
 			Type: string(packageSpec.ProtoReflect().Descriptor().FullName()),
 		},
 		Metadata: &resourcev1.ResourceMeta{
-			Provider:   resourcev1.Provider_PROVIDER_ANTIMETAL,
+			Provider:   resourcev1.Provider_PROVIDER_KUBERNETES,
 			ProviderId: packageName,
 			Name:       packageName,
 		},
@@ -283,7 +229,7 @@ func (b *Builder) createCPUCoreNode(core *performance.CPUCore) (*resourcev1.Reso
 			Type: string(coreSpec.ProtoReflect().Descriptor().FullName()),
 		},
 		Metadata: &resourcev1.ResourceMeta{
-			Provider:   resourcev1.Provider_PROVIDER_ANTIMETAL,
+			Provider:   resourcev1.Provider_PROVIDER_KUBERNETES,
 			ProviderId: coreName,
 			Name:       coreName,
 		},
@@ -323,7 +269,7 @@ func (b *Builder) createMemoryModuleNode(memInfo *performance.MemoryInfo) (*reso
 			Type: string(memSpec.ProtoReflect().Descriptor().FullName()),
 		},
 		Metadata: &resourcev1.ResourceMeta{
-			Provider:   resourcev1.Provider_PROVIDER_ANTIMETAL,
+			Provider:   resourcev1.Provider_PROVIDER_KUBERNETES,
 			ProviderId: memName,
 			Name:       memName,
 		},
@@ -377,7 +323,7 @@ func (b *Builder) createNUMANode(numa *performance.NUMANode) (*resourcev1.Resour
 			Type: string(numaSpec.ProtoReflect().Descriptor().FullName()),
 		},
 		Metadata: &resourcev1.ResourceMeta{
-			Provider:   resourcev1.Provider_PROVIDER_ANTIMETAL,
+			Provider:   resourcev1.Provider_PROVIDER_KUBERNETES,
 			ProviderId: numaName,
 			Name:       numaName,
 		},
@@ -421,7 +367,7 @@ func (b *Builder) createDiskDeviceNode(disk *performance.DiskInfo) (*resourcev1.
 			Type: string(diskSpec.ProtoReflect().Descriptor().FullName()),
 		},
 		Metadata: &resourcev1.ResourceMeta{
-			Provider:   resourcev1.Provider_PROVIDER_ANTIMETAL,
+			Provider:   resourcev1.Provider_PROVIDER_KUBERNETES,
 			ProviderId: disk.Device,
 			Name:       disk.Device,
 		},
@@ -460,7 +406,7 @@ func (b *Builder) createDiskPartitionNode(partition *performance.PartitionInfo, 
 			Type: string(partSpec.ProtoReflect().Descriptor().FullName()),
 		},
 		Metadata: &resourcev1.ResourceMeta{
-			Provider:   resourcev1.Provider_PROVIDER_ANTIMETAL,
+			Provider:   resourcev1.Provider_PROVIDER_KUBERNETES,
 			ProviderId: partition.Name,
 			Name:       partition.Name,
 		},
@@ -555,7 +501,7 @@ func (b *Builder) createNetworkInterfaceNode(iface *performance.NetworkInfo) (*r
 			Type: string(netSpec.ProtoReflect().Descriptor().FullName()),
 		},
 		Metadata: &resourcev1.ResourceMeta{
-			Provider:   resourcev1.Provider_PROVIDER_ANTIMETAL,
+			Provider:   resourcev1.Provider_PROVIDER_KUBERNETES,
 			ProviderId: iface.Interface,
 			Name:       iface.Interface,
 		},

@@ -10,7 +10,6 @@ import (
 	"context"
 	"fmt"
 
-	runtimev1 "github.com/antimetal/agent/pkg/api/antimetal/runtime/v1"
 	"github.com/antimetal/agent/pkg/resource"
 	"github.com/go-logr/logr"
 )
