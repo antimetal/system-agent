@@ -35,12 +35,12 @@ func (v CgroupVersion) String() string {
 type ContainerRuntime int32
 
 const (
-	ContainerRuntimeUnknown         ContainerRuntime = 0
-	ContainerRuntimeDocker          ContainerRuntime = 1
-	ContainerRuntimeContainerd      ContainerRuntime = 2
-	ContainerRuntimeCRIContainerd   ContainerRuntime = 3
-	ContainerRuntimeCRIO            ContainerRuntime = 4
-	ContainerRuntimePodman          ContainerRuntime = 5
+	ContainerRuntimeUnknown       ContainerRuntime = 0
+	ContainerRuntimeDocker        ContainerRuntime = 1
+	ContainerRuntimeContainerd    ContainerRuntime = 2
+	ContainerRuntimeCRIContainerd ContainerRuntime = 3
+	ContainerRuntimeCRIO          ContainerRuntime = 4
+	ContainerRuntimePodman        ContainerRuntime = 5
 )
 
 // String returns the string representation of ContainerRuntime
@@ -114,47 +114,47 @@ func (s ProcessState) String() string {
 type ContainerNode struct {
 	// ContainerID is the unique identifier for the container (may be truncated for some runtimes).
 	ContainerID string `json:"container_id"`
-	
+
 	// Runtime identifies the container runtime that manages this container.
 	Runtime ContainerRuntime `json:"runtime"`
-	
+
 	// CgroupVersion indicates whether this container uses cgroup v1 or v2.
 	// Different runtimes on the same host may use different cgroup versions.
 	CgroupVersion CgroupVersion `json:"cgroup_version"`
-	
+
 	// CgroupPath is the filesystem path to the container's cgroup directory.
 	CgroupPath string `json:"cgroup_path"`
-	
+
 	// ImageName is the container image name (e.g., "nginx", "alpine").
 	ImageName string `json:"image_name,omitempty"`
-	
+
 	// ImageTag is the container image tag (e.g., "latest", "1.21").
 	ImageTag string `json:"image_tag,omitempty"`
-	
+
 	// Labels contains runtime-specific labels and annotations.
 	Labels map[string]string `json:"labels,omitempty"`
-	
+
 	// CreatedAt is when the container was created.
 	CreatedAt *time.Time `json:"created_at,omitempty"`
-	
+
 	// StartedAt is when the container was started (may differ from created_at).
 	StartedAt *time.Time `json:"started_at,omitempty"`
-	
+
 	// CPUShares represents the relative CPU weight (cgroup v1 cpu.shares).
 	CPUShares *int32 `json:"cpu_shares,omitempty"`
-	
+
 	// CPUQuotaUs represents the CPU quota in microseconds per period.
 	CPUQuotaUs *int32 `json:"cpu_quota_us,omitempty"`
-	
+
 	// CPUPeriodUs represents the CPU quota enforcement period in microseconds.
 	CPUPeriodUs *int32 `json:"cpu_period_us,omitempty"`
-	
+
 	// MemoryLimitBytes represents the memory limit in bytes (if set).
 	MemoryLimitBytes *uint64 `json:"memory_limit_bytes,omitempty"`
-	
+
 	// CpusetCpus contains the CPU cores this container is allowed to use.
 	CpusetCpus string `json:"cpuset_cpus,omitempty"`
-	
+
 	// CpusetMems contains the NUMA memory nodes this container is allowed to use.
 	CpusetMems string `json:"cpuset_mems,omitempty"`
 }
@@ -164,25 +164,25 @@ type ContainerNode struct {
 type ProcessNode struct {
 	// PID is the process identifier.
 	PID int32 `json:"pid"`
-	
+
 	// PPID is the parent process identifier.
 	PPID int32 `json:"ppid"`
-	
+
 	// PGID is the process group identifier.
 	PGID int32 `json:"pgid"`
-	
+
 	// SID is the session identifier.
 	SID int32 `json:"sid"`
-	
+
 	// Command is the process command name.
 	Command string `json:"command"`
-	
+
 	// Cmdline is the full command line with arguments.
 	Cmdline string `json:"cmdline,omitempty"`
-	
+
 	// State is the current process state.
 	State ProcessState `json:"state"`
-	
+
 	// StartTime is when the process was started.
 	StartTime time.Time `json:"start_time"`
 }

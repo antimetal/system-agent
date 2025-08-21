@@ -165,7 +165,7 @@ type RuntimeSnapshot struct {
 // GetContainers implements the graph.RuntimeSnapshot interface
 func (s *RuntimeSnapshot) GetContainers() []graph.ContainerInfo {
 	containerInfos := make([]graph.ContainerInfo, len(s.Containers))
-	
+
 	for i, container := range s.Containers {
 		containerInfos[i] = graph.ContainerInfo{
 			ID:            container.ID,
@@ -177,18 +177,18 @@ func (s *RuntimeSnapshot) GetContainers() []graph.ContainerInfo {
 			// TODO: Extract labels from container runtime
 		}
 	}
-	
+
 	return containerInfos
 }
 
-// GetProcesses implements the graph.RuntimeSnapshot interface  
+// GetProcesses implements the graph.RuntimeSnapshot interface
 func (s *RuntimeSnapshot) GetProcesses() []graph.ProcessInfo {
 	if s.ProcessStats == nil {
 		return []graph.ProcessInfo{}
 	}
-	
+
 	processInfos := make([]graph.ProcessInfo, len(s.ProcessStats.Processes))
-	
+
 	for i, process := range s.ProcessStats.Processes {
 		processInfos[i] = graph.ProcessInfo{
 			PID:     process.PID,
@@ -200,7 +200,7 @@ func (s *RuntimeSnapshot) GetProcesses() []graph.ProcessInfo {
 			// TODO: Add cmdline when available in ProcessStats
 		}
 	}
-	
+
 	return processInfos
 }
 

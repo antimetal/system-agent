@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"time"
 
-	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	runtimev1 "github.com/antimetal/agent/pkg/api/antimetal/runtime/v1"
+	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -20,7 +20,7 @@ import (
 func (b *Builder) createContainerNode(container *ContainerInfo) (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
 	// Convert string runtime to enum
 	runtime := parseContainerRuntime(container.Runtime)
-	
+
 	// Convert cgroup version
 	cgroupVersion := parseCgroupVersion(container.CgroupVersion)
 
@@ -32,9 +32,13 @@ func (b *Builder) createContainerNode(container *ContainerInfo) (*resourcev1.Res
 		"cgroup_path":    container.CgroupPath,
 		"image_name":     container.ImageName,
 		"image_tag":      container.ImageTag,
-		"labels":         container.Labels,
 	}
-	
+
+	// Handle labels safely - only add if not empty
+	if len(container.Labels) > 0 {
+		containerData["labels"] = container.Labels
+	}
+
 	// Add resource limits if available
 	if container.CPUShares != nil {
 		containerData["cpu_shares"] = *container.CPUShares
@@ -60,7 +64,7 @@ func (b *Builder) createContainerNode(container *ContainerInfo) (*resourcev1.Res
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to marshal container data: %w", err)
 	}
-	
+
 	specAny, err := anypb.New(spec)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to wrap container spec: %w", err)
@@ -75,9 +79,9 @@ func (b *Builder) createContainerNode(container *ContainerInfo) (*resourcev1.Res
 			Type: "antimetal.runtime.v1.ContainerNode",
 		},
 		Metadata: &resourcev1.ResourceMeta{
-			Provider:  resourcev1.Provider_PROVIDER_KUBERNETES,
-			Service:   "runtime",
-			Name:      containerName,
+			Provider: resourcev1.Provider_PROVIDER_KUBERNETES,
+			Service:  "runtime",
+			Name:     containerName,
 			Namespace: &resourcev1.Namespace{
 				Namespace: &resourcev1.Namespace_Kube{
 					Kube: &resourcev1.KubernetesNamespace{
@@ -92,8 +96,8 @@ func (b *Builder) createContainerNode(container *ContainerInfo) (*resourcev1.Res
 
 	// Create resource reference
 	ref := &resourcev1.ResourceRef{
-		TypeUrl:   "antimetal.runtime.v1/ContainerNode",
-		Name:      containerName,
+		TypeUrl: "antimetal.runtime.v1/ContainerNode",
+		Name:    containerName,
 		Namespace: &resourcev1.Namespace{
 			Namespace: &resourcev1.Namespace_Kube{
 				Kube: &resourcev1.KubernetesNamespace{
@@ -121,11 +125,11 @@ func (b *Builder) createProcessNode(process *ProcessInfo) (*resourcev1.Resource,
 		"command": process.Command,
 		"state":   processState.String(),
 	}
-	
+
 	if process.Cmdline != "" {
 		processData["cmdline"] = process.Cmdline
 	}
-	
+
 	// Add current timestamp as start time (TODO: get actual start time)
 	processData["start_time"] = time.Now().Format(time.RFC3339)
 
@@ -134,7 +138,7 @@ func (b *Builder) createProcessNode(process *ProcessInfo) (*resourcev1.Resource,
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to marshal process data: %w", err)
 	}
-	
+
 	specAny, err := anypb.New(spec)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to wrap process spec: %w", err)
@@ -149,9 +153,9 @@ func (b *Builder) createProcessNode(process *ProcessInfo) (*resourcev1.Resource,
 			Type: "antimetal.runtime.v1.ProcessNode",
 		},
 		Metadata: &resourcev1.ResourceMeta{
-			Provider:  resourcev1.Provider_PROVIDER_KUBERNETES,
-			Service:   "runtime",
-			Name:      processName,
+			Provider: resourcev1.Provider_PROVIDER_KUBERNETES,
+			Service:  "runtime",
+			Name:     processName,
 			Namespace: &resourcev1.Namespace{
 				Namespace: &resourcev1.Namespace_Kube{
 					Kube: &resourcev1.KubernetesNamespace{
@@ -166,8 +170,8 @@ func (b *Builder) createProcessNode(process *ProcessInfo) (*resourcev1.Resource,
 
 	// Create resource reference
 	ref := &resourcev1.ResourceRef{
-		TypeUrl:   "antimetal.runtime.v1/ProcessNode",
-		Name:      processName,
+		TypeUrl: "antimetal.runtime.v1/ProcessNode",
+		Name:    processName,
 		Namespace: &resourcev1.Namespace{
 			Namespace: &resourcev1.Namespace_Kube{
 				Kube: &resourcev1.KubernetesNamespace{
@@ -185,8 +189,8 @@ func (b *Builder) createProcessNode(process *ProcessInfo) (*resourcev1.Resource,
 func (b *Builder) createProcessRef(pid int32) (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
 	processName := fmt.Sprintf("process-%d", pid)
 	ref := &resourcev1.ResourceRef{
-		TypeUrl:   "antimetal.runtime.v1/ProcessNode",
-		Name:      processName,
+		TypeUrl: "antimetal.runtime.v1/ProcessNode",
+		Name:    processName,
 		Namespace: &resourcev1.Namespace{
 			Namespace: &resourcev1.Namespace_Kube{
 				Kube: &resourcev1.KubernetesNamespace{

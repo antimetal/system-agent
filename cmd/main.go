@@ -118,7 +118,8 @@ func init() {
 		"Interval for hardware topology discovery updates")
 	flag.DurationVar(&runtimeUpdateInterval, "runtime-update-interval", 30*time.Second,
 		"Interval for runtime (container/process) topology discovery updates")
-	flag.StringVar(&cgroupPath, "cgroup-path", "/sys/fs/cgroup", "Path to the cgroup filesystem root")
+	flag.StringVar(&cgroupPath, "cgroup-path", "/sys/fs/cgroup",
+		"Path to the cgroup filesystem root")
 
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)

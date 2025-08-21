@@ -210,7 +210,7 @@ type ProcessStats struct {
 
 // ProcessSnapshot contains a collection of process statistics at a specific point in time
 type ProcessSnapshot struct {
-	Timestamp time.Time     // When the snapshot was taken
+	Timestamp time.Time      // When the snapshot was taken
 	Processes []ProcessStats // All processes in the snapshot
 }
 

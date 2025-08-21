@@ -49,7 +49,10 @@ func (b *Builder) createParentOfRelationship(parentRef, childRef *resourcev1.Res
 	return nil
 }
 
-// createContainerProcessRelationship creates a container-to-process relationship
+// TODO: createContainerProcessRelationship creates a container-to-process relationship
+// Currently commented out to avoid unused function warnings - will be integrated when
+// container-process relationships are implemented in buildProcessTopology
+/*
 func (b *Builder) createContainerProcessRelationship(containerRef, processRef *resourcev1.ResourceRef) error {
 	// Create contains relationship data
 	containsData := map[string]interface{}{
@@ -83,8 +86,12 @@ func (b *Builder) createContainerProcessRelationship(containerRef, processRef *r
 
 	return nil
 }
+*/
 
-// createContainerHardwareRelationship creates relationships between containers and hardware
+// TODO: createContainerHardwareRelationship creates relationships between containers and hardware
+// Currently commented out to avoid unused function warnings - will be integrated when
+// container-hardware relationships are implemented in buildContainerTopology
+/*
 func (b *Builder) createContainerHardwareRelationship(containerRef, hardwareRef *resourcev1.ResourceRef, relationshipType string) error {
 	var relationshipData map[string]interface{}
 
@@ -137,3 +144,4 @@ func (b *Builder) createContainerHardwareRelationship(containerRef, hardwareRef 
 
 	return nil
 }
+*/
