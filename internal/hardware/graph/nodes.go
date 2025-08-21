@@ -62,13 +62,13 @@ func (b *Builder) getSystemInfo() (arch hardwarev1.Architecture, bootTime time.T
 	return
 }
 
-// getOSInfo reads OS information from /usr/lib/os-release (with /etc/os-release fallback)
+// getOSInfo reads OS information from os-release files according to freedesktop.org standard
 func getOSInfo() string {
-	// Try /usr/lib/os-release first (more portable)
-	file, err := os.Open("/usr/lib/os-release")
+	// Try /etc/os-release first (primary location per freedesktop.org spec)
+	file, err := os.Open("/etc/os-release")
 	if err != nil {
-		// Fall back to /etc/os-release (systemd symlink)
-		file, err = os.Open("/etc/os-release")
+		// Fall back to /usr/lib/os-release (secondary location)
+		file, err = os.Open("/usr/lib/os-release")
 		if err != nil {
 			return "Linux" // Final fallback
 		}
@@ -89,28 +89,35 @@ func getOSInfo() string {
 	return "Linux" // Fallback
 }
 
-// getMachineID reads the machine ID from /etc/machine-id or /sys/class/dmi/id/product_uuid
+// getMachineID reads the OS-specific machine ID from /etc/machine-id
+// This is distinct from the hardware UUID and hostname
 func getMachineID() string {
-	// Try /etc/machine-id first (most common and doesn't require root)
+	// Try /etc/machine-id (OS-specific identifier)
 	if data, err := os.ReadFile("/etc/machine-id"); err == nil {
 		if id := strings.TrimSpace(string(data)); id != "" {
 			return id
 		}
 	}
 
-	// Try /sys/class/dmi/id/product_uuid (requires root but is hardware-based)
+	// Fall back to system UUID if machine-id not available
 	if data, err := os.ReadFile("/sys/class/dmi/id/product_uuid"); err == nil {
 		if uuid := strings.TrimSpace(string(data)); uuid != "" {
 			return uuid
 		}
 	}
 
-	// Fall back to hostname if neither is available
-	if hostname, err := os.Hostname(); err == nil {
-		return hostname
-	}
-
 	return "unknown"
+}
+
+// getSystemUUID reads the hardware UUID from DMI
+func getSystemUUID() string {
+	// Try /sys/class/dmi/id/product_uuid (hardware-based, requires root)
+	if data, err := os.ReadFile("/sys/class/dmi/id/product_uuid"); err == nil {
+		if uuid := strings.TrimSpace(string(data)); uuid != "" {
+			return uuid
+		}
+	}
+	return ""
 }
 
 // createSystemNode creates the root system node representing the machine
@@ -118,10 +125,13 @@ func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.Resource
 	// Get system information
 	arch, bootTime, kernelVersion, osInfo := b.getSystemInfo()
 
-	// Get machine ID for unique identification
+	// Get machine ID for unique identification (OS-specific)
 	machineID := getMachineID()
 
-	// Get hostname for display purposes
+	// Get system UUID (hardware-specific)
+	systemUUID := getSystemUUID()
+
+	// Get hostname (network identifier)
 	hostname, err := os.Hostname()
 	if err != nil {
 		b.logger.Error(err, "Failed to get hostname, using 'unknown'")
@@ -143,7 +153,18 @@ func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.Resource
 		return nil, nil, fmt.Errorf("failed to marshal system spec: %w", err)
 	}
 
-	// Create resource with machine ID as the unique identifier
+	// Build tags list
+	tags := []*resourcev1.Tag{
+		{Key: "hostname", Value: hostname},
+		{Key: "machine-id", Value: machineID},
+	}
+
+	// Add system UUID tag if available
+	if systemUUID != "" {
+		tags = append(tags, &resourcev1.Tag{Key: "system-uuid", Value: systemUUID})
+	}
+
+	// Create resource with machine ID as the name (globally unique)
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
 			Kind: "SystemNode",
@@ -151,12 +172,9 @@ func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.Resource
 		},
 		Metadata: &resourcev1.ResourceMeta{
 			Provider:   resourcev1.Provider_PROVIDER_ANTIMETAL,
-			ProviderId: machineID, // Use machine ID for unique identification
-			Name:       hostname,  // Keep hostname for display/readability
-			Tags: []*resourcev1.Tag{
-				{Key: "hostname", Value: hostname},
-				{Key: "machine-id", Value: machineID},
-			},
+			ProviderId: machineID,
+			Name:       machineID, // Use machine ID as name (globally unique)
+			Tags:       tags,
 		},
 		Spec: specAny,
 	}

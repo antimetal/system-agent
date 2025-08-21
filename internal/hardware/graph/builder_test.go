@@ -26,16 +26,7 @@ import (
 
 // testStore wraps the real store and tracks operations for testing
 type testStore struct {
-	realStore interface {
-		AddResource(r *resourcev1.Resource) error
-		AddRelationships(rels ...*resourcev1.Relationship) error
-		UpdateResource(r *resourcev1.Resource) error
-		DeleteResource(ref *resourcev1.ResourceRef) error
-		GetResource(ref *resourcev1.ResourceRef) (*resourcev1.Resource, error)
-		GetRelationships(subject, object *resourcev1.ResourceRef, predicate proto.Message) ([]*resourcev1.Relationship, error)
-		Subscribe(typeDef *resourcev1.TypeDescriptor) <-chan resource.Event
-		Close() error
-	}
+	realStore     resource.Store
 	resources     []*resourcev1.Resource
 	relationships []*resourcev1.Relationship
 }
