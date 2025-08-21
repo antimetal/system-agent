@@ -261,15 +261,10 @@ func main() {
 		setupLog.Error(err, "unable to create hardware manager")
 		os.Exit(1)
 	}
-	if err := hwManager.Start(); err != nil {
-		setupLog.Error(err, "unable to start hardware manager")
+	if err := mgr.Add(hwManager); err != nil {
+		setupLog.Error(err, "unable to register hardware manager")
 		os.Exit(1)
 	}
-	defer func() {
-		if err := hwManager.Stop(); err != nil {
-			setupLog.Error(err, "error stopping hardware manager")
-		}
-	}()
 
 	// Setup Kubernetes Collector Controller
 	if enableK8sController {

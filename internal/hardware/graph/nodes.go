@@ -62,11 +62,16 @@ func (b *Builder) getSystemInfo() (arch hardwarev1.Architecture, bootTime time.T
 	return
 }
 
-// getOSInfo reads OS information from /etc/os-release
+// getOSInfo reads OS information from /usr/lib/os-release (with /etc/os-release fallback)
 func getOSInfo() string {
-	file, err := os.Open("/etc/os-release")
+	// Try /usr/lib/os-release first (more portable)
+	file, err := os.Open("/usr/lib/os-release")
 	if err != nil {
-		return "Linux" // Fallback
+		// Fall back to /etc/os-release (systemd symlink)
+		file, err = os.Open("/etc/os-release")
+		if err != nil {
+			return "Linux" // Final fallback
+		}
 	}
 	defer file.Close()
 
@@ -84,12 +89,39 @@ func getOSInfo() string {
 	return "Linux" // Fallback
 }
 
+// getMachineID reads the machine ID from /etc/machine-id or /sys/class/dmi/id/product_uuid
+func getMachineID() string {
+	// Try /etc/machine-id first (most common and doesn't require root)
+	if data, err := os.ReadFile("/etc/machine-id"); err == nil {
+		if id := strings.TrimSpace(string(data)); id != "" {
+			return id
+		}
+	}
+
+	// Try /sys/class/dmi/id/product_uuid (requires root but is hardware-based)
+	if data, err := os.ReadFile("/sys/class/dmi/id/product_uuid"); err == nil {
+		if uuid := strings.TrimSpace(string(data)); uuid != "" {
+			return uuid
+		}
+	}
+
+	// Fall back to hostname if neither is available
+	if hostname, err := os.Hostname(); err == nil {
+		return hostname
+	}
+
+	return "unknown"
+}
+
 // createSystemNode creates the root system node representing the machine
 func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
 	// Get system information
 	arch, bootTime, kernelVersion, osInfo := b.getSystemInfo()
 
-	// Get hostname
+	// Get machine ID for unique identification
+	machineID := getMachineID()
+
+	// Get hostname for display purposes
 	hostname, err := os.Hostname()
 	if err != nil {
 		b.logger.Error(err, "Failed to get hostname, using 'unknown'")
@@ -111,7 +143,7 @@ func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.Resource
 		return nil, nil, fmt.Errorf("failed to marshal system spec: %w", err)
 	}
 
-	// Create resource
+	// Create resource with machine ID as the unique identifier
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
 			Kind: "SystemNode",
@@ -119,8 +151,12 @@ func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.Resource
 		},
 		Metadata: &resourcev1.ResourceMeta{
 			Provider:   resourcev1.Provider_PROVIDER_ANTIMETAL,
-			ProviderId: hostname,
-			Name:       hostname,
+			ProviderId: machineID, // Use machine ID for unique identification
+			Name:       hostname,  // Keep hostname for display/readability
+			Tags: []*resourcev1.Tag{
+				{Key: "hostname", Value: hostname},
+				{Key: "machine-id", Value: machineID},
+			},
 		},
 		Spec: specAny,
 	}
@@ -128,7 +164,7 @@ func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.Resource
 	// Create reference
 	ref := &resourcev1.ResourceRef{
 		TypeUrl: string(systemSpec.ProtoReflect().Descriptor().FullName()),
-		Name:    hostname,
+		Name:    hostname, // Keep hostname for readability, machine ID is in ProviderId
 	}
 
 	return resource, ref, nil

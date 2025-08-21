@@ -16,6 +16,7 @@ import (
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/antimetal/agent/pkg/resource"
+	"github.com/antimetal/agent/pkg/resource/store"
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,49 +24,75 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-// mockStore implements a minimal ResourceStore for testing
-type mockStore struct {
+// testStore wraps the real store and tracks operations for testing
+type testStore struct {
+	realStore interface {
+		AddResource(r *resourcev1.Resource) error
+		AddRelationships(rels ...*resourcev1.Relationship) error
+		UpdateResource(r *resourcev1.Resource) error
+		DeleteResource(ref *resourcev1.ResourceRef) error
+		GetResource(ref *resourcev1.ResourceRef) (*resourcev1.Resource, error)
+		GetRelationships(subject, object *resourcev1.ResourceRef, predicate proto.Message) ([]*resourcev1.Relationship, error)
+		Subscribe(typeDef *resourcev1.TypeDescriptor) <-chan resource.Event
+		Close() error
+	}
 	resources     []*resourcev1.Resource
 	relationships []*resourcev1.Relationship
 }
 
-func newMockStore() *mockStore {
-	return &mockStore{
+func newTestStore(t *testing.T) *testStore {
+	// Create an in-memory store (passing empty string for dataDir makes it in-memory)
+	s, err := store.New("")
+	require.NoError(t, err, "Failed to create in-memory store")
+
+	return &testStore{
+		realStore:     s,
 		resources:     make([]*resourcev1.Resource, 0),
 		relationships: make([]*resourcev1.Relationship, 0),
 	}
 }
 
-func (m *mockStore) AddResource(r *resourcev1.Resource) error {
-	m.resources = append(m.resources, r)
-	return nil
+func (ts *testStore) AddResource(r *resourcev1.Resource) error {
+	ts.resources = append(ts.resources, r)
+	return ts.realStore.AddResource(r)
 }
 
-func (m *mockStore) AddRelationships(rels ...*resourcev1.Relationship) error {
-	m.relationships = append(m.relationships, rels...)
-	return nil
+func (ts *testStore) AddRelationships(rels ...*resourcev1.Relationship) error {
+	ts.relationships = append(ts.relationships, rels...)
+	return ts.realStore.AddRelationships(rels...)
 }
 
-// Implement remaining ResourceStore interface methods as no-ops
-func (m *mockStore) UpdateResource(r *resourcev1.Resource) error      { return nil }
-func (m *mockStore) DeleteResource(ref *resourcev1.ResourceRef) error { return nil }
-func (m *mockStore) GetResource(ref *resourcev1.ResourceRef) (*resourcev1.Resource, error) {
-	return nil, nil
+func (ts *testStore) UpdateResource(r *resourcev1.Resource) error {
+	return ts.realStore.UpdateResource(r)
 }
-func (m *mockStore) GetRelationships(subject, object *resourcev1.ResourceRef, predicate proto.Message) ([]*resourcev1.Relationship, error) {
-	return nil, nil
+
+func (ts *testStore) DeleteResource(ref *resourcev1.ResourceRef) error {
+	return ts.realStore.DeleteResource(ref)
 }
-func (m *mockStore) Subscribe(typeDef *resourcev1.TypeDescriptor) <-chan resource.Event {
-	return nil
+
+func (ts *testStore) GetResource(ref *resourcev1.ResourceRef) (*resourcev1.Resource, error) {
+	return ts.realStore.GetResource(ref)
 }
-func (m *mockStore) Close() error { return nil }
+
+func (ts *testStore) GetRelationships(subject, object *resourcev1.ResourceRef, predicate proto.Message) ([]*resourcev1.Relationship, error) {
+	return ts.realStore.GetRelationships(subject, object, predicate)
+}
+
+func (ts *testStore) Subscribe(typeDef *resourcev1.TypeDescriptor) <-chan resource.Event {
+	return ts.realStore.Subscribe(typeDef)
+}
+
+func (ts *testStore) Close() error {
+	return ts.realStore.Close()
+}
 
 func TestBuilder_BuildFromSnapshot(t *testing.T) {
 	ctx := context.Background()
 	logger := logr.Discard()
-	mockStore := newMockStore()
+	testStore := newTestStore(t)
+	defer testStore.Close()
 
-	builder := graph.NewBuilder(logger, mockStore)
+	builder := graph.NewBuilder(logger, testStore)
 
 	// Create a test snapshot with sample data
 	snapshot := &performance.Snapshot{
@@ -153,12 +180,12 @@ func TestBuilder_BuildFromSnapshot(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify resources were created
-	assert.Greater(t, len(mockStore.resources), 0, "Should have created resources")
-	assert.Greater(t, len(mockStore.relationships), 0, "Should have created relationships")
+	assert.Greater(t, len(testStore.resources), 0, "Should have created resources")
+	assert.Greater(t, len(testStore.relationships), 0, "Should have created relationships")
 
 	// Count resource types
 	resourceCounts := make(map[string]int)
-	for _, r := range mockStore.resources {
+	for _, r := range testStore.resources {
 		resourceCounts[r.Type.Kind]++
 	}
 
@@ -174,7 +201,7 @@ func TestBuilder_BuildFromSnapshot(t *testing.T) {
 
 	// Verify relationships were created
 	relationshipCounts := make(map[string]int)
-	for _, r := range mockStore.relationships {
+	for _, r := range testStore.relationships {
 		relationshipCounts[r.Type.Kind]++
 	}
 
@@ -182,7 +209,7 @@ func TestBuilder_BuildFromSnapshot(t *testing.T) {
 	assert.Greater(t, relationshipCounts["BelongsToNUMA"], 0, "Should have NUMA affinity relationships")
 
 	// Verify specific resource details
-	for _, r := range mockStore.resources {
+	for _, r := range testStore.resources {
 		assert.Equal(t, resourcev1.Provider_PROVIDER_ANTIMETAL, r.Metadata.Provider)
 		assert.NotEmpty(t, r.Metadata.Name)
 		assert.NotNil(t, r.Spec)
@@ -217,9 +244,10 @@ func TestBuilder_BuildFromSnapshot(t *testing.T) {
 func TestBuilder_BuildFromSnapshot_EmptySnapshot(t *testing.T) {
 	ctx := context.Background()
 	logger := logr.Discard()
-	mockStore := newMockStore()
+	testStore := newTestStore(t)
+	defer testStore.Close()
 
-	builder := graph.NewBuilder(logger, mockStore)
+	builder := graph.NewBuilder(logger, testStore)
 
 	// Create an empty snapshot
 	snapshot := &performance.Snapshot{
@@ -232,16 +260,17 @@ func TestBuilder_BuildFromSnapshot_EmptySnapshot(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should have at least the system node
-	assert.Equal(t, 1, len(mockStore.resources), "Should have created system node")
-	assert.Equal(t, "SystemNode", mockStore.resources[0].Type.Kind)
+	assert.Equal(t, 1, len(testStore.resources), "Should have created system node")
+	assert.Equal(t, "SystemNode", testStore.resources[0].Type.Kind)
 }
 
 func TestBuilder_BuildFromSnapshot_PartialData(t *testing.T) {
 	ctx := context.Background()
 	logger := logr.Discard()
-	mockStore := newMockStore()
+	testStore := newTestStore(t)
+	defer testStore.Close()
 
-	builder := graph.NewBuilder(logger, mockStore)
+	builder := graph.NewBuilder(logger, testStore)
 
 	// Create a snapshot with only CPU data
 	snapshot := &performance.Snapshot{
@@ -276,7 +305,7 @@ func TestBuilder_BuildFromSnapshot_PartialData(t *testing.T) {
 
 	// Verify resources were created
 	resourceCounts := make(map[string]int)
-	for _, r := range mockStore.resources {
+	for _, r := range testStore.resources {
 		resourceCounts[r.Type.Kind]++
 	}
 
