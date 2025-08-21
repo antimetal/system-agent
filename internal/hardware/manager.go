@@ -74,7 +74,7 @@ func NewManager(logger logr.Logger, config ManagerConfig) (*Manager, error) {
 }
 
 // Start begins hardware discovery and graph building
-func (m *Manager) Start() error {
+func (m *Manager) Start(ctx context.Context) error {
 	m.logger.Info("Starting hardware manager", "interval", m.interval)
 
 	// Do an initial hardware discovery

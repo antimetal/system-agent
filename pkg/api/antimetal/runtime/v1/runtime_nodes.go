@@ -10,26 +10,12 @@ import (
 	"time"
 )
 
-// CgroupVersion defines the supported cgroup versions.
-type CgroupVersion int32
-
+// CgroupVersion constants for convenience - use the protobuf-generated enum values
 const (
-	CgroupVersionUnknown CgroupVersion = 0
-	CgroupVersionV1      CgroupVersion = 1
-	CgroupVersionV2      CgroupVersion = 2
+	CgroupVersionUnknown = CgroupVersion_CGROUP_VERSION_V1 // Default to V1 for unknown
+	CgroupVersionV1      = CgroupVersion_CGROUP_VERSION_V1
+	CgroupVersionV2      = CgroupVersion_CGROUP_VERSION_V2
 )
-
-// String returns the string representation of CgroupVersion
-func (v CgroupVersion) String() string {
-	switch v {
-	case CgroupVersionV1:
-		return "v1"
-	case CgroupVersionV2:
-		return "v2"
-	default:
-		return "unknown"
-	}
-}
 
 // ContainerRuntime defines the supported container runtime implementations.
 type ContainerRuntime int32

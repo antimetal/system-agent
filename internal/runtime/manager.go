@@ -31,7 +31,6 @@ type Manager struct {
 	lastUpdate time.Time
 	mu         sync.RWMutex
 
-	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 }
@@ -69,8 +68,6 @@ func NewManager(logger logr.Logger, config ManagerConfig) (*Manager, error) {
 		cgroupPath = "/sys/fs/cgroup"
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-
 	return &Manager{
 		logger:      logger.WithName("runtime-manager"),
 		store:       config.Store,
@@ -78,24 +75,26 @@ func NewManager(logger logr.Logger, config ManagerConfig) (*Manager, error) {
 		builder:     graph.NewBuilder(logger, config.Store),
 		discovery:   containers.NewDiscovery(cgroupPath),
 		interval:    interval,
-		ctx:         ctx,
-		cancel:      cancel,
 	}, nil
 }
 
 // Start begins runtime discovery and graph building
-func (m *Manager) Start() error {
+func (m *Manager) Start(ctx context.Context) error {
 	m.logger.Info("Starting runtime manager", "interval", m.interval)
 
+	// Create cancellable context for internal operations
+	ctx, cancel := context.WithCancel(ctx)
+	m.cancel = cancel
+
 	// Do an initial runtime discovery
-	if err := m.updateRuntimeGraph(); err != nil {
+	if err := m.updateRuntimeGraph(ctx); err != nil {
 		m.logger.Error(err, "Failed initial runtime discovery")
 		// Don't fail startup on initial discovery error
 	}
 
 	// Start the periodic update goroutine
 	m.wg.Add(1)
-	go m.runPeriodicUpdates()
+	go m.runPeriodicUpdates(ctx)
 
 	return nil
 }
@@ -103,13 +102,15 @@ func (m *Manager) Start() error {
 // Stop stops the runtime manager
 func (m *Manager) Stop() error {
 	m.logger.Info("Stopping runtime manager")
-	m.cancel()
+	if m.cancel != nil {
+		m.cancel()
+	}
 	m.wg.Wait()
 	return nil
 }
 
 // runPeriodicUpdates runs periodic runtime graph updates
-func (m *Manager) runPeriodicUpdates() {
+func (m *Manager) runPeriodicUpdates(ctx context.Context) {
 	defer m.wg.Done()
 
 	ticker := time.NewTicker(m.interval)
@@ -117,10 +118,10 @@ func (m *Manager) runPeriodicUpdates() {
 
 	for {
 		select {
-		case <-m.ctx.Done():
+		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := m.updateRuntimeGraph(); err != nil {
+			if err := m.updateRuntimeGraph(ctx); err != nil {
 				m.logger.Error(err, "Failed to update runtime graph")
 			}
 		}
@@ -128,7 +129,7 @@ func (m *Manager) runPeriodicUpdates() {
 }
 
 // updateRuntimeGraph collects runtime info and updates the graph
-func (m *Manager) updateRuntimeGraph() error {
+func (m *Manager) updateRuntimeGraph(ctx context.Context) error {
 	m.logger.V(1).Info("Updating runtime graph")
 
 	// Collect a snapshot of all runtime information
@@ -138,7 +139,7 @@ func (m *Manager) updateRuntimeGraph() error {
 	}
 
 	// Build the runtime graph from the snapshot
-	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	if err := m.builder.BuildFromSnapshot(ctx, snapshot); err != nil {
@@ -247,6 +248,6 @@ func (m *Manager) GetLastUpdateTime() time.Time {
 }
 
 // ForceUpdate triggers an immediate runtime graph update
-func (m *Manager) ForceUpdate() error {
-	return m.updateRuntimeGraph()
+func (m *Manager) ForceUpdate(ctx context.Context) error {
+	return m.updateRuntimeGraph(ctx)
 }

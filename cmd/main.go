@@ -65,6 +65,9 @@ var (
 	hardwareUpdateInterval time.Duration
 	runtimeUpdateInterval  time.Duration
 	cgroupPath             string
+	runtimeTrackerMode     string
+	runtimeEventBufferSize int
+	runtimeDebounceMs      int
 )
 
 func init() {
@@ -120,6 +123,12 @@ func init() {
 		"Interval for runtime (container/process) topology discovery updates")
 	flag.StringVar(&cgroupPath, "cgroup-path", "/sys/fs/cgroup",
 		"Path to the cgroup filesystem root")
+	flag.StringVar(&runtimeTrackerMode, "runtime-tracker-mode", "auto",
+		"Runtime tracking mode: auto, polling, event-driven, ebpf")
+	flag.IntVar(&runtimeEventBufferSize, "runtime-event-buffer-size", 1000,
+		"Size of the runtime event channel buffer")
+	flag.IntVar(&runtimeDebounceMs, "runtime-debounce-ms", 10,
+		"Debounce interval for runtime events in milliseconds")
 
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
@@ -287,7 +296,7 @@ func main() {
 		setupLog.Error(err, "unable to create runtime manager")
 		os.Exit(1)
 	}
-	if err := rtManager.Start(); err != nil {
+	if err := rtManager.Start(ctx); err != nil {
 		setupLog.Error(err, "unable to start runtime manager")
 		os.Exit(1)
 	}
