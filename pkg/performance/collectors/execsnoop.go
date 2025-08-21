@@ -7,8 +7,6 @@
 // Package collectors provides performance data collectors for the Antimetal agent.
 package collectors
 
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -cflags "-I../../../ebpf/include -Wall -Werror -g -O2 -D__TARGET_ARCH_x86 -fdebug-types-section -fno-stack-protector" -target bpfel execsnoop ../../../ebpf/src/execsnoop.bpf.c -- -I../../../ebpf/include
-
 import (
 	"bytes"
 	"context"

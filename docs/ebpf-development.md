@@ -145,6 +145,60 @@ For a complete example of an eBPF-based collector implementation, see:
 - `pkg/performance/collectors/execsnoop.go` - Go integration
 - `pkg/performance/collectors/execsnoop_test.go` - Testing approach
 
+## Hardware Testing for eBPF Profilers
+
+### Overview
+eBPF profilers that use `perf_event` programs require access to hardware Performance Monitoring Units (PMUs), which are typically not available in virtualized environments. This necessitates testing on bare metal hardware.
+
+### When Hardware Testing is Required
+- **Perf event-based profilers**: CPU cycles, instructions, cache events
+- **Hardware PMU counters**: L1/L2/L3 cache misses, TLB events
+- **Uncore events**: Memory controller, interconnect monitoring
+- **High-frequency sampling**: Testing overhead and event rates
+
+### Running Hardware Tests
+```bash
+# Build with hardware tag
+GOOS=linux GOARCH=amd64 go test -c -tags=hardware \
+    -o hardware-tests ./pkg/performance/collectors
+
+# Run on bare metal server
+sudo ANTIMETAL_BPF_PATH=./ebpf/build ./hardware-tests -test.v
+
+# Or use the automated script
+sudo ./scripts/run-hardware-tests.sh
+```
+
+### Key Differences from VM Testing
+| Feature | VM Testing | Hardware Testing |
+|---------|------------|------------------|
+| PMU Access | ❌ Not available | ✅ Full access |
+| perf_event_open | Limited/Fails | Full functionality |
+| Hardware Events | Software only | All event types |
+| Event Rates | Low/Unreliable | Accurate sampling |
+
+### Common Issues and Solutions
+
+#### "invalid argument" on perf_event attachment
+- **In VMs**: Expected - PMU not available
+- **Solution**: Use software events (SW_CPU_CLOCK) or test on bare metal
+
+#### Integration tests hanging
+- **Cause**: Perf events not generating samples
+- **Solution**: Ensure proper `Sample_type` and `Wakeup` configuration
+
+#### bpf_link not supported (kernel < 5.15)
+- **Solution**: Use legacy ioctl attachment (PERF_EVENT_IOC_SET_BPF)
+- **See**: `profiler.go:attachPerfEvent()` for implementation
+
+### Hardware Test Infrastructure
+For comprehensive hardware testing, we recommend:
+- **Hetzner AX41-NVMe**: ~€41/month, full PMU access
+- **AWS Bare Metal**: i3.metal instances (expensive)
+- **Local servers**: Any physical Linux machine
+
+For detailed hardware testing procedures, see [Hardware Testing Guide](hardware-testing.md).
+
 ## Additional Resources
 
 - [Linux Kernel BPF Documentation](https://www.kernel.org/doc/html/latest/bpf/)

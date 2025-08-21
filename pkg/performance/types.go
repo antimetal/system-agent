@@ -31,6 +31,8 @@ const (
 	MetricTypeDiskInfo    MetricType = "disk_info"
 	MetricTypeNetworkInfo MetricType = "network_info"
 	MetricTypeNUMAStats   MetricType = "numa_stats"
+	// eBPF-based collectors
+	MetricTypeProfiler MetricType = "profiler"
 )
 
 // CollectorStatus represents the operational status of a collector
@@ -562,4 +564,40 @@ type NUMANodeStatistics struct {
 	InterleaveHit uint64 // Interleaved memory successfully allocated here
 	LocalNode     uint64 // Memory allocated here while process was running here
 	OtherNode     uint64 // Memory allocated here while process was on other node
+}
+
+// ProfileStats contains CPU profiling data collected via eBPF
+type ProfileStats struct {
+	CollectionTime time.Time     // When the profile collection started
+	Duration       time.Duration // How long the profile ran
+	// Perf event configuration
+	EventName    string // Human-readable name: "cpu-cycles", "cache-misses", etc.
+	EventType    uint32 // PERF_TYPE_* constant (HARDWARE, SOFTWARE, etc.)
+	EventConfig  uint64 // Event-specific config (PERF_COUNT_HW_*, PERF_COUNT_SW_*, etc.)
+	SamplePeriod uint64 // Sample every N events
+	// Collection statistics
+	SampleCount    uint64 // Total number of samples collected
+	LostSamples    uint64 // Samples lost due to ring buffer overflow
+	DroppedSamples uint64 // Samples dropped due to full output channel
+	// Stack traces
+	Stacks []ProfileStack
+	// Process summary (command names and aggregated data)
+	Processes map[int32]ProfileProcess // Keyed by PID
+}
+
+// ProfileStack represents a unique stack trace
+type ProfileStack struct {
+	PID         int32    // Process ID
+	TID         int32    // Thread ID
+	CPU         int32    // CPU where sample was taken
+	SampleCount uint64   // Number of samples with this stack
+	UserStack   []uint64 // User-space stack trace (instruction pointers)
+	KernelStack []uint64 // Kernel-space stack trace (instruction pointers)
+}
+
+// ProfileProcess contains aggregated profile data for a process
+type ProfileProcess struct {
+	PID         int32  // Process ID
+	Command     string // Process command name
+	SampleCount uint64 // Total samples for this process
 }
