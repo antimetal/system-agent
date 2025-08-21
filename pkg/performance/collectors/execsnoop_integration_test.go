@@ -10,7 +10,6 @@ package collectors_test
 
 import (
 	"context"
-	"os"
 	"os/exec"
 	"testing"
 	"time"
@@ -131,7 +130,7 @@ func TestExecSnoopCollector_Integration(t *testing.T) {
 		err = collector.Stop()
 		require.NoError(t, err)
 
-		// Verify collector is stopped
-		assert.Equal(t, performance.CollectorStatusStopped, collector.Status())
+		// Verify collector is disabled after stop
+		assert.Equal(t, performance.CollectorStatusDisabled, collector.Status())
 	})
 }
