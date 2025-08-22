@@ -1,0 +1,62 @@
+# Copyright Antimetal, Inc. All rights reserved.
+#
+# Use of this source code is governed by a source available license that can be found in the
+# LICENSE file or at:
+# https://polyformproject.org/wp-content/uploads/2020/06/PolyForm-Shield-1.0.0.txt
+
+# KIND cluster configuration for topology testing
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: antimetal-topology-test
+nodes:
+- role: control-plane
+  extraMounts:
+  # Mount host /proc, /sys, /dev for real system access
+  - hostPath: /proc
+    containerPath: /host/proc
+    readOnly: true
+  - hostPath: /sys
+    containerPath: /host/sys
+    readOnly: true
+  - hostPath: /dev
+    containerPath: /host/dev
+    readOnly: true
+  # Mount container runtime paths for container discovery
+  - hostPath: /var/lib/docker
+    containerPath: /host/var/lib/docker
+    readOnly: true
+  - hostPath: /run/containerd
+    containerPath: /host/run/containerd
+    readOnly: true
+  - hostPath: /var/run/docker.sock
+    containerPath: /var/run/docker.sock
+    readOnly: true
+  kubeadmConfigPatches:
+  - |
+    kind: InitConfiguration
+    nodeRegistration:
+      kubeletExtraArgs:
+        # Enable cgroup v2 support
+        cgroup-driver: systemd
+        # Enable container runtime endpoint
+        container-runtime-endpoint: unix:///run/containerd/containerd.sock
+- role: worker
+  extraMounts:
+  - hostPath: /proc
+    containerPath: /host/proc
+    readOnly: true
+  - hostPath: /sys
+    containerPath: /host/sys
+    readOnly: true
+  - hostPath: /dev
+    containerPath: /host/dev
+    readOnly: true
+  - hostPath: /var/lib/docker
+    containerPath: /host/var/lib/docker
+    readOnly: true
+  - hostPath: /run/containerd
+    containerPath: /host/run/containerd
+    readOnly: true
+  - hostPath: /var/run/docker.sock
+    containerPath: /var/run/docker.sock
+    readOnly: true
