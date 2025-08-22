@@ -46,6 +46,26 @@ type ContinuousCollector interface {
 	LastError() error
 }
 
+// DeltaAwareCollector extends PointCollector with delta/rate calculation capabilities
+type DeltaAwareCollector interface {
+	PointCollector
+
+	// CollectWithDelta performs collection and calculates deltas/rates based on configuration
+	// Returns the same data as Collect() but with delta fields populated when enabled
+	CollectWithDelta(ctx context.Context, config DeltaConfig) (any, error)
+
+	// ResetDeltaState clears internal state for delta calculations
+	// Useful when collector configuration changes or after long gaps
+	ResetDeltaState() error
+
+	// GetDeltaCapabilities returns which metric fields support delta calculations
+	// Used for validation and configuration assistance
+	GetDeltaCapabilities() []string
+
+	// HasDeltaState returns whether the collector has previous state for delta calculations
+	HasDeltaState() bool
+}
+
 // NewContinuousCollector creates a new continuous collector instance with the provided config
 type NewContinuousCollector func(logr.Logger, CollectionConfig) (ContinuousCollector, error)
 
