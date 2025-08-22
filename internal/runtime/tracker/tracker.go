@@ -10,6 +10,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/antimetal/agent/internal/runtime/graph"
 	"github.com/antimetal/agent/pkg/containers"
 	"github.com/antimetal/agent/pkg/performance"
 )
@@ -40,6 +41,48 @@ type RuntimeSnapshot struct {
 	Containers []containers.Container
 	// Process information will be integrated with existing performance collectors
 	ProcessStats *performance.ProcessSnapshot
+}
+
+// GetContainers implements the graph.RuntimeSnapshot interface
+func (s *RuntimeSnapshot) GetContainers() []graph.ContainerInfo {
+	containerInfos := make([]graph.ContainerInfo, len(s.Containers))
+
+	for i, container := range s.Containers {
+		containerInfos[i] = graph.ContainerInfo{
+			ID:            container.ID,
+			Runtime:       container.Runtime,
+			CgroupVersion: container.CgroupVersion,
+			CgroupPath:    container.CgroupPath,
+			// TODO: Extract image name/tag from container metadata
+			// TODO: Extract resource limits from cgroup files
+			// TODO: Extract labels from container runtime
+		}
+	}
+
+	return containerInfos
+}
+
+// GetProcesses implements the graph.RuntimeSnapshot interface
+func (s *RuntimeSnapshot) GetProcesses() []graph.ProcessInfo {
+	if s.ProcessStats == nil {
+		return []graph.ProcessInfo{}
+	}
+
+	processInfos := make([]graph.ProcessInfo, len(s.ProcessStats.Processes))
+
+	for i, process := range s.ProcessStats.Processes {
+		processInfos[i] = graph.ProcessInfo{
+			PID:     process.PID,
+			PPID:    process.PPID,
+			PGID:    process.PGID,
+			SID:     process.SID,
+			Command: process.Command,
+			State:   process.State,
+			// TODO: Add cmdline when available in ProcessStats
+		}
+	}
+
+	return processInfos
 }
 
 // RuntimeEvent represents a runtime change event (container/process lifecycle)

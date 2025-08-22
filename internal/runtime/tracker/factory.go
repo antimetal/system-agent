@@ -30,9 +30,7 @@ func NewRuntimeTracker(logger logr.Logger, config TrackerConfig) (RuntimeTracker
 		return NewPollingTracker(logger, config)
 	
 	case TrackerModeEventDriven:
-		// TODO: Implement event-driven tracker in Phase 1B
-		logger.Info("Event-driven tracker not yet implemented, falling back to polling")
-		return NewPollingTracker(logger, config)
+		return NewEventDrivenTracker(logger, config)
 	
 	case TrackerModeEBPF:
 		// TODO: Implement eBPF tracker in future phases

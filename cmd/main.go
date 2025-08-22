@@ -34,6 +34,7 @@ import (
 	"github.com/antimetal/agent/internal/kubernetes/cluster"
 	"github.com/antimetal/agent/internal/kubernetes/scheme"
 	"github.com/antimetal/agent/internal/runtime"
+	"github.com/antimetal/agent/internal/runtime/tracker"
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/antimetal/agent/pkg/resource/store"
 )
@@ -289,7 +290,13 @@ func main() {
 			Store:              rsrcStore,
 			PerformanceManager: perfManager,
 			UpdateInterval:     runtimeUpdateInterval,
-			CgroupPath:         cgroupPath,
+			TrackerConfig: tracker.TrackerConfig{
+				Mode:             tracker.TrackerMode(runtimeTrackerMode),
+				CgroupPath:       cgroupPath,
+				UpdateInterval:   runtimeUpdateInterval,
+				EventBufferSize:  runtimeEventBufferSize,
+				DebounceInterval: time.Duration(runtimeDebounceMs) * time.Millisecond,
+			},
 		},
 	)
 	if err != nil {

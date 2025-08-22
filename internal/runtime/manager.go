@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/antimetal/agent/internal/runtime/graph"
-	"github.com/antimetal/agent/pkg/containers"
+	"github.com/antimetal/agent/internal/runtime/tracker"
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/antimetal/agent/pkg/resource"
 	"github.com/go-logr/logr"
@@ -25,7 +25,7 @@ type Manager struct {
 	store       resource.Store
 	perfManager *performance.Manager
 	builder     *graph.Builder
-	discovery   *containers.Discovery
+	tracker     tracker.RuntimeTracker
 
 	interval   time.Duration
 	lastUpdate time.Time
@@ -37,14 +37,14 @@ type Manager struct {
 
 // ManagerConfig contains configuration for the runtime manager
 type ManagerConfig struct {
-	// UpdateInterval is how often to refresh the runtime graph
+	// UpdateInterval is how often to refresh the runtime graph (for polling mode)
 	UpdateInterval time.Duration
 	// Store is the resource store to write runtime nodes to
 	Store resource.Store
 	// PerformanceManager is the performance collector manager
 	PerformanceManager *performance.Manager
-	// CgroupPath is the root cgroup filesystem path (default: /sys/fs/cgroup)
-	CgroupPath string
+	// TrackerConfig contains runtime tracker configuration
+	TrackerConfig tracker.TrackerConfig
 }
 
 // NewManager creates a new runtime manager
@@ -56,16 +56,25 @@ func NewManager(logger logr.Logger, config ManagerConfig) (*Manager, error) {
 		return nil, fmt.Errorf("performance manager is required")
 	}
 
-	// Default to 30 second update interval (more frequent than hardware)
-	interval := config.UpdateInterval
-	if interval == 0 {
-		interval = 30 * time.Second
+	// Validate and setup tracker configuration
+	trackerConfig := config.TrackerConfig
+	if err := tracker.ValidateConfig(&trackerConfig); err != nil {
+		return nil, fmt.Errorf("invalid tracker config: %w", err)
 	}
 
-	// Default cgroup path
-	cgroupPath := config.CgroupPath
-	if cgroupPath == "" {
-		cgroupPath = "/sys/fs/cgroup"
+	// Set polling interval if not specified in tracker config
+	if trackerConfig.UpdateInterval == 0 {
+		interval := config.UpdateInterval
+		if interval == 0 {
+			interval = 30 * time.Second
+		}
+		trackerConfig.UpdateInterval = interval
+	}
+
+	// Create the appropriate tracker
+	runtimeTracker, err := tracker.NewRuntimeTracker(logger, trackerConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create runtime tracker: %w", err)
 	}
 
 	return &Manager{
@@ -73,18 +82,25 @@ func NewManager(logger logr.Logger, config ManagerConfig) (*Manager, error) {
 		store:       config.Store,
 		perfManager: config.PerformanceManager,
 		builder:     graph.NewBuilder(logger, config.Store),
-		discovery:   containers.NewDiscovery(cgroupPath),
-		interval:    interval,
+		tracker:     runtimeTracker,
+		interval:    trackerConfig.UpdateInterval,
 	}, nil
 }
 
 // Start begins runtime discovery and graph building
 func (m *Manager) Start(ctx context.Context) error {
-	m.logger.Info("Starting runtime manager", "interval", m.interval)
+	m.logger.Info("Starting runtime manager", 
+		"tracker_mode", fmt.Sprintf("%T", m.tracker),
+		"event_driven", m.tracker.IsEventDriven())
 
 	// Create cancellable context for internal operations
 	ctx, cancel := context.WithCancel(ctx)
 	m.cancel = cancel
+
+	// Start the tracker
+	if err := m.tracker.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start runtime tracker: %w", err)
+	}
 
 	// Do an initial runtime discovery
 	if err := m.updateRuntimeGraph(ctx); err != nil {
@@ -92,9 +108,19 @@ func (m *Manager) Start(ctx context.Context) error {
 		// Don't fail startup on initial discovery error
 	}
 
-	// Start the periodic update goroutine
-	m.wg.Add(1)
-	go m.runPeriodicUpdates(ctx)
+	// Start update management based on tracker type
+	if m.tracker.IsEventDriven() {
+		// For event-driven trackers, process events and do periodic graph rebuilds
+		m.wg.Add(1)
+		go m.processRuntimeEvents(ctx)
+		
+		m.wg.Add(1)
+		go m.runPeriodicGraphUpdates(ctx)
+	} else {
+		// For polling trackers, use the traditional periodic update approach
+		m.wg.Add(1)
+		go m.runPeriodicUpdates(ctx)
+	}
 
 	return nil
 }
@@ -102,6 +128,14 @@ func (m *Manager) Start(ctx context.Context) error {
 // Stop stops the runtime manager
 func (m *Manager) Stop() error {
 	m.logger.Info("Stopping runtime manager")
+	
+	// Stop the tracker first
+	if m.tracker != nil {
+		if err := m.tracker.Stop(); err != nil {
+			m.logger.Error(err, "Error stopping runtime tracker")
+		}
+	}
+	
 	if m.cancel != nil {
 		m.cancel()
 	}
@@ -132,10 +166,10 @@ func (m *Manager) runPeriodicUpdates(ctx context.Context) {
 func (m *Manager) updateRuntimeGraph(ctx context.Context) error {
 	m.logger.V(1).Info("Updating runtime graph")
 
-	// Collect a snapshot of all runtime information
-	snapshot, err := m.collectRuntimeSnapshot()
+	// Get snapshot from tracker
+	snapshot, err := m.tracker.GetSnapshot()
 	if err != nil {
-		return fmt.Errorf("failed to collect runtime snapshot: %w", err)
+		return fmt.Errorf("failed to get runtime snapshot: %w", err)
 	}
 
 	// Build the runtime graph from the snapshot
@@ -155,96 +189,81 @@ func (m *Manager) updateRuntimeGraph(ctx context.Context) error {
 	return nil
 }
 
-// RuntimeSnapshot contains all runtime information collected at a point in time
-type RuntimeSnapshot struct {
-	Timestamp  time.Time
-	Containers []containers.Container
-	// Process information will be collected from existing performance collectors
-	ProcessStats *performance.ProcessSnapshot
-}
-
-// GetContainers implements the graph.RuntimeSnapshot interface
-func (s *RuntimeSnapshot) GetContainers() []graph.ContainerInfo {
-	containerInfos := make([]graph.ContainerInfo, len(s.Containers))
-
-	for i, container := range s.Containers {
-		containerInfos[i] = graph.ContainerInfo{
-			ID:            container.ID,
-			Runtime:       container.Runtime,
-			CgroupVersion: container.CgroupVersion,
-			CgroupPath:    container.CgroupPath,
-			// TODO: Extract image name/tag from container metadata
-			// TODO: Extract resource limits from cgroup files
-			// TODO: Extract labels from container runtime
-		}
-	}
-
-	return containerInfos
-}
-
-// GetProcesses implements the graph.RuntimeSnapshot interface
-func (s *RuntimeSnapshot) GetProcesses() []graph.ProcessInfo {
-	if s.ProcessStats == nil {
-		return []graph.ProcessInfo{}
-	}
-
-	processInfos := make([]graph.ProcessInfo, len(s.ProcessStats.Processes))
-
-	for i, process := range s.ProcessStats.Processes {
-		processInfos[i] = graph.ProcessInfo{
-			PID:     process.PID,
-			PPID:    process.PPID,
-			PGID:    process.PGID,
-			SID:     process.SID,
-			Command: process.Command,
-			State:   process.State,
-			// TODO: Add cmdline when available in ProcessStats
-		}
-	}
-
-	return processInfos
-}
-
-// collectRuntimeSnapshot collects all runtime information into a snapshot
-func (m *Manager) collectRuntimeSnapshot() (*RuntimeSnapshot, error) {
-	startTime := time.Now()
-
-	// Discover all containers
-	allContainers, err := m.discovery.DiscoverAllContainers()
-	if err != nil {
-		m.logger.Error(err, "Failed to discover containers")
-		// Continue with empty containers list rather than failing completely
-		allContainers = []containers.Container{}
-	}
-
-	m.logger.V(1).Info("Discovered containers", "count", len(allContainers))
-
-	// Collect process information from performance manager
-	// For now, we'll use a placeholder - in a full implementation,
-	// we would integrate with the process collector
-	processSnapshot := &performance.ProcessSnapshot{
-		Timestamp: startTime,
-		Processes: []performance.ProcessStats{},
-	}
-
-	snapshot := &RuntimeSnapshot{
-		Timestamp:    startTime,
-		Containers:   allContainers,
-		ProcessStats: processSnapshot,
-	}
-
-	m.logger.V(1).Info("Runtime snapshot collected successfully",
-		"duration", time.Since(startTime),
-		"containers", len(allContainers))
-
-	return snapshot, nil
-}
 
 // GetLastUpdateTime returns the last time the runtime graph was updated
 func (m *Manager) GetLastUpdateTime() time.Time {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.lastUpdate
+}
+
+// processRuntimeEvents handles events from event-driven trackers
+func (m *Manager) processRuntimeEvents(ctx context.Context) {
+	defer m.wg.Done()
+
+	events := m.tracker.Events()
+	if events == nil {
+		m.logger.Info("Tracker does not provide events, ending event processing")
+		return
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case event, ok := <-events:
+			if !ok {
+				return // Channel closed
+			}
+			m.handleRuntimeEvent(event)
+		}
+	}
+}
+
+// handleRuntimeEvent processes individual runtime events
+func (m *Manager) handleRuntimeEvent(event tracker.RuntimeEvent) {
+	m.logger.V(1).Info("Received runtime event", "type", event.Type)
+
+	switch event.Type {
+	case tracker.EventTypeContainerCreated, tracker.EventTypeContainerDeleted, tracker.EventTypeContainerUpdated:
+		// For container events, rebuild the graph to reflect changes
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if err := m.updateRuntimeGraph(ctx); err != nil {
+			m.logger.Error(err, "Failed to update runtime graph after container event")
+		}
+		cancel()
+
+	case tracker.EventTypeProcessCreated, tracker.EventTypeProcessExited:
+		// Process events are more frequent, so we log them but don't rebuild graph each time
+		// The periodic graph updates will capture process changes
+		m.logger.V(2).Info("Process event received", "type", event.Type)
+
+	case tracker.EventTypeError:
+		if errorEvent, ok := event.Data.(tracker.ErrorEvent); ok {
+			m.logger.Error(errorEvent.Error, "Runtime tracking error", "context", errorEvent.Context)
+		}
+	}
+}
+
+// runPeriodicGraphUpdates runs periodic graph rebuilds for event-driven trackers
+func (m *Manager) runPeriodicGraphUpdates(ctx context.Context) {
+	defer m.wg.Done()
+
+	// For event-driven trackers, rebuild graph less frequently (every 2 minutes)
+	// since we get real-time events for container changes
+	ticker := time.NewTicker(2 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := m.updateRuntimeGraph(ctx); err != nil {
+				m.logger.Error(err, "Failed periodic runtime graph update")
+			}
+		}
+	}
 }
 
 // ForceUpdate triggers an immediate runtime graph update

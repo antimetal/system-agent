@@ -129,11 +129,7 @@ func testProcWatch() bool {
 	
 	// Try to watch /proc - some systems may not allow this
 	err = watcher.Add("/proc")
-	if err != nil {
-		return false
-	}
-	
-	return true
+	return err == nil
 }
 
 // testCgroupWatch tests if we can watch cgroup directories for events
