@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/go-logr/logr"
@@ -27,8 +28,9 @@ func init() {
 	))
 }
 
-// Compile-time interface check
+// Compile-time interface checks
 var _ performance.PointCollector = (*MemoryCollector)(nil)
+var _ performance.DeltaAwareCollector = (*MemoryCollector)(nil)
 
 // MemoryCollector collects runtime memory statistics from /proc/meminfo
 //
@@ -63,7 +65,7 @@ var _ performance.PointCollector = (*MemoryCollector)(nil)
 //
 // Reference: https://www.kernel.org/doc/html/latest/filesystems/proc.html#meminfo
 type MemoryCollector struct {
-	performance.BaseCollector
+	performance.BaseDeltaCollector
 	meminfoPath string
 	vmstatPath  string
 }
@@ -81,7 +83,7 @@ func NewMemoryCollector(logger logr.Logger, config performance.CollectionConfig)
 	}
 
 	return &MemoryCollector{
-		BaseCollector: performance.NewBaseCollector(
+		BaseDeltaCollector: performance.NewBaseDeltaCollector(
 			performance.MetricTypeMemory,
 			"System Memory Collector",
 			logger,
@@ -371,5 +373,73 @@ func (c *MemoryCollector) collectSwapActivity(stats *performance.MemoryStats) {
 
 	if err := scanner.Err(); err != nil {
 		c.Logger().V(2).Info("Error reading vmstat file", "path", c.vmstatPath, "error", err)
+	}
+}
+
+func (c *MemoryCollector) CollectWithDelta(ctx context.Context, config performance.DeltaConfig) (any, error) {
+	stats, err := c.collectMemoryStats()
+	if err != nil {
+		return nil, fmt.Errorf("failed to collect memory stats: %w", err)
+	}
+
+	currentTime := time.Now()
+
+	if c.HasDeltaState() {
+		if should, reason := c.ShouldCalculateDeltas(currentTime); should {
+			previous := c.LastSnapshot.(*performance.MemoryStats)
+			c.calculateMemoryDeltas(stats, previous, currentTime, config)
+		} else {
+			c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
+		}
+	}
+
+	c.UpdateDeltaState(stats, currentTime)
+	c.Logger().V(1).Info("Collected memory statistics with delta support")
+	return stats, nil
+}
+
+func (c *MemoryCollector) GetDeltaCapabilities() []string {
+	return []string{
+		"SwapIn",
+		"SwapOut",
+	}
+}
+
+func (c *MemoryCollector) calculateMemoryDeltas(
+	current, previous *performance.MemoryStats,
+	currentTime time.Time,
+	config performance.DeltaConfig,
+) {
+	interval := currentTime.Sub(c.LastTime)
+	var resetDetected bool
+
+	// Create nested delta data structure
+	delta := &performance.MemoryDeltaData{}
+
+	calculateField := func(currentVal, previousVal uint64) uint64 {
+		deltaVal, _, reset := c.CalculateUint64Delta(currentVal, previousVal, interval)
+		resetDetected = resetDetected || reset
+		return deltaVal
+	}
+
+	// Calculate delta values
+	delta.SwapIn = calculateField(current.SwapIn, previous.SwapIn)
+	delta.SwapOut = calculateField(current.SwapOut, previous.SwapOut)
+
+	// Calculate rates if no reset detected
+	if !resetDetected {
+		intervalSecs := interval.Seconds()
+		if intervalSecs > 0 {
+			delta.SwapInPerSec = uint64(float64(delta.SwapIn) / intervalSecs)
+			delta.SwapOutPerSec = uint64(float64(delta.SwapOut) / intervalSecs)
+		}
+	}
+
+	// Use composition helper to set metadata
+	c.PopulateMetadata(delta, currentTime, resetDetected)
+	current.Delta = delta
+
+	if resetDetected {
+		c.Logger().V(1).Info("Counter reset detected in memory statistics")
 	}
 }
