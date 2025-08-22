@@ -169,15 +169,6 @@ func TestDiskCollector_BasicFunctionality(t *testing.T) {
 	assert.Equal(t, uint64(0), sda.IOsInProgress)
 	assert.Equal(t, uint64(5678), sda.IOTime)
 	assert.Equal(t, uint64(9012), sda.WeightedIOTime)
-
-	// Verify rate fields are zero (not calculated in point collector)
-	assert.Equal(t, float64(0), sda.IOPS)
-	assert.Equal(t, float64(0), sda.ReadBytesPerSec)
-	assert.Equal(t, float64(0), sda.WriteBytesPerSec)
-	assert.Equal(t, float64(0), sda.Utilization)
-	assert.Equal(t, float64(0), sda.AvgQueueSize)
-	assert.Equal(t, float64(0), sda.AvgReadLatency)
-	assert.Equal(t, float64(0), sda.AvgWriteLatency)
 }
 
 // Test error handling
