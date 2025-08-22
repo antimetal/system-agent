@@ -225,11 +225,11 @@ func parseContainerRuntime(runtime string) runtimev1.ContainerRuntime {
 func parseCgroupVersion(version int) runtimev1.CgroupVersion {
 	switch version {
 	case 1:
-		return runtimev1.CgroupVersionV1
+		return runtimev1.CgroupVersion_CGROUP_VERSION_V1
 	case 2:
-		return runtimev1.CgroupVersionV2
+		return runtimev1.CgroupVersion_CGROUP_VERSION_V2
 	default:
-		return runtimev1.CgroupVersionUnknown
+		return runtimev1.CgroupVersion_CGROUP_VERSION_V1 // Default to V1 as most common
 	}
 }
 
