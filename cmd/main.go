@@ -303,15 +303,10 @@ func main() {
 		setupLog.Error(err, "unable to create runtime manager")
 		os.Exit(1)
 	}
-	if err := rtManager.Start(ctx); err != nil {
-		setupLog.Error(err, "unable to start runtime manager")
+	if err := mgr.Add(rtManager); err != nil {
+		setupLog.Error(err, "unable to add runtime manager to controller manager")
 		os.Exit(1)
 	}
-	defer func() {
-		if err := rtManager.Stop(); err != nil {
-			setupLog.Error(err, "error stopping runtime manager")
-		}
-	}()
 
 	// Setup Kubernetes Collector Controller
 	if enableK8sController {

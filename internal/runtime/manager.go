@@ -31,9 +31,6 @@ type Manager struct {
 	interval   time.Duration
 	lastUpdate time.Time
 	mu         sync.RWMutex
-
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
 }
 
 // ManagerConfig contains configuration for the runtime manager
@@ -89,14 +86,11 @@ func NewManager(logger logr.Logger, config ManagerConfig) (*Manager, error) {
 }
 
 // Start begins runtime discovery and graph building
+// Implements controller-runtime's Runnable interface - blocks until context is cancelled
 func (m *Manager) Start(ctx context.Context) error {
 	m.logger.Info("Starting runtime manager",
 		"tracker_mode", fmt.Sprintf("%T", m.tracker),
 		"event_driven", m.tracker.IsEventDriven())
-
-	// Create cancellable context for internal operations
-	ctx, cancel := context.WithCancel(ctx)
-	m.cancel = cancel
 
 	// Start the tracker
 	if err := m.tracker.Start(ctx); err != nil {
@@ -112,49 +106,26 @@ func (m *Manager) Start(ctx context.Context) error {
 	// Start update management based on tracker type
 	if m.tracker.IsEventDriven() {
 		// For event-driven trackers, process events and do periodic graph rebuilds
-		m.wg.Add(1)
-		go m.processRuntimeEvents(ctx)
-
-		m.wg.Add(1)
-		go m.runPeriodicGraphUpdates(ctx)
+		return m.runEventDrivenMode(ctx)
 	} else {
 		// For polling trackers, use the traditional periodic update approach
-		m.wg.Add(1)
-		go m.runPeriodicUpdates(ctx)
+		return m.runPollingMode(ctx)
 	}
-
-	return nil
 }
 
-// Stop stops the runtime manager
-func (m *Manager) Stop() error {
-	m.logger.Info("Stopping runtime manager")
-
-	// Stop the tracker first
-	if m.tracker != nil {
-		if err := m.tracker.Stop(); err != nil {
-			m.logger.Error(err, "Error stopping runtime tracker")
-		}
-	}
-
-	if m.cancel != nil {
-		m.cancel()
-	}
-	m.wg.Wait()
-	return nil
-}
-
-// runPeriodicUpdates runs periodic runtime graph updates
-func (m *Manager) runPeriodicUpdates(ctx context.Context) {
-	defer m.wg.Done()
-
+// runPollingMode runs the manager in polling mode (blocks until context is cancelled)
+func (m *Manager) runPollingMode(ctx context.Context) error {
 	ticker := time.NewTicker(m.interval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			m.logger.Info("Stopping runtime manager (polling mode)")
+			if err := m.tracker.Stop(); err != nil {
+				m.logger.Error(err, "Error stopping runtime tracker")
+			}
+			return nil
 		case <-ticker.C:
 			if err := m.updateRuntimeGraph(ctx); err != nil {
 				m.logger.Error(err, "Failed to update runtime graph")
@@ -162,6 +133,44 @@ func (m *Manager) runPeriodicUpdates(ctx context.Context) {
 		}
 	}
 }
+
+// runEventDrivenMode runs the manager in event-driven mode (blocks until context is cancelled)
+func (m *Manager) runEventDrivenMode(ctx context.Context) error {
+	// For event-driven trackers, handle events and do periodic graph rebuilds
+	events := m.tracker.Events()
+	if events == nil {
+		m.logger.Info("Tracker does not provide events, falling back to polling mode")
+		return m.runPollingMode(ctx)
+	}
+
+	// Periodic graph rebuild ticker (less frequent for event-driven mode)
+	ticker := time.NewTicker(2 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			m.logger.Info("Stopping runtime manager (event-driven mode)")
+			if err := m.tracker.Stop(); err != nil {
+				m.logger.Error(err, "Error stopping runtime tracker")
+			}
+			return nil
+
+		case event, ok := <-events:
+			if !ok {
+				m.logger.Info("Event channel closed, stopping runtime manager")
+				return nil
+			}
+			m.handleRuntimeEvent(ctx, event)
+
+		case <-ticker.C:
+			if err := m.updateRuntimeGraph(ctx); err != nil {
+				m.logger.Error(err, "Failed periodic runtime graph update")
+			}
+		}
+	}
+}
+
 
 // updateRuntimeGraph collects runtime info and updates the graph
 func (m *Manager) updateRuntimeGraph(ctx context.Context) error {
@@ -197,38 +206,16 @@ func (m *Manager) GetLastUpdateTime() time.Time {
 	return m.lastUpdate
 }
 
-// processRuntimeEvents handles events from event-driven trackers
-func (m *Manager) processRuntimeEvents(ctx context.Context) {
-	defer m.wg.Done()
-
-	events := m.tracker.Events()
-	if events == nil {
-		m.logger.Info("Tracker does not provide events, ending event processing")
-		return
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case event, ok := <-events:
-			if !ok {
-				return // Channel closed
-			}
-			m.handleRuntimeEvent(event)
-		}
-	}
-}
 
 // handleRuntimeEvent processes individual runtime events
-func (m *Manager) handleRuntimeEvent(event tracker.RuntimeEvent) {
+func (m *Manager) handleRuntimeEvent(ctx context.Context, event tracker.RuntimeEvent) {
 	m.logger.V(1).Info("Received runtime event", "type", event.Type)
 
 	switch event.Type {
 	case tracker.EventTypeContainerCreated, tracker.EventTypeContainerDeleted, tracker.EventTypeContainerUpdated:
 		// For container events, rebuild the graph to reflect changes
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		if err := m.updateRuntimeGraph(ctx); err != nil {
+		updateCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		if err := m.updateRuntimeGraph(updateCtx); err != nil {
 			m.logger.Error(err, "Failed to update runtime graph after container event")
 		}
 		cancel()
@@ -245,26 +232,6 @@ func (m *Manager) handleRuntimeEvent(event tracker.RuntimeEvent) {
 	}
 }
 
-// runPeriodicGraphUpdates runs periodic graph rebuilds for event-driven trackers
-func (m *Manager) runPeriodicGraphUpdates(ctx context.Context) {
-	defer m.wg.Done()
-
-	// For event-driven trackers, rebuild graph less frequently (every 2 minutes)
-	// since we get real-time events for container changes
-	ticker := time.NewTicker(2 * time.Minute)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if err := m.updateRuntimeGraph(ctx); err != nil {
-				m.logger.Error(err, "Failed periodic runtime graph update")
-			}
-		}
-	}
-}
 
 // ForceUpdate triggers an immediate runtime graph update
 func (m *Manager) ForceUpdate(ctx context.Context) error {
