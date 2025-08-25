@@ -9,6 +9,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -89,7 +90,7 @@ func NewManager(logger logr.Logger, config ManagerConfig) (*Manager, error) {
 
 // Start begins runtime discovery and graph building
 func (m *Manager) Start(ctx context.Context) error {
-	m.logger.Info("Starting runtime manager", 
+	m.logger.Info("Starting runtime manager",
 		"tracker_mode", fmt.Sprintf("%T", m.tracker),
 		"event_driven", m.tracker.IsEventDriven())
 
@@ -113,7 +114,7 @@ func (m *Manager) Start(ctx context.Context) error {
 		// For event-driven trackers, process events and do periodic graph rebuilds
 		m.wg.Add(1)
 		go m.processRuntimeEvents(ctx)
-		
+
 		m.wg.Add(1)
 		go m.runPeriodicGraphUpdates(ctx)
 	} else {
@@ -128,14 +129,14 @@ func (m *Manager) Start(ctx context.Context) error {
 // Stop stops the runtime manager
 func (m *Manager) Stop() error {
 	m.logger.Info("Stopping runtime manager")
-	
+
 	// Stop the tracker first
 	if m.tracker != nil {
 		if err := m.tracker.Stop(); err != nil {
 			m.logger.Error(err, "Error stopping runtime tracker")
 		}
 	}
-	
+
 	if m.cancel != nil {
 		m.cancel()
 	}
@@ -188,7 +189,6 @@ func (m *Manager) updateRuntimeGraph(ctx context.Context) error {
 	m.logger.Info("Runtime graph updated successfully")
 	return nil
 }
-
 
 // GetLastUpdateTime returns the last time the runtime graph was updated
 func (m *Manager) GetLastUpdateTime() time.Time {
@@ -269,4 +269,63 @@ func (m *Manager) runPeriodicGraphUpdates(ctx context.Context) {
 // ForceUpdate triggers an immediate runtime graph update
 func (m *Manager) ForceUpdate(ctx context.Context) error {
 	return m.updateRuntimeGraph(ctx)
+}
+
+// parseImageNameTag parses a Docker/OCI image reference into name and tag components.
+// It handles various image reference formats including:
+// - Simple names: "nginx" -> ("nginx", "latest")
+// - Tagged images: "nginx:1.21" -> ("nginx", "1.21")
+// - Registry paths: "docker.io/library/nginx:1.21" -> ("docker.io/library/nginx", "1.21")
+// - Images with SHA256 digests: "nginx@sha256:abc123" -> ("nginx@sha256:abc123", "latest")
+//
+// The function follows these rules:
+// - If no tag is present, defaults to "latest"
+// - Only the rightmost colon is considered as a tag separator
+// - Images with @ (digest) are not parsed for tags
+func parseImageNameTag(image string) (name, tag string) {
+	if image == "" {
+		return "", ""
+	}
+
+	// If the image contains @, it has a digest, so don't parse for tag
+	if strings.Contains(image, "@") {
+		return image, "latest"
+	}
+
+	// Find the last colon which could be a tag separator
+	lastColonIndex := strings.LastIndex(image, ":")
+	if lastColonIndex == -1 {
+		// No colon found, so no tag
+		return image, "latest"
+	}
+
+	// Check if the part after the colon looks like a tag (not a port number)
+	potentialTag := image[lastColonIndex+1:]
+	potentialName := image[:lastColonIndex]
+
+	// If the potential tag contains a slash, it's likely part of the registry path
+	// e.g., "registry.example.com/path/with:colon/image"
+	if strings.Contains(potentialTag, "/") {
+		return image, "latest"
+	}
+
+	// If the potential name ends with a port-like pattern (e.g., "localhost:5000"),
+	// check if there are any more path components after the colon
+	if strings.Count(potentialName, "/") == 0 && len(potentialTag) <= 5 {
+		// Could be a port number (like :5000), check if it's all digits
+		isAllDigits := true
+		for _, c := range potentialTag {
+			if c < '0' || c > '9' {
+				isAllDigits = false
+				break
+			}
+		}
+		// If it's all digits and short, it might be a port, so look for the next colon
+		if isAllDigits && len(potentialTag) <= 5 {
+			// This looks like a port, so don't treat it as a tag
+			return image, "latest"
+		}
+	}
+
+	return potentialName, potentialTag
 }
