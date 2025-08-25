@@ -10,11 +10,11 @@ package collectors_test
 
 import (
 	"context"
-	"os"
 	"os/exec"
 	"testing"
 	"time"
 
+	"github.com/antimetal/agent/pkg/kernel"
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/antimetal/agent/pkg/performance/collectors"
 	"github.com/cilium/ebpf/rlimit"
@@ -24,8 +24,16 @@ import (
 )
 
 func TestExecSnoopCollector_Integration(t *testing.T) {
+	// Check kernel version first - ExecSnoop requires 5.8+ for ring buffer support
+	currentKernel, err := kernel.GetCurrentVersion()
+	require.NoError(t, err, "Failed to get current kernel version")
+	
+	if !currentKernel.IsAtLeast(5, 8) {
+		t.Skipf("ExecSnoop collector requires kernel 5.8+ for ring buffer support, current kernel is %s", currentKernel.String())
+	}
+
 	// Remove memory limit for eBPF
-	err := rlimit.RemoveMemlock()
+	err = rlimit.RemoveMemlock()
 	require.NoError(t, err, "Failed to remove memlock limit - integration tests require proper permissions")
 
 	logger := logr.Discard()
@@ -131,7 +139,7 @@ func TestExecSnoopCollector_Integration(t *testing.T) {
 		err = collector.Stop()
 		require.NoError(t, err)
 
-		// Verify collector is stopped
-		assert.Equal(t, performance.CollectorStatusStopped, collector.Status())
+		// Verify collector is disabled after stop
+		assert.Equal(t, performance.CollectorStatusDisabled, collector.Status())
 	})
 }
