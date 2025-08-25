@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/go-logr/logr"
@@ -26,8 +27,9 @@ func init() {
 	))
 }
 
-// Compile-time interface check
+// Compile-time interface checks
 var _ performance.PointCollector = (*CPUCollector)(nil)
+var _ performance.DeltaAwareCollector = (*CPUCollector)(nil)
 
 // CPUCollector collects CPU statistics from /proc/stat
 //
@@ -39,7 +41,7 @@ var _ performance.PointCollector = (*CPUCollector)(nil)
 //
 // Reference: https://www.kernel.org/doc/html/latest/filesystems/proc.html#proc-stat
 type CPUCollector struct {
-	performance.BaseCollector
+	performance.BaseDeltaCollector
 	statPath string
 }
 
@@ -56,7 +58,7 @@ func NewCPUCollector(logger logr.Logger, config performance.CollectionConfig) (*
 	}
 
 	return &CPUCollector{
-		BaseCollector: performance.NewBaseCollector(
+		BaseDeltaCollector: performance.NewBaseDeltaCollector(
 			performance.MetricTypeCPU,
 			"CPU Statistics Collector",
 			logger,
@@ -231,4 +233,131 @@ func (c *CPUCollector) collectCPUStats() ([]*performance.CPUStats, error) {
 		"cpuCores", len(cpuMap),
 		"maxCPUIndex", maxCPU)
 	return cpuStats, nil
+}
+
+func (c *CPUCollector) CollectWithDelta(ctx context.Context, config performance.DeltaConfig) (any, error) {
+	stats, err := c.collectCPUStats()
+	if err != nil {
+		return nil, fmt.Errorf("failed to collect CPU stats: %w", err)
+	}
+
+	currentTime := time.Now()
+
+	if c.HasDeltaState() {
+		if should, reason := c.ShouldCalculateDeltas(currentTime); should {
+			previous := c.LastSnapshot.([]*performance.CPUStats)
+			c.calculateCPUDeltas(stats, previous, currentTime, config)
+		} else {
+			c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
+		}
+	}
+
+	c.UpdateDeltaState(stats, currentTime)
+	c.Logger().V(1).Info("Collected CPU statistics with delta support", "cpus", len(stats))
+	return stats, nil
+}
+
+func (c *CPUCollector) GetDeltaCapabilities() []string {
+	return []string{
+		"User",
+		"Nice",
+		"System",
+		"Idle",
+		"IOWait",
+		"IRQ",
+		"SoftIRQ",
+		"Steal",
+		"Guest",
+		"GuestNice",
+	}
+}
+
+func (c *CPUCollector) calculateCPUDeltas(
+	current, previous []*performance.CPUStats,
+	currentTime time.Time,
+	config performance.DeltaConfig,
+) {
+	interval := currentTime.Sub(c.LastTime)
+
+	// Create a map of previous stats by CPU index for efficient lookup
+	prevStatsMap := make(map[int32]*performance.CPUStats)
+	for _, prevStat := range previous {
+		prevStatsMap[prevStat.CPUIndex] = prevStat
+	}
+
+	// Calculate deltas for each current CPU
+	for _, currentStat := range current {
+		prevStat, exists := prevStatsMap[currentStat.CPUIndex]
+		if !exists {
+			// New CPU - skip delta calculation
+			c.Logger().V(2).Info("New CPU detected, skipping delta calculation",
+				"cpuIndex", currentStat.CPUIndex)
+			continue
+		}
+
+		c.calculateCPUCoreDeltas(currentStat, prevStat, interval, config)
+	}
+}
+
+func (c *CPUCollector) calculateCPUCoreDeltas(
+	current, previous *performance.CPUStats,
+	interval time.Duration,
+	config performance.DeltaConfig,
+) {
+	var resetDetected bool
+
+	// Create delta data structure
+	delta := &performance.CPUDeltaData{}
+
+	calculateField := func(currentVal, previousVal uint64) uint64 {
+		deltaVal, _, reset := c.CalculateUint64Delta(currentVal, previousVal, interval)
+		resetDetected = resetDetected || reset
+		return deltaVal
+	}
+
+	// Calculate time deltas
+	delta.User = calculateField(current.User, previous.User)
+	delta.Nice = calculateField(current.Nice, previous.Nice)
+	delta.System = calculateField(current.System, previous.System)
+	delta.Idle = calculateField(current.Idle, previous.Idle)
+	delta.IOWait = calculateField(current.IOWait, previous.IOWait)
+	delta.IRQ = calculateField(current.IRQ, previous.IRQ)
+	delta.SoftIRQ = calculateField(current.SoftIRQ, previous.SoftIRQ)
+	delta.Steal = calculateField(current.Steal, previous.Steal)
+	delta.Guest = calculateField(current.Guest, previous.Guest)
+	delta.GuestNice = calculateField(current.GuestNice, previous.GuestNice)
+
+	// Calculate utilization percentages if no reset detected
+	if !resetDetected {
+		c.calculateCPUPercentages(delta)
+	}
+
+	// Use composition helper to set metadata
+	c.PopulateMetadata(delta, time.Now(), resetDetected)
+	current.Delta = delta
+
+	if resetDetected {
+		c.Logger().V(1).Info("Counter reset detected for CPU", "cpuIndex", current.CPUIndex)
+	}
+}
+
+func (c *CPUCollector) calculateCPUPercentages(delta *performance.CPUDeltaData) {
+	// Calculate total time delta
+	totalTime := float64(delta.User + delta.Nice + delta.System + delta.Idle +
+		delta.IOWait + delta.IRQ + delta.SoftIRQ + delta.Steal +
+		delta.Guest + delta.GuestNice)
+
+	if totalTime > 0 {
+		// Calculate percentages
+		delta.UserPercent = (float64(delta.User) / totalTime) * 100.0
+		delta.NicePercent = (float64(delta.Nice) / totalTime) * 100.0
+		delta.SystemPercent = (float64(delta.System) / totalTime) * 100.0
+		delta.IdlePercent = (float64(delta.Idle) / totalTime) * 100.0
+		delta.IOWaitPercent = (float64(delta.IOWait) / totalTime) * 100.0
+		delta.IRQPercent = (float64(delta.IRQ) / totalTime) * 100.0
+		delta.SoftIRQPercent = (float64(delta.SoftIRQ) / totalTime) * 100.0
+		delta.StealPercent = (float64(delta.Steal) / totalTime) * 100.0
+		delta.GuestPercent = (float64(delta.Guest) / totalTime) * 100.0
+		delta.GuestNicePercent = (float64(delta.GuestNice) / totalTime) * 100.0
+	}
 }

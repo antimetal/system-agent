@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/go-logr/logr"
@@ -33,13 +34,14 @@ import (
 //
 // Reference: https://www.kernel.org/doc/html/latest/networking/statistics.html
 type NetworkCollector struct {
-	performance.BaseCollector
+	performance.BaseDeltaCollector
 	procNetDevPath  string
 	sysClassNetPath string
 }
 
-// Compile-time interface check
+// Compile-time interface checks
 var _ performance.Collector = (*NetworkCollector)(nil)
+var _ performance.DeltaAwareCollector = (*NetworkCollector)(nil)
 
 func init() {
 	performance.Register(performance.MetricTypeNetwork, performance.PartialNewContinuousPointCollector(
@@ -62,7 +64,7 @@ func NewNetworkCollector(logger logr.Logger, config performance.CollectionConfig
 	}
 
 	return &NetworkCollector{
-		BaseCollector: performance.NewBaseCollector(
+		BaseDeltaCollector: performance.NewBaseDeltaCollector(
 			performance.MetricTypeNetwork,
 			"Network Statistics Collector",
 			logger,
@@ -225,5 +227,114 @@ func (c *NetworkCollector) readInterfaceMetadata(stat *performance.NetworkStats)
 	if carrierData, err := os.ReadFile(carrierPath); err == nil {
 		carrier := strings.TrimSpace(string(carrierData))
 		stat.LinkDetected = carrier == "1"
+	}
+}
+
+func (c *NetworkCollector) CollectWithDelta(ctx context.Context, config performance.DeltaConfig) (any, error) {
+	stats, err := c.collectNetworkStats()
+	if err != nil {
+		return nil, fmt.Errorf("failed to collect network stats: %w", err)
+	}
+
+	currentTime := time.Now()
+
+	if c.HasDeltaState() {
+		if should, reason := c.ShouldCalculateDeltas(currentTime); should {
+			previous := c.LastSnapshot.([]performance.NetworkStats)
+			c.calculateNetworkDeltas(stats, previous, currentTime, config)
+		} else {
+			c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
+		}
+	}
+
+	c.UpdateDeltaState(stats, currentTime)
+	c.Logger().V(1).Info("Collected network statistics with delta support", "interfaces", len(stats))
+	return stats, nil
+}
+
+func (c *NetworkCollector) GetDeltaCapabilities() []string {
+	return []string{
+		"RxBytes",
+		"TxBytes",
+		"RxPackets",
+		"TxPackets",
+		"RxErrors",
+		"TxErrors",
+		"RxDropped",
+		"TxDropped",
+	}
+}
+
+func (c *NetworkCollector) calculateNetworkDeltas(
+	current, previous []performance.NetworkStats,
+	currentTime time.Time,
+	config performance.DeltaConfig,
+) {
+	interval := currentTime.Sub(c.LastTime)
+
+	// Create a map of previous stats by interface name for efficient lookup
+	prevStatsMap := make(map[string]*performance.NetworkStats)
+	for i := range previous {
+		prevStatsMap[previous[i].Interface] = &previous[i]
+	}
+
+	// Calculate deltas for each current interface
+	for i := range current {
+		prevStat, exists := prevStatsMap[current[i].Interface]
+		if !exists {
+			// New interface - skip delta calculation for this interface
+			c.Logger().V(2).Info("New interface detected, skipping delta calculation",
+				"interface", current[i].Interface)
+			continue
+		}
+
+		c.calculateInterfaceDeltas(&current[i], prevStat, interval, config)
+	}
+}
+
+func (c *NetworkCollector) calculateInterfaceDeltas(
+	current, previous *performance.NetworkStats,
+	interval time.Duration,
+	config performance.DeltaConfig,
+) {
+	var resetDetected bool
+
+	delta := &performance.NetworkDeltaData{}
+
+	calculateField := func(currentVal, previousVal uint64) uint64 {
+		deltaVal, _, reset := c.CalculateUint64Delta(currentVal, previousVal, interval)
+		resetDetected = resetDetected || reset
+		return deltaVal
+	}
+
+	delta.RxBytes = calculateField(current.RxBytes, previous.RxBytes)
+	delta.TxBytes = calculateField(current.TxBytes, previous.TxBytes)
+	delta.RxPackets = calculateField(current.RxPackets, previous.RxPackets)
+	delta.TxPackets = calculateField(current.TxPackets, previous.TxPackets)
+	delta.RxErrors = calculateField(current.RxErrors, previous.RxErrors)
+	delta.TxErrors = calculateField(current.TxErrors, previous.TxErrors)
+	delta.RxDropped = calculateField(current.RxDropped, previous.RxDropped)
+	delta.TxDropped = calculateField(current.TxDropped, previous.TxDropped)
+
+	if !resetDetected {
+		intervalSecs := interval.Seconds()
+		if intervalSecs > 0 {
+			delta.RxBytesPerSec = uint64(float64(delta.RxBytes) / intervalSecs)
+			delta.TxBytesPerSec = uint64(float64(delta.TxBytes) / intervalSecs)
+			delta.RxPacketsPerSec = uint64(float64(delta.RxPackets) / intervalSecs)
+			delta.TxPacketsPerSec = uint64(float64(delta.TxPackets) / intervalSecs)
+			delta.RxErrorsPerSec = uint64(float64(delta.RxErrors) / intervalSecs)
+			delta.TxErrorsPerSec = uint64(float64(delta.TxErrors) / intervalSecs)
+			delta.RxDroppedPerSec = uint64(float64(delta.RxDropped) / intervalSecs)
+			delta.TxDroppedPerSec = uint64(float64(delta.TxDropped) / intervalSecs)
+		}
+	}
+
+	// Use composition helper to set metadata
+	c.PopulateMetadata(delta, time.Now(), resetDetected)
+	current.Delta = delta
+
+	if resetDetected {
+		c.Logger().V(1).Info("Counter reset detected for network interface", "interface", current.Interface)
 	}
 }

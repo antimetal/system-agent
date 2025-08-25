@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/go-logr/logr"
@@ -27,8 +28,9 @@ func init() {
 	))
 }
 
-// Compile-time interface check
+// Compile-time interface checks
 var _ performance.PointCollector = (*SystemStatsCollector)(nil)
+var _ performance.DeltaAwareCollector = (*SystemStatsCollector)(nil)
 
 // SystemStatsCollector collects system-wide activity statistics from /proc/stat
 //
@@ -84,7 +86,7 @@ var _ performance.PointCollector = (*SystemStatsCollector)(nil)
 //
 // Reference: https://www.kernel.org/doc/html/latest/filesystems/proc.html#miscellaneous-kernel-statistics-in-proc-stat
 type SystemStatsCollector struct {
-	performance.BaseCollector
+	performance.BaseDeltaCollector
 	statPath string
 }
 
@@ -101,7 +103,7 @@ func NewSystemStatsCollector(logger logr.Logger, config performance.CollectionCo
 	}
 
 	return &SystemStatsCollector{
-		BaseCollector: performance.NewBaseCollector(
+		BaseDeltaCollector: performance.NewBaseDeltaCollector(
 			performance.MetricTypeSystem,
 			"System Activity Collector",
 			logger,
@@ -183,4 +185,72 @@ func (c *SystemStatsCollector) collectSystemStats() (*performance.SystemStats, e
 	}
 
 	return stats, nil
+}
+
+func (c *SystemStatsCollector) CollectWithDelta(ctx context.Context, config performance.DeltaConfig) (any, error) {
+	stats, err := c.collectSystemStats()
+	if err != nil {
+		return nil, fmt.Errorf("failed to collect system stats: %w", err)
+	}
+
+	currentTime := time.Now()
+
+	if c.HasDeltaState() {
+		if should, reason := c.ShouldCalculateDeltas(currentTime); should {
+			previous := c.LastSnapshot.(*performance.SystemStats)
+			c.calculateSystemDeltas(stats, previous, currentTime, config)
+		} else {
+			c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
+		}
+	}
+
+	c.UpdateDeltaState(stats, currentTime)
+	c.Logger().V(1).Info("Collected system statistics with delta support")
+	return stats, nil
+}
+
+func (c *SystemStatsCollector) GetDeltaCapabilities() []string {
+	return []string{
+		"Interrupts",
+		"ContextSwitches",
+	}
+}
+
+func (c *SystemStatsCollector) calculateSystemDeltas(
+	current, previous *performance.SystemStats,
+	currentTime time.Time,
+	config performance.DeltaConfig,
+) {
+	interval := currentTime.Sub(c.LastTime)
+	var resetDetected bool
+
+	// Create nested delta data structure
+	delta := &performance.SystemDeltaData{}
+
+	calculateField := func(currentVal, previousVal uint64) uint64 {
+		deltaVal, _, reset := c.CalculateUint64Delta(currentVal, previousVal, interval)
+		resetDetected = resetDetected || reset
+		return deltaVal
+	}
+
+	// Calculate delta values
+	delta.Interrupts = calculateField(current.Interrupts, previous.Interrupts)
+	delta.ContextSwitches = calculateField(current.ContextSwitches, previous.ContextSwitches)
+
+	// Calculate rates if no reset detected
+	if !resetDetected {
+		intervalSecs := interval.Seconds()
+		if intervalSecs > 0 {
+			delta.InterruptsPerSec = uint64(float64(delta.Interrupts) / intervalSecs)
+			delta.ContextSwitchesPerSec = uint64(float64(delta.ContextSwitches) / intervalSecs)
+		}
+	}
+
+	// Use composition helper to set metadata
+	c.PopulateMetadata(delta, currentTime, resetDetected)
+	current.Delta = delta
+
+	if resetDetected {
+		c.Logger().V(1).Info("Counter reset detected in system statistics")
+	}
 }

@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/go-logr/logr"
@@ -27,8 +28,9 @@ func init() {
 	))
 }
 
-// Compile-time interface check
+// Compile-time interface checks
 var _ performance.PointCollector = (*TCPCollector)(nil)
+var _ performance.DeltaAwareCollector = (*TCPCollector)(nil)
 
 // TCPCollector collects TCP connection statistics from /proc/net/snmp, /proc/net/netstat, /proc/net/tcp*
 //
@@ -45,7 +47,7 @@ var _ performance.PointCollector = (*TCPCollector)(nil)
 // - https://www.kernel.org/doc/html/latest/networking/proc_net_tcp.html
 // - https://www.kernel.org/doc/html/latest/networking/snmp_counter.html
 type TCPCollector struct {
-	performance.BaseCollector
+	performance.BaseDeltaCollector
 	snmpPath    string
 	netstatPath string
 	tcpPath     string
@@ -82,7 +84,7 @@ func NewTCPCollector(logger logr.Logger, config performance.CollectionConfig) (*
 	}
 
 	return &TCPCollector{
-		BaseCollector: performance.NewBaseCollector(
+		BaseDeltaCollector: performance.NewBaseDeltaCollector(
 			performance.MetricTypeTCP,
 			"TCP Statistics Collector",
 			logger,
@@ -375,4 +377,123 @@ func (c *TCPCollector) countConnectionsFromFile(path string, stats *performance.
 	}
 
 	return scanner.Err()
+}
+
+// DeltaAwareCollector interface implementation
+
+// CollectWithDelta performs collection and calculates deltas/rates based on configuration
+func (c *TCPCollector) CollectWithDelta(ctx context.Context, config performance.DeltaConfig) (any, error) {
+	currentTime := time.Now()
+
+	// Collect current statistics
+	currentStats, err := c.collectTCPStats()
+	if err != nil {
+		return nil, err
+	}
+
+	if !config.IsEnabled(performance.MetricTypeTCP) {
+		return currentStats, nil
+	}
+
+	shouldCalc, reason := c.ShouldCalculateDeltas(currentTime)
+	if !shouldCalc {
+		c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
+		if c.IsFirst {
+			c.UpdateDeltaState(currentStats, currentTime)
+		}
+		return currentStats, nil
+	}
+
+	previousStats, ok := c.LastSnapshot.(*performance.TCPStats)
+	if !ok || previousStats == nil {
+		c.UpdateDeltaState(currentStats, currentTime)
+		return currentStats, nil
+	}
+
+	c.calculateTCPDeltas(currentStats, previousStats, currentTime, config)
+
+	c.UpdateDeltaState(currentStats, currentTime)
+
+	return currentStats, nil
+}
+
+// GetDeltaCapabilities returns which metric fields support delta calculations
+func (c *TCPCollector) GetDeltaCapabilities() []string {
+	return []string{
+		"ActiveOpens", "PassiveOpens", "AttemptFails", "EstabResets",
+		"InSegs", "OutSegs", "RetransSegs", "InErrs", "OutRsts", "InCsumErrors",
+		"SyncookiesSent", "SyncookiesRecv", "SyncookiesFailed",
+		"ListenOverflows", "ListenDrops", "TCPLostRetransmit",
+		"TCPFastRetrans", "TCPSlowStartRetrans", "TCPTimeouts",
+	}
+}
+
+func (c *TCPCollector) calculateTCPDeltas(
+	current, previous *performance.TCPStats,
+	currentTime time.Time,
+	config performance.DeltaConfig,
+) {
+	interval := currentTime.Sub(c.LastTime)
+	var resetDetected bool
+
+	delta := &performance.TCPDeltaData{}
+
+	calculateField := func(currentVal, previousVal uint64) uint64 {
+		deltaVal, _, reset := c.CalculateUint64Delta(currentVal, previousVal, interval)
+		resetDetected = resetDetected || reset
+		return deltaVal
+	}
+
+	delta.ActiveOpens = calculateField(current.ActiveOpens, previous.ActiveOpens)
+	delta.PassiveOpens = calculateField(current.PassiveOpens, previous.PassiveOpens)
+	delta.AttemptFails = calculateField(current.AttemptFails, previous.AttemptFails)
+	delta.EstabResets = calculateField(current.EstabResets, previous.EstabResets)
+	delta.InSegs = calculateField(current.InSegs, previous.InSegs)
+	delta.OutSegs = calculateField(current.OutSegs, previous.OutSegs)
+	delta.RetransSegs = calculateField(current.RetransSegs, previous.RetransSegs)
+	delta.InErrs = calculateField(current.InErrs, previous.InErrs)
+	delta.OutRsts = calculateField(current.OutRsts, previous.OutRsts)
+	delta.InCsumErrors = calculateField(current.InCsumErrors, previous.InCsumErrors)
+	delta.SyncookiesSent = calculateField(current.SyncookiesSent, previous.SyncookiesSent)
+	delta.SyncookiesRecv = calculateField(current.SyncookiesRecv, previous.SyncookiesRecv)
+	delta.SyncookiesFailed = calculateField(current.SyncookiesFailed, previous.SyncookiesFailed)
+	delta.ListenOverflows = calculateField(current.ListenOverflows, previous.ListenOverflows)
+	delta.ListenDrops = calculateField(current.ListenDrops, previous.ListenDrops)
+	delta.TCPLostRetransmit = calculateField(current.TCPLostRetransmit, previous.TCPLostRetransmit)
+	delta.TCPFastRetrans = calculateField(current.TCPFastRetrans, previous.TCPFastRetrans)
+	delta.TCPSlowStartRetrans = calculateField(current.TCPSlowStartRetrans, previous.TCPSlowStartRetrans)
+	delta.TCPTimeouts = calculateField(current.TCPTimeouts, previous.TCPTimeouts)
+
+	if !resetDetected {
+		intervalSecs := interval.Seconds()
+		if intervalSecs > 0 {
+			delta.ActiveOpensPerSec = uint64(float64(delta.ActiveOpens) / intervalSecs)
+			delta.PassiveOpensPerSec = uint64(float64(delta.PassiveOpens) / intervalSecs)
+			delta.AttemptFailsPerSec = uint64(float64(delta.AttemptFails) / intervalSecs)
+			delta.EstabResetsPerSec = uint64(float64(delta.EstabResets) / intervalSecs)
+			delta.InSegsPerSec = uint64(float64(delta.InSegs) / intervalSecs)
+			delta.OutSegsPerSec = uint64(float64(delta.OutSegs) / intervalSecs)
+			delta.RetransSegsPerSec = uint64(float64(delta.RetransSegs) / intervalSecs)
+			delta.InErrsPerSec = uint64(float64(delta.InErrs) / intervalSecs)
+			delta.OutRstsPerSec = uint64(float64(delta.OutRsts) / intervalSecs)
+			delta.InCsumErrorsPerSec = uint64(float64(delta.InCsumErrors) / intervalSecs)
+			delta.SyncookiesSentPerSec = uint64(float64(delta.SyncookiesSent) / intervalSecs)
+			delta.SyncookiesRecvPerSec = uint64(float64(delta.SyncookiesRecv) / intervalSecs)
+			delta.SyncookiesFailedPerSec = uint64(float64(delta.SyncookiesFailed) / intervalSecs)
+			delta.ListenOverflowsPerSec = uint64(float64(delta.ListenOverflows) / intervalSecs)
+			delta.ListenDropsPerSec = uint64(float64(delta.ListenDrops) / intervalSecs)
+			delta.TCPLostRetransmitPerSec = uint64(float64(delta.TCPLostRetransmit) / intervalSecs)
+			delta.TCPFastRetransPerSec = uint64(float64(delta.TCPFastRetrans) / intervalSecs)
+			delta.TCPSlowStartRetransPerSec = uint64(float64(delta.TCPSlowStartRetrans) / intervalSecs)
+			delta.TCPTimeoutsPerSec = uint64(float64(delta.TCPTimeouts) / intervalSecs)
+		}
+	}
+
+	// Use composition helper to set metadata
+	c.PopulateMetadata(delta, currentTime, resetDetected)
+	current.Delta = delta
+
+	if resetDetected {
+		c.Logger().V(1).Info("Counter reset detected in TCP statistics")
+	}
 }
