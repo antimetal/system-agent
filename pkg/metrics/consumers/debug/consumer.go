@@ -1,0 +1,429 @@
+// Copyright Antimetal, Inc. All rights reserved.
+//
+// Use of this source code is governed by a source available license that can be found in the
+// LICENSE file or at:
+// https://polyformproject.org/wp-content/uploads/2020/06/PolyForm-Shield-1.0.0.txt
+
+package debug
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"reflect"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/go-logr/logr"
+
+	"github.com/antimetal/agent/pkg/metrics"
+)
+
+const (
+	consumerName = "debug"
+)
+
+// Consumer implements the metrics consumer interface for debug logging
+type Consumer struct {
+	config Config
+	logger logr.Logger
+
+	// Runtime state
+	ctx       context.Context
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
+	healthy   atomic.Bool
+	lastError atomic.Pointer[error]
+
+	// Metrics
+	eventsProcessed atomic.Uint64
+	errorsCount     atomic.Uint64
+	startTime       time.Time
+
+	// Statistics tracking
+	eventsByType   map[string]*atomic.Uint64
+	eventsBySource map[string]*atomic.Uint64
+	statsMutex     sync.RWMutex
+}
+
+func NewConsumer(config Config, logger logr.Logger) (*Consumer, error) {
+	if !config.Enabled {
+		return nil, nil // Return nil if disabled
+	}
+
+	// Validate configuration
+	if err := config.Validate(); err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	consumer := &Consumer{
+		config:         config,
+		logger:         logger.WithName("debug-consumer"),
+		ctx:            ctx,
+		cancel:         cancel,
+		startTime:      time.Now(),
+		eventsByType:   make(map[string]*atomic.Uint64),
+		eventsBySource: make(map[string]*atomic.Uint64),
+	}
+
+	consumer.healthy.Store(true)
+	return consumer, nil
+}
+
+func (c *Consumer) Name() string {
+	return consumerName
+}
+
+func (c *Consumer) Start(events <-chan metrics.MetricEvent) error {
+	c.logger.Info("Starting Debug consumer",
+		"log_level", c.config.LogLevel,
+		"log_format", c.config.LogFormat,
+		"include_data", c.config.IncludeEventData)
+
+	c.wg.Add(1)
+	go c.processEvents(events)
+
+	return nil
+}
+
+func (c *Consumer) Stop() error {
+	c.logger.Info("Stopping Debug consumer...")
+	c.cancel()
+	c.wg.Wait()
+
+	// Log final statistics
+	stats := c.getStats()
+	c.logFinalStats(stats)
+
+	c.logger.Info("Debug consumer stopped",
+		"events_processed", c.eventsProcessed.Load(),
+		"errors", c.errorsCount.Load(),
+		"uptime", time.Since(c.startTime))
+
+	return nil
+}
+
+func (c *Consumer) Health() metrics.ConsumerHealth {
+	var lastErr error
+	if errPtr := c.lastError.Load(); errPtr != nil {
+		lastErr = *errPtr
+	}
+
+	return metrics.ConsumerHealth{
+		Healthy:     c.healthy.Load(),
+		LastError:   lastErr,
+		EventsCount: c.eventsProcessed.Load(),
+		ErrorsCount: c.errorsCount.Load(),
+	}
+}
+
+func (c *Consumer) processEvents(events <-chan metrics.MetricEvent) {
+	defer c.wg.Done()
+
+	// Setup error recovery
+	defer func() {
+		if r := recover(); r != nil {
+			c.logger.Error(nil, "Debug consumer panic recovered", "panic", r)
+			c.healthy.Store(false)
+			if err, ok := r.(error); ok {
+				c.lastError.Store(&err)
+			}
+		}
+	}()
+
+	c.logger.Info("Debug consumer event processing started")
+
+	for {
+		select {
+		case event, ok := <-events:
+			if !ok {
+				c.logger.Info("Events channel closed, stopping consumer")
+				return
+			}
+
+			if err := c.processEvent(event); err != nil {
+				c.logger.Error(err, "Failed to process metrics event",
+					"metric_type", event.MetricType,
+					"source", event.Source)
+				c.errorsCount.Add(1)
+				c.lastError.Store(&err)
+			} else {
+				c.eventsProcessed.Add(1)
+			}
+
+		case <-c.ctx.Done():
+			c.logger.Info("Context cancelled, stopping consumer")
+			return
+		}
+	}
+}
+
+func (c *Consumer) processEvent(event metrics.MetricEvent) error {
+	// Check filters
+	if !c.config.ShouldLogMetricType(event.MetricType) {
+		return nil
+	}
+	if !c.config.ShouldLogSource(event.Source) {
+		return nil
+	}
+
+	// Update statistics
+	c.updateStats(event)
+
+	// Log the event based on configuration
+	if c.config.LogFormat == "json" {
+		return c.logEventJSON(event)
+	}
+	return c.logEventText(event)
+}
+
+func (c *Consumer) updateStats(event metrics.MetricEvent) {
+	c.statsMutex.Lock()
+	defer c.statsMutex.Unlock()
+
+	// Track by type
+	if counter, exists := c.eventsByType[event.MetricType]; exists {
+		counter.Add(1)
+	} else {
+		counter := &atomic.Uint64{}
+		counter.Store(1)
+		c.eventsByType[event.MetricType] = counter
+	}
+
+	// Track by source
+	if counter, exists := c.eventsBySource[event.Source]; exists {
+		counter.Add(1)
+	} else {
+		counter := &atomic.Uint64{}
+		counter.Store(1)
+		c.eventsBySource[event.Source] = counter
+	}
+}
+
+// logEventJSON logs an event in JSON format
+func (c *Consumer) logEventJSON(event metrics.MetricEvent) error {
+	entry := LogEntry{
+		Level:    "INFO",
+		Consumer: consumerName,
+		Message:  "Metrics event received",
+		Event:    c.createEventSummary(event),
+		Tags:     event.Tags,
+	}
+
+	if c.config.IncludeTimestamp {
+		entry.Timestamp = time.Now()
+	}
+
+	if c.config.IncludeEventData && c.config.LogLevel >= 2 {
+		entry.Data = c.truncateData(event.Data)
+	}
+
+	// Log periodic stats
+	if c.eventsProcessed.Load()%1000 == 0 {
+		entry.Stats = c.getStatsSnapshot()
+	}
+
+	jsonBytes, err := json.Marshal(entry)
+	if err != nil {
+		return fmt.Errorf("failed to marshal log entry: %w", err)
+	}
+
+	c.logger.Info(string(jsonBytes))
+	return nil
+}
+
+// logEventText logs an event in human-readable text format
+func (c *Consumer) logEventText(event metrics.MetricEvent) error {
+	var parts []string
+
+	// Basic event info (level 0+)
+	parts = append(parts, fmt.Sprintf("Event: %s", event.MetricType))
+
+	if c.config.LogLevel >= 1 {
+		// Add detailed info (level 1+)
+		if event.Source != "" {
+			parts = append(parts, fmt.Sprintf("Source: %s", event.Source))
+		}
+		if event.NodeName != "" {
+			parts = append(parts, fmt.Sprintf("Node: %s", event.NodeName))
+		}
+		if event.ClusterName != "" {
+			parts = append(parts, fmt.Sprintf("Cluster: %s", event.ClusterName))
+		}
+		if event.EventType != "" {
+			parts = append(parts, fmt.Sprintf("Type: %s", event.EventType))
+		}
+	}
+
+	if c.config.LogLevel >= 2 {
+		// Add data info (level 2+)
+		if event.Data != nil {
+			dataType := reflect.TypeOf(event.Data).String()
+			parts = append(parts, fmt.Sprintf("DataType: %s", dataType))
+
+			if c.config.IncludeEventData {
+				dataStr := c.formatDataForText(event.Data)
+				parts = append(parts, fmt.Sprintf("Data: %s", dataStr))
+			}
+		}
+
+		// Add tags
+		if len(event.Tags) > 0 {
+			var tagParts []string
+			for k, v := range event.Tags {
+				tagParts = append(tagParts, fmt.Sprintf("%s=%s", k, v))
+			}
+			parts = append(parts, fmt.Sprintf("Tags: {%s}", strings.Join(tagParts, ", ")))
+		}
+	}
+
+	message := strings.Join(parts, " | ")
+
+	// Add timestamp if requested
+	if c.config.IncludeTimestamp {
+		timestamp := time.Now().Format("2006-01-02 15:04:05.000")
+		message = fmt.Sprintf("[%s] %s", timestamp, message)
+	}
+
+	c.logger.Info(message)
+
+	// Log periodic stats
+	if c.eventsProcessed.Load()%1000 == 0 {
+		c.logStatsText()
+	}
+
+	return nil
+}
+
+// createEventSummary creates a summary of the event for JSON logging
+func (c *Consumer) createEventSummary(event metrics.MetricEvent) *MetricEventSummary {
+	summary := &MetricEventSummary{
+		MetricType:  event.MetricType,
+		EventType:   event.EventType,
+		Source:      event.Source,
+		NodeName:    event.NodeName,
+		ClusterName: event.ClusterName,
+	}
+
+	if event.Data != nil {
+		summary.DataType = reflect.TypeOf(event.Data).String()
+		if dataBytes, err := json.Marshal(event.Data); err == nil {
+			summary.DataSize = len(dataBytes)
+		}
+	}
+
+	return summary
+}
+
+// truncateData truncates data payload if it exceeds MaxDataLength
+func (c *Consumer) truncateData(data interface{}) interface{} {
+	if c.config.MaxDataLength == 0 {
+		return data
+	}
+
+	dataBytes, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Sprintf("Error marshaling data: %v", err)
+	}
+
+	if len(dataBytes) <= c.config.MaxDataLength {
+		return data
+	}
+
+	truncated := string(dataBytes[:c.config.MaxDataLength])
+	return fmt.Sprintf("%s... (truncated from %d bytes)", truncated, len(dataBytes))
+}
+
+// formatDataForText formats data for text logging
+func (c *Consumer) formatDataForText(data interface{}) string {
+	if c.config.MaxDataLength == 0 {
+		return fmt.Sprintf("%+v", data)
+	}
+
+	dataStr := fmt.Sprintf("%+v", data)
+	if len(dataStr) <= c.config.MaxDataLength {
+		return dataStr
+	}
+
+	return fmt.Sprintf("%s... (truncated from %d chars)",
+		dataStr[:c.config.MaxDataLength], len(dataStr))
+}
+
+// getStatsSnapshot returns current statistics for JSON logging
+func (c *Consumer) getStatsSnapshot() *ConsumerStats {
+	return c.getStats()
+}
+
+// getStats returns current consumer statistics
+func (c *Consumer) getStats() *ConsumerStats {
+	c.statsMutex.RLock()
+	defer c.statsMutex.RUnlock()
+
+	eventsByType := make(map[string]uint64)
+	for t, counter := range c.eventsByType {
+		eventsByType[t] = counter.Load()
+	}
+
+	eventsBySource := make(map[string]uint64)
+	for s, counter := range c.eventsBySource {
+		eventsBySource[s] = counter.Load()
+	}
+
+	return &ConsumerStats{
+		EventsProcessed: c.eventsProcessed.Load(),
+		ErrorsCount:     c.errorsCount.Load(),
+		Uptime:          time.Since(c.startTime),
+		EventsByType:    eventsByType,
+		EventsBySource:  eventsBySource,
+	}
+}
+
+// logStatsText logs statistics in text format
+func (c *Consumer) logStatsText() {
+	stats := c.getStats()
+	c.logger.Info("Debug consumer stats",
+		"events_processed", stats.EventsProcessed,
+		"errors", stats.ErrorsCount,
+		"uptime", stats.Uptime,
+		"types", len(stats.EventsByType),
+		"sources", len(stats.EventsBySource))
+}
+
+// logFinalStats logs comprehensive final statistics
+func (c *Consumer) logFinalStats(stats *ConsumerStats) {
+	c.logger.Info("Final debug consumer statistics",
+		"total_events", stats.EventsProcessed,
+		"total_errors", stats.ErrorsCount,
+		"uptime", stats.Uptime)
+
+	if len(stats.EventsByType) > 0 {
+		c.logger.Info("Events by type", "breakdown", stats.EventsByType)
+	}
+
+	if len(stats.EventsBySource) > 0 {
+		c.logger.Info("Events by source", "breakdown", stats.EventsBySource)
+	}
+}
+
+// NewConsumerFromConfig creates a consumer from configuration
+// Returns nil if Debug consumer is disabled in config
+func NewConsumerFromConfig(config Config, logger logr.Logger) (*Consumer, error) {
+	if !config.Enabled {
+		logger.V(1).Info("Debug consumer is disabled")
+		return nil, nil
+	}
+
+	consumer, err := NewConsumer(config, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	return consumer, nil
+}
+
+// Compile-time check that Consumer implements ConsumerInterface
+var _ metrics.ConsumerInterface = (*Consumer)(nil)
