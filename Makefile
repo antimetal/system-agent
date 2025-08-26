@@ -66,7 +66,7 @@ install-hooks: ## Install shared git hooks for development workflow.
 
 .PHONY: generate
 generate: ## Generate all artifacts
-generate: manifests generate-ebpf-types generate-ebpf-bindings proto
+generate: manifests generate-ebpf-types generate-ebpf-bindings
 
 .PHONY: ebpf-typegen
 ebpf-typegen: ## Build the ebpf-typegen tool
