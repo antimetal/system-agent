@@ -76,7 +76,8 @@ func New(dataDir string) (*store, error) {
 			WithInMemory(dataDir == "").
 			WithNumMemtables(3).
 			WithBlockCacheSize(128 << 20).
-			WithIndexCacheSize(64 << 20),
+			WithIndexCacheSize(64 << 20).
+			WithLogger(nil), // Disable badger logging to reduce test noise
 	)
 	if err != nil {
 		return nil, err
