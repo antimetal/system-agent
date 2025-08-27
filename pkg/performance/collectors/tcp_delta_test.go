@@ -34,11 +34,6 @@ func TestTCPCollector_DeltaAwareCollector(t *testing.T) {
 		// Test interface methods
 		assert.False(t, collector.HasDeltaState())
 
-		capabilities := collector.GetDeltaCapabilities()
-		assert.Contains(t, capabilities, "ActiveOpens")
-		assert.Contains(t, capabilities, "RetransSegs")
-		assert.Contains(t, capabilities, "InSegs")
-
 		collector.ResetDeltaState()
 	})
 

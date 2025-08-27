@@ -397,13 +397,6 @@ func (c *MemoryCollector) CollectWithDelta(ctx context.Context, config performan
 	return stats, nil
 }
 
-func (c *MemoryCollector) GetDeltaCapabilities() []string {
-	return []string{
-		"SwapIn",
-		"SwapOut",
-	}
-}
-
 func (c *MemoryCollector) calculateMemoryDeltas(
 	current, previous *performance.MemoryStats,
 	currentTime time.Time,

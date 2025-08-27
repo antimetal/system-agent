@@ -375,17 +375,6 @@ func (c *NUMAStatsCollector) CollectWithDelta(ctx context.Context, config perfor
 	return numaStats, nil
 }
 
-func (c *NUMAStatsCollector) GetDeltaCapabilities() []string {
-	return []string{
-		"NumaHit",
-		"NumaMiss",
-		"NumaForeign",
-		"InterleaveHit",
-		"LocalNode",
-		"OtherNode",
-	}
-}
-
 func (c *NUMAStatsCollector) calculateNUMADeltas(
 	current, previous *performance.NUMAStatistics,
 	currentTime time.Time,

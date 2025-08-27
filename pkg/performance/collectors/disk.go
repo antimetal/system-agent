@@ -262,28 +262,6 @@ func (c *DiskCollector) CollectWithDelta(ctx context.Context, config performance
 	return stats, nil
 }
 
-func (c *DiskCollector) GetDeltaCapabilities() []string {
-	return []string{
-		"ReadsCompleted",
-		"WritesCompleted",
-		"ReadsMerged",
-		"WritesMerged",
-		"SectorsRead",
-		"SectorsWritten",
-		"ReadTime",
-		"WriteTime",
-		"IOTime",
-		"WeightedIOTime",
-		"IOPS",
-		"ReadBytesPerSec",
-		"WriteBytesPerSec",
-		"Utilization",
-		"AvgQueueSize",
-		"AvgReadLatency",
-		"AvgWriteLatency",
-	}
-}
-
 func (c *DiskCollector) calculateDiskDeltas(
 	current, previous []*performance.DiskStats,
 	currentTime time.Time,

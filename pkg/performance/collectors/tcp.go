@@ -416,17 +416,6 @@ func (c *TCPCollector) CollectWithDelta(ctx context.Context, config performance.
 	return currentStats, nil
 }
 
-// GetDeltaCapabilities returns which metric fields support delta calculations
-func (c *TCPCollector) GetDeltaCapabilities() []string {
-	return []string{
-		"ActiveOpens", "PassiveOpens", "AttemptFails", "EstabResets",
-		"InSegs", "OutSegs", "RetransSegs", "InErrs", "OutRsts", "InCsumErrors",
-		"SyncookiesSent", "SyncookiesRecv", "SyncookiesFailed",
-		"ListenOverflows", "ListenDrops", "TCPLostRetransmit",
-		"TCPFastRetrans", "TCPSlowStartRetrans", "TCPTimeouts",
-	}
-}
-
 func (c *TCPCollector) calculateTCPDeltas(
 	current, previous *performance.TCPStats,
 	currentTime time.Time,

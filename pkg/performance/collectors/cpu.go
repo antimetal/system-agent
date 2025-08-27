@@ -256,21 +256,6 @@ func (c *CPUCollector) CollectWithDelta(ctx context.Context, config performance.
 	return stats, nil
 }
 
-func (c *CPUCollector) GetDeltaCapabilities() []string {
-	return []string{
-		"User",
-		"Nice",
-		"System",
-		"Idle",
-		"IOWait",
-		"IRQ",
-		"SoftIRQ",
-		"Steal",
-		"Guest",
-		"GuestNice",
-	}
-}
-
 func (c *CPUCollector) calculateCPUDeltas(
 	current, previous []*performance.CPUStats,
 	currentTime time.Time,

@@ -251,19 +251,6 @@ func (c *NetworkCollector) CollectWithDelta(ctx context.Context, config performa
 	return stats, nil
 }
 
-func (c *NetworkCollector) GetDeltaCapabilities() []string {
-	return []string{
-		"RxBytes",
-		"TxBytes",
-		"RxPackets",
-		"TxPackets",
-		"RxErrors",
-		"TxErrors",
-		"RxDropped",
-		"TxDropped",
-	}
-}
-
 func (c *NetworkCollector) calculateNetworkDeltas(
 	current, previous []performance.NetworkStats,
 	currentTime time.Time,

@@ -208,13 +208,6 @@ func (c *SystemStatsCollector) CollectWithDelta(ctx context.Context, config perf
 	return stats, nil
 }
 
-func (c *SystemStatsCollector) GetDeltaCapabilities() []string {
-	return []string{
-		"Interrupts",
-		"ContextSwitches",
-	}
-}
-
 func (c *SystemStatsCollector) calculateSystemDeltas(
 	current, previous *performance.SystemStats,
 	currentTime time.Time,

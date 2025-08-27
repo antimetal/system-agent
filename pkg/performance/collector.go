@@ -58,10 +58,6 @@ type DeltaAwareCollector interface {
 	// Useful when collector configuration changes or after long gaps
 	ResetDeltaState()
 
-	// GetDeltaCapabilities returns which metric fields support delta calculations
-	// Used for validation and configuration assistance
-	GetDeltaCapabilities() []string
-
 	// HasDeltaState returns whether the collector has previous state for delta calculations
 	HasDeltaState() bool
 }
