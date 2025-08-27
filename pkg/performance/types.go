@@ -73,10 +73,6 @@ func (d DeltaConfig) IsEnabled(metricType MetricType) bool {
 	return d.isSupported(metricType)
 }
 
-// IsRatesEnabled returns whether rate calculation is enabled
-func (d DeltaConfig) IsRatesEnabled() bool {
-	return d.Mode == DeltaModeEnabled
-}
 
 // isSupported returns whether a metric type supports delta calculations
 func (d DeltaConfig) isSupported(metricType MetricType) bool {

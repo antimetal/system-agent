@@ -46,10 +46,6 @@ func TestDeltaConfig(t *testing.T) {
 		// Currently all implemented collectors support delta calculation
 	})
 
-	t.Run("IsRatesEnabled", func(t *testing.T) {
-		assert.False(t, DeltaConfig{Mode: DeltaModeDisabled}.IsRatesEnabled())
-		assert.True(t, DeltaConfig{Mode: DeltaModeEnabled}.IsRatesEnabled())
-	})
 }
 
 func TestBaseDeltaCalculation(t *testing.T) {
