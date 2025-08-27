@@ -30,6 +30,9 @@ func init() {
 	)
 }
 
+// Compile-time interface check
+var _ performance.PointCollector = (*DiskCollector)(nil)
+
 const (
 	// diskstatsFieldCount is the expected number of fields in /proc/diskstats
 	diskstatsFieldCount = 14

@@ -28,6 +28,9 @@ func init() {
 	))
 }
 
+// Compile-time interface check
+var _ performance.PointCollector = (*SystemStatsCollector)(nil)
+
 // SystemStatsCollector collects system-wide activity statistics from /proc/stat
 //
 // Purpose: System activity monitoring for interrupt and context switch rates

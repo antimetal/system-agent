@@ -33,6 +33,9 @@ import (
 // - /sys/class/net/[interface]/carrier: Link detection status
 //
 // Reference: https://www.kernel.org/doc/html/latest/networking/statistics.html
+// Compile-time interface check
+var _ performance.PointCollector = (*NetworkCollector)(nil)
+
 type NetworkCollector struct {
 	performance.BaseDeltaCollector
 	procNetDevPath  string

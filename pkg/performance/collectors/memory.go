@@ -28,6 +28,9 @@ func init() {
 	))
 }
 
+// Compile-time interface check
+var _ performance.PointCollector = (*MemoryCollector)(nil)
+
 // MemoryCollector collects runtime memory statistics from /proc/meminfo
 //
 // Purpose: Runtime memory monitoring and performance analysis

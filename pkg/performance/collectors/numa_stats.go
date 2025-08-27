@@ -28,6 +28,9 @@ func init() {
 	))
 }
 
+// Compile-time interface check
+var _ performance.PointCollector = (*NUMAStatsCollector)(nil)
+
 // NUMAStatsCollector collects runtime NUMA performance statistics
 //
 // This collector runs continuously to monitor NUMA allocation patterns

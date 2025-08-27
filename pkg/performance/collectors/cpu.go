@@ -27,6 +27,9 @@ func init() {
 	))
 }
 
+// Compile-time interface check
+var _ performance.PointCollector = (*CPUCollector)(nil)
+
 // CPUCollector collects CPU statistics from /proc/stat
 //
 // This collector reads CPU time statistics from the Linux proc filesystem.
