@@ -70,37 +70,34 @@ func NewCPUCollector(logger logr.Logger, config performance.CollectionConfig) (*
 
 // Collect performs a one-shot collection of CPU statistics
 func (c *CPUCollector) Collect(ctx context.Context) (any, error) {
-	result, err := performance.CollectWithDeltas(
-		&c.BaseDeltaCollector,
-		time.Now(),
-		func() ([]*performance.CPUStats, error) {
-			stats, err := c.collectCPUStats()
-			if err != nil {
-				return nil, fmt.Errorf("failed to collect CPU stats: %w", err)
-			}
-			return stats, nil
-		},
-		func(current, previous []*performance.CPUStats, currentTime time.Time) {
-			c.calculateCPUDeltas(current, previous, currentTime, c.Config)
-		},
-		func(lastSnapshot any) ([]*performance.CPUStats, bool) {
-			stats, ok := lastSnapshot.([]*performance.CPUStats)
-			return stats, ok && stats != nil
-		},
-	)
+	currentTime := time.Now()
 
+	// Collect current statistics
+	currentStats, err := c.collectCPUStats()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to collect CPU stats: %w", err)
 	}
 
-	// Add logging with CPU count information
-	if len(result) > 0 && result[0].Delta != nil {
-		c.Logger().V(1).Info("Collected CPU statistics with delta support", "cpus", len(result))
-	} else {
-		c.Logger().V(1).Info("Collected CPU statistics", "cpus", len(result))
+	shouldCalc, reason := c.ShouldCalculateDeltas(currentTime)
+	if !shouldCalc {
+		c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
+		if c.IsFirst {
+			c.UpdateDeltaState(currentStats, currentTime)
+		}
+		return currentStats, nil
 	}
 
-	return result, nil
+	previousStats, ok := c.LastSnapshot.([]*performance.CPUStats)
+	if !ok || previousStats == nil {
+		c.UpdateDeltaState(currentStats, currentTime)
+		return currentStats, nil
+	}
+
+	c.calculateCPUDeltas(currentStats, previousStats, currentTime, c.Config)
+	c.UpdateDeltaState(currentStats, currentTime)
+
+	c.Logger().V(1).Info("Collected CPU statistics with delta support", "cpus", len(currentStats))
+	return currentStats, nil
 }
 
 // collectCPUStats reads and parses /proc/stat for CPU statistics

@@ -98,18 +98,33 @@ func NewTCPCollector(logger logr.Logger, config performance.CollectionConfig) (*
 }
 
 func (c *TCPCollector) Collect(ctx context.Context) (any, error) {
-	return performance.CollectWithDeltas(
-		&c.BaseDeltaCollector,
-		time.Now(),
-		c.collectTCPStats,
-		func(current, previous *performance.TCPStats, currentTime time.Time) {
-			c.calculateTCPDeltas(current, previous, currentTime, c.Config)
-		},
-		func(lastSnapshot any) (*performance.TCPStats, bool) {
-			stats, ok := lastSnapshot.(*performance.TCPStats)
-			return stats, ok && stats != nil
-		},
-	)
+	currentTime := time.Now()
+
+	// Collect current statistics
+	currentStats, err := c.collectTCPStats()
+	if err != nil {
+		return nil, err
+	}
+
+	shouldCalc, reason := c.ShouldCalculateDeltas(currentTime)
+	if !shouldCalc {
+		c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
+		if c.IsFirst {
+			c.UpdateDeltaState(currentStats, currentTime)
+		}
+		return currentStats, nil
+	}
+
+	previousStats, ok := c.LastSnapshot.(*performance.TCPStats)
+	if !ok || previousStats == nil {
+		c.UpdateDeltaState(currentStats, currentTime)
+		return currentStats, nil
+	}
+
+	c.calculateTCPDeltas(currentStats, previousStats, currentTime, c.Config)
+	c.UpdateDeltaState(currentStats, currentTime)
+
+	return currentStats, nil
 }
 
 // collectTCPStats gathers TCP statistics from multiple proc files
