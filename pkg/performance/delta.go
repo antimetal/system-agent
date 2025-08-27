@@ -99,30 +99,20 @@ func (b *BaseDeltaCollector) CreateDeltaMetadata(currentTime time.Time, resetDet
 	}
 }
 
-// CalculateUint64Delta calculates delta and optional rate for uint64 counters
+// CalculateUint64Delta calculates delta for uint64 counters with reset detection
 func (b *BaseDeltaCollector) CalculateUint64Delta(
 	current, previous uint64,
 	interval time.Duration,
-) (delta uint64, rate *float64, resetDetected bool) {
+) (delta uint64, resetDetected bool) {
 	// Detect counter reset (current < previous)
 	// This happens due to system reboots, process restarts, etc.
 	if current < previous {
 		// Counter was reset - return zero delta and flag reset
-		return 0, nil, true
+		return 0, true
 	}
 
 	delta = current - previous
-
-	// Calculate rate if enabled and interval is sufficient
-	if b.config.IsRatesEnabled() && interval >= b.config.MinInterval {
-		seconds := interval.Seconds()
-		if seconds > 0 {
-			rateValue := float64(delta) / seconds
-			rate = &rateValue
-		}
-	}
-
-	return delta, rate, false
+	return delta, false
 }
 
 // PopulateMetadata is a composition helper that sets DeltaMetadata for any delta struct

@@ -427,7 +427,7 @@ func (c *TCPCollector) calculateTCPDeltas(
 	delta := &performance.TCPDeltaData{}
 
 	calculateField := func(currentVal, previousVal uint64) uint64 {
-		deltaVal, _, reset := c.CalculateUint64Delta(currentVal, previousVal, interval)
+		deltaVal, reset := c.CalculateUint64Delta(currentVal, previousVal, interval)
 		resetDetected = resetDetected || reset
 		return deltaVal
 	}

@@ -299,7 +299,7 @@ func (c *DiskCollector) calculateDeviceDeltas(
 	delta := &performance.DiskDeltaData{}
 
 	calculateField := func(currentVal, previousVal uint64) uint64 {
-		deltaVal, _, reset := c.CalculateUint64Delta(currentVal, previousVal, interval)
+		deltaVal, reset := c.CalculateUint64Delta(currentVal, previousVal, interval)
 		resetDetected = resetDetected || reset
 		return deltaVal
 	}

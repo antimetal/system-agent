@@ -12,7 +12,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestDeltaConfig(t *testing.T) {
@@ -59,11 +58,9 @@ func TestBaseDeltaCalculation(t *testing.T) {
 			MetricTypeTCP, "test", logr.Discard(), config, CollectorCapabilities{},
 		)
 
-		delta, rate, reset := collector.CalculateUint64Delta(100, 50, time.Second)
+		delta, reset := collector.CalculateUint64Delta(100, 50, time.Second)
 
 		assert.Equal(t, uint64(50), delta)
-		require.NotNil(t, rate) // Rates enabled in enabled mode
-		assert.Equal(t, 50.0, *rate)
 		assert.False(t, reset)
 	})
 
@@ -78,11 +75,9 @@ func TestBaseDeltaCalculation(t *testing.T) {
 			MetricTypeTCP, "test", logr.Discard(), config, CollectorCapabilities{},
 		)
 
-		delta, rate, reset := collector.CalculateUint64Delta(150, 50, time.Second)
+		delta, reset := collector.CalculateUint64Delta(150, 50, time.Second)
 
 		assert.Equal(t, uint64(100), delta)
-		require.NotNil(t, rate)
-		assert.Equal(t, 100.0, *rate) // 100 per second
 		assert.False(t, reset)
 	})
 
@@ -95,18 +90,16 @@ func TestBaseDeltaCalculation(t *testing.T) {
 		)
 
 		// Current < previous indicates reset (simple case)
-		delta, rate, reset := collector.CalculateUint64Delta(10, 100, time.Second)
+		delta, reset := collector.CalculateUint64Delta(10, 100, time.Second)
 
 		assert.Equal(t, uint64(0), delta)
-		assert.Nil(t, rate)
 		assert.True(t, reset)
 
 		// Large previous value, small current value = still a reset
 		// (no special rollover handling)
-		delta2, rate2, reset2 := collector.CalculateUint64Delta(5, ^uint64(0)-10, time.Second)
+		delta2, reset2 := collector.CalculateUint64Delta(5, ^uint64(0)-10, time.Second)
 
 		assert.Equal(t, uint64(0), delta2)
-		assert.Nil(t, rate2)
 		assert.True(t, reset2)
 	})
 
