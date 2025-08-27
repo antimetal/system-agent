@@ -115,6 +115,51 @@ func (b *BaseDeltaCollector) CalculateUint64Delta(
 	return delta, false
 }
 
+// CollectWithDeltas implements the common delta collection pattern for all collectors.
+// This generic helper eliminates repetitive boilerplate in Collect methods.
+//
+// T: The stats type (e.g., *performance.TCPStats)
+//
+// collector: The delta collector instance 
+// collectStats: Function that collects the current raw statistics
+// calculateDeltas: Function that calculates deltas between current and previous stats
+// extractPrevious: Function that safely extracts previous stats from the last snapshot
+func CollectWithDeltas[T any](
+	collector *BaseDeltaCollector,
+	currentTime time.Time,
+	collectStats func() (T, error),
+	calculateDeltas func(current T, previous T, currentTime time.Time),
+	extractPrevious func(lastSnapshot any) (T, bool),
+) (T, error) {
+	var zeroT T
+
+	// Collect current statistics
+	currentStats, err := collectStats()
+	if err != nil {
+		return zeroT, err
+	}
+
+	shouldCalc, reason := collector.ShouldCalculateDeltas(currentTime)
+	if !shouldCalc {
+		collector.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
+		if collector.IsFirst {
+			collector.UpdateDeltaState(currentStats, currentTime)
+		}
+		return currentStats, nil
+	}
+
+	previousStats, ok := extractPrevious(collector.LastSnapshot)
+	if !ok {
+		collector.UpdateDeltaState(currentStats, currentTime)
+		return currentStats, nil
+	}
+
+	calculateDeltas(currentStats, previousStats, currentTime)
+	collector.UpdateDeltaState(currentStats, currentTime)
+
+	return currentStats, nil
+}
+
 // PopulateMetadata is a composition helper that sets DeltaMetadata for any delta struct
 func (b *BaseDeltaCollector) PopulateMetadata(delta interface{}, currentTime time.Time, resetDetected bool) {
 	metadata := b.CreateDeltaMetadata(currentTime, resetDetected)

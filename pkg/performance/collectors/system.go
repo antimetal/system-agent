@@ -114,36 +114,37 @@ func NewSystemStatsCollector(logger logr.Logger, config performance.CollectionCo
 }
 
 func (c *SystemStatsCollector) Collect(ctx context.Context) (any, error) {
-	currentTime := time.Now()
+	result, err := performance.CollectWithDeltas(
+		&c.BaseDeltaCollector,
+		time.Now(),
+		func() (*performance.SystemStats, error) {
+			stats, err := c.collectSystemStats()
+			if err != nil {
+				return nil, fmt.Errorf("failed to collect system stats: %w", err)
+			}
+			return stats, nil
+		},
+		func(current, previous *performance.SystemStats, currentTime time.Time) {
+			c.calculateSystemDeltas(current, previous, currentTime, c.Config)
+		},
+		func(lastSnapshot any) (*performance.SystemStats, bool) {
+			stats, ok := lastSnapshot.(*performance.SystemStats)
+			return stats, ok && stats != nil
+		},
+	)
 
-	// Collect current statistics
-	currentStats, err := c.collectSystemStats()
 	if err != nil {
-		return nil, fmt.Errorf("failed to collect system stats: %w", err)
+		return nil, err
 	}
 
-	shouldCalc, reason := c.ShouldCalculateDeltas(currentTime)
-	if !shouldCalc {
-		c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
-		if c.IsFirst {
-			c.UpdateDeltaState(currentStats, currentTime)
-		}
+	// Add logging based on whether deltas were calculated
+	if result.Delta != nil {
+		c.Logger().V(1).Info("Collected system statistics with delta support")
+	} else {
 		c.Logger().V(1).Info("Collected system statistics")
-		return currentStats, nil
 	}
 
-	previousStats, ok := c.LastSnapshot.(*performance.SystemStats)
-	if !ok || previousStats == nil {
-		c.UpdateDeltaState(currentStats, currentTime)
-		c.Logger().V(1).Info("Collected system statistics")
-		return currentStats, nil
-	}
-
-	c.calculateSystemDeltas(currentStats, previousStats, currentTime, c.Config)
-	c.UpdateDeltaState(currentStats, currentTime)
-
-	c.Logger().V(1).Info("Collected system statistics with delta support")
-	return currentStats, nil
+	return result, nil
 }
 
 // collectSystemStats reads and parses system activity statistics from /proc/stat
