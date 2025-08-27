@@ -39,7 +39,6 @@ type NetworkCollector struct {
 	sysClassNetPath string
 }
 
-
 func init() {
 	performance.Register(performance.MetricTypeNetwork, performance.PartialNewContinuousPointCollector(
 		func(logger logr.Logger, config performance.CollectionConfig) (performance.PointCollector, error) {

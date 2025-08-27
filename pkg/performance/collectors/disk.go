@@ -30,7 +30,6 @@ func init() {
 	)
 }
 
-
 const (
 	// diskstatsFieldCount is the expected number of fields in /proc/diskstats
 	diskstatsFieldCount = 14

@@ -28,7 +28,6 @@ func init() {
 	))
 }
 
-
 // MemoryCollector collects runtime memory statistics from /proc/meminfo
 //
 // Purpose: Runtime memory monitoring and performance analysis
@@ -401,7 +400,6 @@ func (c *MemoryCollector) collectSwapActivity(stats *performance.MemoryStats) {
 		c.Logger().V(2).Info("Error reading vmstat file", "path", c.vmstatPath, "error", err)
 	}
 }
-
 
 func (c *MemoryCollector) calculateMemoryDeltas(
 	current, previous *performance.MemoryStats,

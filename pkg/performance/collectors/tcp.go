@@ -28,7 +28,6 @@ func init() {
 	))
 }
 
-
 // TCPCollector collects TCP connection statistics from /proc/net/snmp, /proc/net/netstat, /proc/net/tcp*
 //
 // This collector reads TCP statistics from multiple proc files:

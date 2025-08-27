@@ -28,7 +28,6 @@ func init() {
 	))
 }
 
-
 // SystemStatsCollector collects system-wide activity statistics from /proc/stat
 //
 // Purpose: System activity monitoring for interrupt and context switch rates
@@ -212,7 +211,6 @@ func (c *SystemStatsCollector) collectSystemStats() (*performance.SystemStats, e
 
 	return stats, nil
 }
-
 
 func (c *SystemStatsCollector) calculateSystemDeltas(
 	current, previous *performance.SystemStats,

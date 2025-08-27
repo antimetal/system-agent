@@ -46,7 +46,6 @@ type ContinuousCollector interface {
 	LastError() error
 }
 
-
 // NewContinuousCollector creates a new continuous collector instance with the provided config
 type NewContinuousCollector func(logr.Logger, CollectionConfig) (ContinuousCollector, error)
 

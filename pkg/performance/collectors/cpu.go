@@ -27,7 +27,6 @@ func init() {
 	))
 }
 
-
 // CPUCollector collects CPU statistics from /proc/stat
 //
 // This collector reads CPU time statistics from the Linux proc filesystem.
@@ -263,7 +262,6 @@ func (c *CPUCollector) collectCPUStats() ([]*performance.CPUStats, error) {
 		"maxCPUIndex", maxCPU)
 	return cpuStats, nil
 }
-
 
 func (c *CPUCollector) calculateCPUDeltas(
 	current, previous []*performance.CPUStats,
