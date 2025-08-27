@@ -76,7 +76,28 @@ func NewNetworkCollector(logger logr.Logger, config performance.CollectionConfig
 }
 
 func (c *NetworkCollector) Collect(ctx context.Context) (any, error) {
-	return c.collectNetworkStats()
+	stats, err := c.collectNetworkStats()
+	if err != nil {
+		return nil, fmt.Errorf("failed to collect network stats: %w", err)
+	}
+
+	currentTime := time.Now()
+
+	// If delta calculation is enabled and we have previous state, calculate deltas
+	if c.Config.IsEnabled(performance.MetricTypeNetwork) {
+		if c.HasDeltaState() {
+			if should, reason := c.ShouldCalculateDeltas(currentTime); should {
+				previous := c.LastSnapshot.([]performance.NetworkStats)
+				c.calculateNetworkDeltas(stats, previous, currentTime, c.Config)
+			} else {
+				c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
+			}
+		}
+		c.UpdateDeltaState(stats, currentTime)
+	}
+
+	c.Logger().V(1).Info("Collected network statistics", "interfaces", len(stats))
+	return stats, nil
 }
 
 // collectNetworkStats reads and parses /proc/net/dev and /sys/class/net/[interface]/*
@@ -227,28 +248,6 @@ func (c *NetworkCollector) readInterfaceMetadata(stat *performance.NetworkStats)
 		carrier := strings.TrimSpace(string(carrierData))
 		stat.LinkDetected = carrier == "1"
 	}
-}
-
-func (c *NetworkCollector) CollectWithDelta(ctx context.Context, config performance.DeltaConfig) (any, error) {
-	stats, err := c.collectNetworkStats()
-	if err != nil {
-		return nil, fmt.Errorf("failed to collect network stats: %w", err)
-	}
-
-	currentTime := time.Now()
-
-	if c.HasDeltaState() {
-		if should, reason := c.ShouldCalculateDeltas(currentTime); should {
-			previous := c.LastSnapshot.([]performance.NetworkStats)
-			c.calculateNetworkDeltas(stats, previous, currentTime, config)
-		} else {
-			c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
-		}
-	}
-
-	c.UpdateDeltaState(stats, currentTime)
-	c.Logger().V(1).Info("Collected network statistics with delta support", "interfaces", len(stats))
-	return stats, nil
 }
 
 func (c *NetworkCollector) calculateNetworkDeltas(

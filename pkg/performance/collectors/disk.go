@@ -84,6 +84,21 @@ func (c *DiskCollector) Collect(ctx context.Context) (any, error) {
 		return nil, fmt.Errorf("failed to collect disk stats: %w", err)
 	}
 
+	currentTime := time.Now()
+
+	// If delta calculation is enabled and we have previous state, calculate deltas
+	if c.Config.IsEnabled(performance.MetricTypeDisk) {
+		if c.HasDeltaState() {
+			if should, reason := c.ShouldCalculateDeltas(currentTime); should {
+				previous := c.LastSnapshot.([]*performance.DiskStats)
+				c.calculateDiskDeltas(stats, previous, currentTime, c.Config)
+			} else {
+				c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
+			}
+		}
+		c.UpdateDeltaState(stats, currentTime)
+	}
+
 	c.Logger().V(1).Info("Collected disk statistics", "devices", len(stats))
 	return stats, nil
 }
@@ -238,28 +253,6 @@ func IsPartition(device string) bool {
 	// Standard devices: partition if ends with digit
 	lastChar := device[len(device)-1]
 	return lastChar >= '0' && lastChar <= '9'
-}
-
-func (c *DiskCollector) CollectWithDelta(ctx context.Context, config performance.DeltaConfig) (any, error) {
-	stats, err := c.collectDiskStats()
-	if err != nil {
-		return nil, fmt.Errorf("failed to collect disk stats: %w", err)
-	}
-
-	currentTime := time.Now()
-
-	if c.HasDeltaState() {
-		if should, reason := c.ShouldCalculateDeltas(currentTime); should {
-			previous := c.LastSnapshot.([]*performance.DiskStats)
-			c.calculateDiskDeltas(stats, previous, currentTime, config)
-		} else {
-			c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
-		}
-	}
-
-	c.UpdateDeltaState(stats, currentTime)
-	c.Logger().V(1).Info("Collected disk statistics with delta support", "devices", len(stats))
-	return stats, nil
 }
 
 func (c *DiskCollector) calculateDiskDeltas(

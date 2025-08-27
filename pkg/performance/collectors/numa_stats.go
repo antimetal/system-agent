@@ -120,6 +120,21 @@ func (c *NUMAStatsCollector) Collect(ctx context.Context) (any, error) {
 		stats.Nodes = append(stats.Nodes, node)
 	}
 
+	currentTime := time.Now()
+
+	// If delta calculation is enabled and we have previous state, calculate deltas
+	if c.Config.IsEnabled(performance.MetricTypeNUMAStats) {
+		if c.HasDeltaState() {
+			if should, reason := c.ShouldCalculateDeltas(currentTime); should {
+				previous := c.LastSnapshot.(*performance.NUMAStatistics)
+				c.calculateNUMADeltas(stats, previous, currentTime, c.Config)
+			} else {
+				c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
+			}
+		}
+		c.UpdateDeltaState(stats, currentTime)
+	}
+
 	return stats, nil
 }
 
@@ -350,29 +365,6 @@ func (c *NUMAStatsCollector) readNodeNumaStat(path string) (*runtimeNodeNumaStat
 	}
 
 	return stats, nil
-}
-
-func (c *NUMAStatsCollector) CollectWithDelta(ctx context.Context, config performance.DeltaConfig) (any, error) {
-	stats, err := c.Collect(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to collect NUMA stats: %w", err)
-	}
-
-	numaStats := stats.(*performance.NUMAStatistics)
-	currentTime := time.Now()
-
-	if c.HasDeltaState() {
-		if should, reason := c.ShouldCalculateDeltas(currentTime); should {
-			previous := c.LastSnapshot.(*performance.NUMAStatistics)
-			c.calculateNUMADeltas(numaStats, previous, currentTime, config)
-		} else {
-			c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
-		}
-	}
-
-	c.UpdateDeltaState(numaStats, currentTime)
-	c.Logger().V(1).Info("Collected NUMA statistics with delta support", "nodes", len(numaStats.Nodes))
-	return numaStats, nil
 }
 
 func (c *NUMAStatsCollector) calculateNUMADeltas(
