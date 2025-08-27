@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# test-cgroup-collectors.sh - Test cgroup CPU and memory collectors in KIND cluster
+# test-agent-workloads.sh - Test performance collectors with workloads in KIND cluster
 set -euo pipefail
 
 # Colors for output
@@ -13,12 +13,11 @@ NC='\033[0m' # No Color
 # Configuration
 CLUSTER_NAME="${KIND_CLUSTER:-antimetal-agent-dev}"
 NAMESPACE="antimetal-system"
-TEST_NAMESPACE="default"
-WORKLOAD_FILE="test/cgroup-test-workloads.yaml"
 
 # Use local binaries if not in PATH
 KIND="${KIND:-./bin/kind}"
 KUBECTL="${KUBECTL:-kubectl}"
+KUSTOMIZE="${KUSTOMIZE:-./bin/kustomize}"
 KUBECTL_CONTEXT="--context kind-${CLUSTER_NAME}"
 
 # Helper functions
@@ -69,58 +68,17 @@ check_prerequisites() {
     success "Agent deployment found"
 }
 
-# Build and deploy agent with cgroup support
-deploy_agent() {
-    header "Building and Deploying Agent with Cgroup Support"
-    
-    info "Generating manifests..."
-    make generate
-    
-    info "Building Docker image..."
-    make docker-build
-    
-    info "Loading image into KIND cluster..."
-    make load-image
-    
-    info "Deploying agent..."
-    make deploy
-    
-    info "Waiting for agent to be ready..."
-    ${KUBECTL} ${KUBECTL_CONTEXT} rollout status deployment/agent -n ${NAMESPACE} --timeout=60s
-    
-    success "Agent deployed successfully"
-}
 
-# Deploy test workloads
-deploy_workloads() {
-    header "Deploying Test Workloads"
-    
-    if [ ! -f "${WORKLOAD_FILE}" ]; then
-        error "Workload file ${WORKLOAD_FILE} not found"
-    fi
-    
-    info "Applying test workloads..."
-    ${KUBECTL} ${KUBECTL_CONTEXT} apply -f "${WORKLOAD_FILE}"
-    
-    info "Waiting for pods to start..."
-    sleep 10
-    
-    # Check pod status
-    ${KUBECTL} ${KUBECTL_CONTEXT} get pods -l 'test' -o wide
-    
-    success "Test workloads deployed"
-}
-
-# Monitor cgroup collectors
+# Monitor performance collectors
 monitor_collectors() {
-    header "Monitoring Cgroup Collectors"
+    header "Monitoring Performance Collectors"
     
-    info "Checking agent logs for cgroup detection..."
+    info "Checking agent logs for collector activity..."
     echo "----------------------------------------"
     
     # Check for cgroup version detection
-    info "Cgroup version detection:"
-    ${KUBECTL} ${KUBECTL_CONTEXT} logs -n ${NAMESPACE} deployment/agent --tail=1000 | grep -i "cgroup version" || warning "No cgroup version detection found"
+    info "Performance collector detection:"
+    ${KUBECTL} ${KUBECTL_CONTEXT} logs -n ${NAMESPACE} deployment/agent --tail=1000 | grep -i "performance\|collector\|cgroup version" || warning "No collector activity found"
     
     echo ""
     info "Container discovery:"
@@ -128,11 +86,11 @@ monitor_collectors() {
     
     echo ""
     info "CPU throttling detection:"
-    ${KUBECTL} ${KUBECTL_CONTEXT} logs -n ${NAMESPACE} deployment/agent --tail=1000 | grep -i "throttl" || warning "No throttling messages found yet"
+    ${KUBECTL} ${KUBECTL_CONTEXT} logs -n ${NAMESPACE} deployment/agent --tail=1000 | grep -i "throttl\|collect\|metric" || warning "No collector metrics found yet"
     
     echo ""
     info "Memory statistics:"
-    ${KUBECTL} ${KUBECTL_CONTEXT} logs -n ${NAMESPACE} deployment/agent --tail=1000 | grep -i "memory.*stats\|cgroup.*memory" || warning "No memory statistics found yet"
+    ${KUBECTL} ${KUBECTL_CONTEXT} logs -n ${NAMESPACE} deployment/agent --tail=1000 | grep -i "memory.*stats\|cgroup.*memory\|performance" || warning "No performance statistics found yet"
 }
 
 # Verify cgroup mounts in agent pod
@@ -189,7 +147,7 @@ stress_test() {
     header "Running Stress Test (30 seconds)"
     
     info "Current pod status:"
-    ${KUBECTL} ${KUBECTL_CONTEXT} get pods -l 'test' --no-headers
+    ${KUBECTL} ${KUBECTL_CONTEXT} get pods -n ${NAMESPACE} -l 'test-suite=cgroup-collectors' --no-headers
     
     info "Waiting for workloads to generate metrics..."
     for i in {1..6}; do
@@ -215,37 +173,17 @@ enable_verbose_logging() {
     success "Verbose logging enabled"
 }
 
-# Cleanup
-cleanup() {
-    header "Cleaning Up Test Resources"
-    
-    info "Deleting test workloads..."
-    ${KUBECTL} ${KUBECTL_CONTEXT} delete -f "${WORKLOAD_FILE}" --ignore-not-found=true
-    
-    info "Resetting verbosity..."
-    ${KUBECTL} ${KUBECTL_CONTEXT} set env deployment/agent -n ${NAMESPACE} VERBOSITY-
-    
-    success "Cleanup complete"
-}
 
 # Main test flow
 main() {
     echo -e "${GREEN}═══════════════════════════════════════════════════════${NC}"
-    echo -e "${GREEN}     Cgroup Collector Testing for System Agent${NC}"
+    echo -e "${GREEN}     Performance Testing for System Agent${NC}"
     echo -e "${GREEN}═══════════════════════════════════════════════════════${NC}"
     
     # Parse arguments
     case "${1:-all}" in
         prereq)
             check_prerequisites
-            ;;
-        deploy)
-            check_prerequisites
-            deploy_agent
-            ;;
-        workloads)
-            check_prerequisites
-            deploy_workloads
             ;;
         monitor)
             check_prerequisites
@@ -267,34 +205,25 @@ main() {
             check_prerequisites
             enable_verbose_logging
             ;;
-        cleanup)
-            cleanup
-            ;;
         all)
             check_prerequisites
-            deploy_agent
-            deploy_workloads
-            sleep 5
             verify_mounts
             sleep 5
             monitor_collectors
             check_container_metrics
             stress_test
-            info "Run './scripts/test-cgroup-collectors.sh cleanup' when done"
+            info "Use 'make destroy-cluster' to clean up when done"
             ;;
         *)
-            echo "Usage: $0 [prereq|deploy|workloads|monitor|verify|metrics|stress|verbose|cleanup|all]"
+            echo "Usage: $0 [prereq|monitor|verify|metrics|stress|verbose|all]"
             echo ""
             echo "Commands:"
             echo "  prereq    - Check prerequisites"
-            echo "  deploy    - Build and deploy agent"
-            echo "  workloads - Deploy test workloads"
             echo "  monitor   - Monitor collector logs"
             echo "  verify    - Verify cgroup mounts"
             echo "  metrics   - Check container metrics"
             echo "  stress    - Run stress test"
             echo "  verbose   - Enable verbose logging"
-            echo "  cleanup   - Remove test resources"
             echo "  all       - Run all tests (default)"
             exit 1
             ;;
