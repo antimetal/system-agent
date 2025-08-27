@@ -6,12 +6,14 @@ namespace: antimetal-system
 resources:
   - ../rbac
   - ../agent
+  - ../test
   - ./metrics_service.yaml
 
 patches:
   - path: ./agent_metrics_patch.yaml
     target:
       kind: Deployment
+      name: agent
 
 labels:
 - includeSelectors: true
