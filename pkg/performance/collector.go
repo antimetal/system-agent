@@ -119,10 +119,6 @@ func (b *BaseCollector) Logger() logr.Logger {
 	return b.logger
 }
 
-func (b *BaseCollector) Config() CollectionConfig {
-	return b.config
-}
-
 type BaseContinuousCollector struct {
 	BaseCollector
 	status    CollectorStatus
