@@ -182,9 +182,6 @@ main() {
     
     # Parse arguments
     case "${1:-all}" in
-        prereq)
-            check_prerequisites
-            ;;
         monitor)
             check_prerequisites
             monitor_collectors
@@ -215,10 +212,9 @@ main() {
             info "Use 'make destroy-cluster' to clean up when done"
             ;;
         *)
-            echo "Usage: $0 [prereq|monitor|verify|metrics|stress|verbose|all]"
+            echo "Usage: $0 [monitor|verify|metrics|stress|verbose|all]"
             echo ""
             echo "Commands:"
-            echo "  prereq    - Check prerequisites"
             echo "  monitor   - Monitor collector logs"
             echo "  verify    - Verify cgroup mounts"
             echo "  metrics   - Check container metrics"
