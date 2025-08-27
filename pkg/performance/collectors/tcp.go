@@ -28,8 +28,6 @@ func init() {
 	))
 }
 
-// Compile-time interface check
-var _ performance.DeltaAwareCollector = (*TCPCollector)(nil)
 
 // TCPCollector collects TCP connection statistics from /proc/net/snmp, /proc/net/netstat, /proc/net/tcp*
 //
@@ -98,7 +96,38 @@ func NewTCPCollector(logger logr.Logger, config performance.CollectionConfig) (*
 }
 
 func (c *TCPCollector) Collect(ctx context.Context) (any, error) {
-	return c.collectTCPStats()
+	currentTime := time.Now()
+
+	// Collect current statistics
+	currentStats, err := c.collectTCPStats()
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if delta calculation is enabled for this collector
+	if !c.Config.IsEnabled(performance.MetricTypeTCP) {
+		return currentStats, nil
+	}
+
+	shouldCalc, reason := c.ShouldCalculateDeltas(currentTime)
+	if !shouldCalc {
+		c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
+		if c.IsFirst {
+			c.UpdateDeltaState(currentStats, currentTime)
+		}
+		return currentStats, nil
+	}
+
+	previousStats, ok := c.LastSnapshot.(*performance.TCPStats)
+	if !ok || previousStats == nil {
+		c.UpdateDeltaState(currentStats, currentTime)
+		return currentStats, nil
+	}
+
+	c.calculateTCPDeltas(currentStats, previousStats, currentTime, c.Config)
+	c.UpdateDeltaState(currentStats, currentTime)
+
+	return currentStats, nil
 }
 
 // collectTCPStats gathers TCP statistics from multiple proc files
@@ -376,44 +405,6 @@ func (c *TCPCollector) countConnectionsFromFile(path string, stats *performance.
 	}
 
 	return scanner.Err()
-}
-
-// DeltaAwareCollector interface implementation
-
-// CollectWithDelta performs collection and calculates deltas/rates based on configuration
-func (c *TCPCollector) CollectWithDelta(ctx context.Context, config performance.DeltaConfig) (any, error) {
-	currentTime := time.Now()
-
-	// Collect current statistics
-	currentStats, err := c.collectTCPStats()
-	if err != nil {
-		return nil, err
-	}
-
-	if !config.IsEnabled(performance.MetricTypeTCP) {
-		return currentStats, nil
-	}
-
-	shouldCalc, reason := c.ShouldCalculateDeltas(currentTime)
-	if !shouldCalc {
-		c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
-		if c.IsFirst {
-			c.UpdateDeltaState(currentStats, currentTime)
-		}
-		return currentStats, nil
-	}
-
-	previousStats, ok := c.LastSnapshot.(*performance.TCPStats)
-	if !ok || previousStats == nil {
-		c.UpdateDeltaState(currentStats, currentTime)
-		return currentStats, nil
-	}
-
-	c.calculateTCPDeltas(currentStats, previousStats, currentTime, config)
-
-	c.UpdateDeltaState(currentStats, currentTime)
-
-	return currentStats, nil
 }
 
 func (c *TCPCollector) calculateTCPDeltas(

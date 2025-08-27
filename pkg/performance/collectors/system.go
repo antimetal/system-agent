@@ -28,8 +28,6 @@ func init() {
 	))
 }
 
-// Compile-time interface check
-var _ performance.DeltaAwareCollector = (*SystemStatsCollector)(nil)
 
 // SystemStatsCollector collects system-wide activity statistics from /proc/stat
 //
@@ -114,13 +112,42 @@ func NewSystemStatsCollector(logger logr.Logger, config performance.CollectionCo
 }
 
 func (c *SystemStatsCollector) Collect(ctx context.Context) (any, error) {
-	stats, err := c.collectSystemStats()
+	currentTime := time.Now()
+
+	// Collect current statistics
+	currentStats, err := c.collectSystemStats()
 	if err != nil {
 		return nil, fmt.Errorf("failed to collect system stats: %w", err)
 	}
 
-	c.Logger().V(1).Info("Collected system statistics")
-	return stats, nil
+	// Check if delta calculation is enabled for this collector
+	if !c.Config.IsEnabled(performance.MetricTypeSystem) {
+		c.Logger().V(1).Info("Collected system statistics")
+		return currentStats, nil
+	}
+
+	shouldCalc, reason := c.ShouldCalculateDeltas(currentTime)
+	if !shouldCalc {
+		c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
+		if c.IsFirst {
+			c.UpdateDeltaState(currentStats, currentTime)
+		}
+		c.Logger().V(1).Info("Collected system statistics")
+		return currentStats, nil
+	}
+
+	previousStats, ok := c.LastSnapshot.(*performance.SystemStats)
+	if !ok || previousStats == nil {
+		c.UpdateDeltaState(currentStats, currentTime)
+		c.Logger().V(1).Info("Collected system statistics")
+		return currentStats, nil
+	}
+
+	c.calculateSystemDeltas(currentStats, previousStats, currentTime, c.Config)
+	c.UpdateDeltaState(currentStats, currentTime)
+
+	c.Logger().V(1).Info("Collected system statistics with delta support")
+	return currentStats, nil
 }
 
 // collectSystemStats reads and parses system activity statistics from /proc/stat
@@ -186,27 +213,6 @@ func (c *SystemStatsCollector) collectSystemStats() (*performance.SystemStats, e
 	return stats, nil
 }
 
-func (c *SystemStatsCollector) CollectWithDelta(ctx context.Context, config performance.DeltaConfig) (any, error) {
-	stats, err := c.collectSystemStats()
-	if err != nil {
-		return nil, fmt.Errorf("failed to collect system stats: %w", err)
-	}
-
-	currentTime := time.Now()
-
-	if c.HasDeltaState() {
-		if should, reason := c.ShouldCalculateDeltas(currentTime); should {
-			previous := c.LastSnapshot.(*performance.SystemStats)
-			c.calculateSystemDeltas(stats, previous, currentTime, config)
-		} else {
-			c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
-		}
-	}
-
-	c.UpdateDeltaState(stats, currentTime)
-	c.Logger().V(1).Info("Collected system statistics with delta support")
-	return stats, nil
-}
 
 func (c *SystemStatsCollector) calculateSystemDeltas(
 	current, previous *performance.SystemStats,

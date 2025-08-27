@@ -39,8 +39,6 @@ type NetworkCollector struct {
 	sysClassNetPath string
 }
 
-// Compile-time interface check
-var _ performance.DeltaAwareCollector = (*NetworkCollector)(nil)
 
 func init() {
 	performance.Register(performance.MetricTypeNetwork, performance.PartialNewContinuousPointCollector(

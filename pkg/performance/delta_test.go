@@ -19,7 +19,6 @@ func TestDeltaConfig(t *testing.T) {
 		config := DefaultDeltaConfig()
 
 		assert.Equal(t, DeltaModeDisabled, config.Mode)
-		assert.Nil(t, config.EnabledCollectors)
 		assert.Equal(t, 100*time.Millisecond, config.MinInterval)
 		assert.Equal(t, 5*time.Minute, config.MaxInterval)
 	})
@@ -31,16 +30,20 @@ func TestDeltaConfig(t *testing.T) {
 		assert.False(t, config.IsEnabled(MetricTypeNetwork))
 	})
 
-	t.Run("IsEnabled with basic mode", func(t *testing.T) {
-		config := DeltaConfig{
-			Mode: DeltaModeEnabled,
-			EnabledCollectors: map[MetricType]bool{
-				MetricTypeTCP: true,
-			},
-		}
+	t.Run("IsEnabled with enabled mode", func(t *testing.T) {
+		config := DeltaConfig{Mode: DeltaModeEnabled}
 
+		// All supported collectors should be enabled
 		assert.True(t, config.IsEnabled(MetricTypeTCP))
-		assert.False(t, config.IsEnabled(MetricTypeNetwork))
+		assert.True(t, config.IsEnabled(MetricTypeNetwork))
+		assert.True(t, config.IsEnabled(MetricTypeCPU))
+		assert.True(t, config.IsEnabled(MetricTypeSystem))
+		assert.True(t, config.IsEnabled(MetricTypeDisk))
+		assert.True(t, config.IsEnabled(MetricTypeMemory))
+		assert.True(t, config.IsEnabled(MetricTypeNUMAStats))
+
+		// Unsupported collectors should remain disabled (example: hypothetical future types)
+		// Currently all implemented collectors support delta calculation
 	})
 
 	t.Run("IsRatesEnabled", func(t *testing.T) {

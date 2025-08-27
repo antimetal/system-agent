@@ -27,8 +27,6 @@ func init() {
 	))
 }
 
-// Compile-time interface check
-var _ performance.DeltaAwareCollector = (*CPUCollector)(nil)
 
 // CPUCollector collects CPU statistics from /proc/stat
 //
@@ -70,7 +68,39 @@ func NewCPUCollector(logger logr.Logger, config performance.CollectionConfig) (*
 
 // Collect performs a one-shot collection of CPU statistics
 func (c *CPUCollector) Collect(ctx context.Context) (any, error) {
-	return c.collectCPUStats()
+	currentTime := time.Now()
+
+	// Collect current statistics
+	currentStats, err := c.collectCPUStats()
+	if err != nil {
+		return nil, fmt.Errorf("failed to collect CPU stats: %w", err)
+	}
+
+	// Check if delta calculation is enabled for this collector
+	if !c.Config.IsEnabled(performance.MetricTypeCPU) {
+		return currentStats, nil
+	}
+
+	shouldCalc, reason := c.ShouldCalculateDeltas(currentTime)
+	if !shouldCalc {
+		c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
+		if c.IsFirst {
+			c.UpdateDeltaState(currentStats, currentTime)
+		}
+		return currentStats, nil
+	}
+
+	previousStats, ok := c.LastSnapshot.([]*performance.CPUStats)
+	if !ok || previousStats == nil {
+		c.UpdateDeltaState(currentStats, currentTime)
+		return currentStats, nil
+	}
+
+	c.calculateCPUDeltas(currentStats, previousStats, currentTime, c.Config)
+	c.UpdateDeltaState(currentStats, currentTime)
+
+	c.Logger().V(1).Info("Collected CPU statistics with delta support", "cpus", len(currentStats))
+	return currentStats, nil
 }
 
 // collectCPUStats reads and parses /proc/stat for CPU statistics
@@ -234,27 +264,6 @@ func (c *CPUCollector) collectCPUStats() ([]*performance.CPUStats, error) {
 	return cpuStats, nil
 }
 
-func (c *CPUCollector) CollectWithDelta(ctx context.Context, config performance.DeltaConfig) (any, error) {
-	stats, err := c.collectCPUStats()
-	if err != nil {
-		return nil, fmt.Errorf("failed to collect CPU stats: %w", err)
-	}
-
-	currentTime := time.Now()
-
-	if c.HasDeltaState() {
-		if should, reason := c.ShouldCalculateDeltas(currentTime); should {
-			previous := c.LastSnapshot.([]*performance.CPUStats)
-			c.calculateCPUDeltas(stats, previous, currentTime, config)
-		} else {
-			c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
-		}
-	}
-
-	c.UpdateDeltaState(stats, currentTime)
-	c.Logger().V(1).Info("Collected CPU statistics with delta support", "cpus", len(stats))
-	return stats, nil
-}
 
 func (c *CPUCollector) calculateCPUDeltas(
 	current, previous []*performance.CPUStats,

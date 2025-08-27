@@ -30,8 +30,6 @@ func init() {
 	)
 }
 
-// Compile-time interface check
-var _ performance.DeltaAwareCollector = (*DiskCollector)(nil)
 
 const (
 	// diskstatsFieldCount is the expected number of fields in /proc/diskstats

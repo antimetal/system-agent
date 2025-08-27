@@ -47,8 +47,6 @@ const (
 type DeltaConfig struct {
 	// Mode controls what types of delta calculations are performed
 	Mode DeltaCalculationMode
-	// EnabledCollectors specifies which collectors should calculate deltas
-	EnabledCollectors map[MetricType]bool
 	// MinInterval is the minimum collection interval for meaningful rate calculations
 	// Rates won't be calculated if the actual interval is less than this value
 	MinInterval time.Duration
@@ -72,12 +70,7 @@ func (d DeltaConfig) IsEnabled(metricType MetricType) bool {
 		return false
 	}
 
-	// If EnabledCollectors is nil or empty, enable for all supported collectors
-	if len(d.EnabledCollectors) == 0 {
-		return d.isSupported(metricType)
-	}
-
-	return d.EnabledCollectors[metricType]
+	return d.isSupported(metricType)
 }
 
 // IsRatesEnabled returns whether rate calculation is enabled
@@ -88,7 +81,7 @@ func (d DeltaConfig) IsRatesEnabled() bool {
 // isSupported returns whether a metric type supports delta calculations
 func (d DeltaConfig) isSupported(metricType MetricType) bool {
 	switch metricType {
-	case MetricTypeTCP, MetricTypeNetwork, MetricTypeCPU, MetricTypeSystem, MetricTypeDisk:
+	case MetricTypeTCP, MetricTypeNetwork, MetricTypeCPU, MetricTypeSystem, MetricTypeDisk, MetricTypeMemory, MetricTypeNUMAStats:
 		return true
 	default:
 		return false
@@ -633,12 +626,6 @@ func (c *CollectionConfig) ApplyDefaults() {
 	// Apply delta defaults
 	if c.Delta.Mode == "" {
 		c.Delta.Mode = defaults.Delta.Mode
-	}
-	if c.Delta.EnabledCollectors == nil && defaults.Delta.EnabledCollectors != nil {
-		c.Delta.EnabledCollectors = make(map[MetricType]bool)
-		for k, v := range defaults.Delta.EnabledCollectors {
-			c.Delta.EnabledCollectors[k] = v
-		}
 	}
 	if c.Delta.MinInterval == 0 {
 		c.Delta.MinInterval = defaults.Delta.MinInterval

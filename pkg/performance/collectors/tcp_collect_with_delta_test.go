@@ -20,7 +20,7 @@ import (
 	"github.com/antimetal/agent/pkg/performance"
 )
 
-func TestTCPCollector_CollectWithDelta_Integration(t *testing.T) {
+func TestTCPCollector_Collect_Integration(t *testing.T) {
 	t.Run("full integration with mock filesystem", func(t *testing.T) {
 		// Create temporary directory structure
 		tempDir := t.TempDir()
@@ -66,9 +66,6 @@ TcpExt: 5 3 2 8 12 25 40 30 100
 				Mode:        performance.DeltaModeEnabled,
 				MinInterval: 100 * time.Millisecond,
 				MaxInterval: 5 * time.Minute,
-				EnabledCollectors: map[performance.MetricType]bool{
-					performance.MetricTypeTCP: true,
-				},
 			},
 		}
 
@@ -76,7 +73,7 @@ TcpExt: 5 3 2 8 12 25 40 30 100
 		require.NoError(t, err)
 
 		// First collection - should have no deltas
-		result1, err := collector.CollectWithDelta(context.Background(), config.Delta)
+		result1, err := collector.Collect(context.Background())
 		require.NoError(t, err)
 
 		stats1, ok := result1.(*performance.TCPStats)
@@ -109,7 +106,7 @@ TcpExt: 7 4 3 10 15 30 45 35 110
 		require.NoError(t, os.WriteFile(netstatPath, []byte(netstatContent2), 0644))
 
 		// Second collection - should have deltas
-		result2, err := collector.CollectWithDelta(context.Background(), config.Delta)
+		result2, err := collector.Collect(context.Background())
 		require.NoError(t, err)
 
 		stats2, ok := result2.(*performance.TCPStats)
@@ -175,7 +172,7 @@ Tcp: 1 200 120000 -1 1000 500 10 5 50 100000 95000 200 0 15 0
 
 		// Multiple collections should never have deltas
 		for i := 0; i < 3; i++ {
-			result, err := collector.CollectWithDelta(context.Background(), config.Delta)
+			result, err := collector.Collect(context.Background())
 			require.NoError(t, err)
 
 			stats, ok := result.(*performance.TCPStats)
@@ -210,9 +207,6 @@ Tcp: 1 200 120000 -1 10000 5000 100 50 50 1000000 950000 2000 0 150 0
 				Mode:        performance.DeltaModeEnabled,
 				MinInterval: 50 * time.Millisecond,
 				MaxInterval: 5 * time.Minute,
-				EnabledCollectors: map[performance.MetricType]bool{
-					performance.MetricTypeTCP: true,
-				},
 			},
 		}
 
@@ -220,7 +214,7 @@ Tcp: 1 200 120000 -1 10000 5000 100 50 50 1000000 950000 2000 0 150 0
 		require.NoError(t, err)
 
 		// First collection
-		_, err = collector.CollectWithDelta(context.Background(), config.Delta)
+		_, err = collector.Collect(context.Background())
 		require.NoError(t, err)
 
 		time.Sleep(60 * time.Millisecond)
@@ -231,7 +225,7 @@ Tcp: 1 200 120000 -1 100 50 5 2 25 5000 4500 10 0 8 0
 `
 		require.NoError(t, os.WriteFile(snmpPath, []byte(snmpContent2), 0644))
 
-		result, err := collector.CollectWithDelta(context.Background(), config.Delta)
+		result, err := collector.Collect(context.Background())
 		require.NoError(t, err)
 
 		stats, ok := result.(*performance.TCPStats)
@@ -254,9 +248,6 @@ Tcp: 1 200 120000 -1 100 50 5 2 25 5000 4500 10 0 8 0
 			HostProcPath: "/nonexistent/path",
 			Delta: performance.DeltaConfig{
 				Mode: performance.DeltaModeEnabled,
-				EnabledCollectors: map[performance.MetricType]bool{
-					performance.MetricTypeTCP: true,
-				},
 			},
 		}
 
@@ -264,7 +255,7 @@ Tcp: 1 200 120000 -1 100 50 5 2 25 5000 4500 10 0 8 0
 		require.NoError(t, err)
 
 		// Collection should fail gracefully
-		result, err := collector.CollectWithDelta(context.Background(), config.Delta)
+		result, err := collector.Collect(context.Background())
 		assert.Error(t, err)
 		assert.Nil(t, result)
 		assert.Contains(t, err.Error(), "no such file or directory")
@@ -287,9 +278,6 @@ Tcp: 1 200 120000 -1 1000 500 10 5 50 100000 95000 200 0 15 0
 				Mode:        performance.DeltaModeEnabled,
 				MinInterval: 500 * time.Millisecond, // High min interval
 				MaxInterval: 1 * time.Second,        // Low max interval
-				EnabledCollectors: map[performance.MetricType]bool{
-					performance.MetricTypeTCP: true,
-				},
 			},
 		}
 
@@ -297,21 +285,21 @@ Tcp: 1 200 120000 -1 1000 500 10 5 50 100000 95000 200 0 15 0
 		require.NoError(t, err)
 
 		// First collection
-		result1, err := collector.CollectWithDelta(context.Background(), config.Delta)
+		result1, err := collector.Collect(context.Background())
 		require.NoError(t, err)
 		stats1 := result1.(*performance.TCPStats)
 		assert.Nil(t, stats1.Delta) // No delta on first collection
 
 		// Second collection too soon (under MinInterval)
 		time.Sleep(100 * time.Millisecond) // Less than MinInterval
-		result2, err := collector.CollectWithDelta(context.Background(), config.Delta)
+		result2, err := collector.Collect(context.Background())
 		require.NoError(t, err)
 		stats2 := result2.(*performance.TCPStats)
 		assert.Nil(t, stats2.Delta) // Should skip delta calculation
 
 		// Third collection after too long (over MaxInterval)
 		time.Sleep(1200 * time.Millisecond) // More than MaxInterval
-		result3, err := collector.CollectWithDelta(context.Background(), config.Delta)
+		result3, err := collector.Collect(context.Background())
 		require.NoError(t, err)
 		stats3 := result3.(*performance.TCPStats)
 		assert.Nil(t, stats3.Delta) // Should skip delta calculation due to large interval

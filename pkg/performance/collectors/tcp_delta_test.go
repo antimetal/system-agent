@@ -29,7 +29,7 @@ func TestTCPCollector_DeltaAwareCollector(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify interface compliance
-		var _ performance.DeltaAwareCollector = collector
+		var _ performance.PointCollector = collector
 
 		// Test interface methods
 		assert.False(t, collector.HasDeltaState())
@@ -46,9 +46,6 @@ func TestTCPCollector_DeltaAwareCollector(t *testing.T) {
 				Mode:        performance.DeltaModeEnabled,
 				MinInterval: 100 * time.Millisecond,
 				MaxInterval: 5 * time.Minute,
-				EnabledCollectors: map[performance.MetricType]bool{
-					performance.MetricTypeTCP: true,
-				},
 			},
 		}
 

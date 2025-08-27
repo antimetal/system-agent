@@ -28,8 +28,6 @@ func init() {
 	))
 }
 
-// Compile-time interface check
-var _ performance.DeltaAwareCollector = (*MemoryCollector)(nil)
 
 // MemoryCollector collects runtime memory statistics from /proc/meminfo
 //
@@ -96,13 +94,42 @@ func NewMemoryCollector(logger logr.Logger, config performance.CollectionConfig)
 
 // Collect performs a one-shot collection of memory statistics
 func (c *MemoryCollector) Collect(ctx context.Context) (any, error) {
-	stats, err := c.collectMemoryStats()
+	currentTime := time.Now()
+
+	// Collect current statistics
+	currentStats, err := c.collectMemoryStats()
 	if err != nil {
 		return nil, fmt.Errorf("failed to collect memory stats: %w", err)
 	}
 
-	c.Logger().V(1).Info("Collected memory statistics")
-	return stats, nil
+	// Check if delta calculation is enabled for this collector
+	if !c.Config.IsEnabled(performance.MetricTypeMemory) {
+		c.Logger().V(1).Info("Collected memory statistics")
+		return currentStats, nil
+	}
+
+	shouldCalc, reason := c.ShouldCalculateDeltas(currentTime)
+	if !shouldCalc {
+		c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
+		if c.IsFirst {
+			c.UpdateDeltaState(currentStats, currentTime)
+		}
+		c.Logger().V(1).Info("Collected memory statistics")
+		return currentStats, nil
+	}
+
+	previousStats, ok := c.LastSnapshot.(*performance.MemoryStats)
+	if !ok || previousStats == nil {
+		c.UpdateDeltaState(currentStats, currentTime)
+		c.Logger().V(1).Info("Collected memory statistics")
+		return currentStats, nil
+	}
+
+	c.calculateMemoryDeltas(currentStats, previousStats, currentTime, c.Config)
+	c.UpdateDeltaState(currentStats, currentTime)
+
+	c.Logger().V(1).Info("Collected memory statistics with delta support")
+	return currentStats, nil
 }
 
 // collectMemoryStats reads and parses runtime memory statistics from /proc/meminfo and /proc/vmstat
@@ -375,27 +402,6 @@ func (c *MemoryCollector) collectSwapActivity(stats *performance.MemoryStats) {
 	}
 }
 
-func (c *MemoryCollector) CollectWithDelta(ctx context.Context, config performance.DeltaConfig) (any, error) {
-	stats, err := c.collectMemoryStats()
-	if err != nil {
-		return nil, fmt.Errorf("failed to collect memory stats: %w", err)
-	}
-
-	currentTime := time.Now()
-
-	if c.HasDeltaState() {
-		if should, reason := c.ShouldCalculateDeltas(currentTime); should {
-			previous := c.LastSnapshot.(*performance.MemoryStats)
-			c.calculateMemoryDeltas(stats, previous, currentTime, config)
-		} else {
-			c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
-		}
-	}
-
-	c.UpdateDeltaState(stats, currentTime)
-	c.Logger().V(1).Info("Collected memory statistics with delta support")
-	return stats, nil
-}
 
 func (c *MemoryCollector) calculateMemoryDeltas(
 	current, previous *performance.MemoryStats,

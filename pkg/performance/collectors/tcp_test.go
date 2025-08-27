@@ -41,9 +41,6 @@ TcpExt: 10 5 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 20 15 0 0 0 0 0 0 0 0 0 0 0 0 0 2
 func createTestTCPCollector(t *testing.T, procPath string) *collectors.TCPCollector {
 	config := performance.CollectionConfig{
 		HostProcPath: procPath,
-		EnabledCollectors: map[performance.MetricType]bool{
-			performance.MetricTypeTCP: true,
-		},
 	}
 	collector, err := collectors.NewTCPCollector(logr.Discard(), config)
 	require.NoError(t, err)

@@ -16,7 +16,7 @@ import (
 // BaseDeltaCollector provides common delta calculation functionality for collectors
 type BaseDeltaCollector struct {
 	BaseCollector
-	config       DeltaConfig
+	Config       DeltaConfig // Exported so collectors can access delta configuration
 	LastSnapshot any
 	LastTime     time.Time
 	IsFirst      bool
@@ -32,7 +32,7 @@ func NewBaseDeltaCollector(
 ) BaseDeltaCollector {
 	return BaseDeltaCollector{
 		BaseCollector: NewBaseCollector(metricType, name, logger, config, capabilities),
-		config:        config.Delta,
+		Config:        config.Delta,
 		IsFirst:       true,
 	}
 }
@@ -59,7 +59,7 @@ func (b *BaseDeltaCollector) UpdateDeltaState(snapshot any, currentTime time.Tim
 
 // ShouldCalculateDeltas checks if delta calculation should proceed
 func (b *BaseDeltaCollector) ShouldCalculateDeltas(currentTime time.Time) (bool, string) {
-	if b.config.Mode == DeltaModeDisabled {
+	if b.Config.Mode == DeltaModeDisabled {
 		return false, "delta calculation disabled"
 	}
 
@@ -73,12 +73,12 @@ func (b *BaseDeltaCollector) ShouldCalculateDeltas(currentTime time.Time) (bool,
 		return false, "time went backwards"
 	}
 
-	if interval > b.config.MaxInterval {
-		return false, fmt.Sprintf("interval too large (%v > %v)", interval, b.config.MaxInterval)
+	if interval > b.Config.MaxInterval {
+		return false, fmt.Sprintf("interval too large (%v > %v)", interval, b.Config.MaxInterval)
 	}
 
-	if interval < b.config.MinInterval {
-		return false, fmt.Sprintf("interval too small (%v < %v)", interval, b.config.MinInterval)
+	if interval < b.Config.MinInterval {
+		return false, fmt.Sprintf("interval too small (%v < %v)", interval, b.Config.MinInterval)
 	}
 
 	return true, ""
