@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,8 +20,7 @@ func TestDeltaConfig(t *testing.T) {
 		config := DefaultDeltaConfig()
 
 		assert.Equal(t, DeltaModeDisabled, config.Mode)
-		assert.True(t, config.EnabledCollectors[MetricTypeTCP])
-		assert.True(t, config.EnabledCollectors[MetricTypeNetwork])
+		assert.Nil(t, config.EnabledCollectors)
 		assert.Equal(t, 100*time.Millisecond, config.MinInterval)
 		assert.Equal(t, 5*time.Minute, config.MaxInterval)
 	})
@@ -50,12 +50,16 @@ func TestDeltaConfig(t *testing.T) {
 	})
 }
 
-func TestDeltaCalculator(t *testing.T) {
+func TestBaseDeltaCalculation(t *testing.T) {
 	t.Run("basic delta calculation", func(t *testing.T) {
-		config := DeltaConfig{Mode: DeltaModeEnabled}
-		calc := NewDeltaCalculator(config)
+		config := CollectionConfig{
+			Delta: DeltaConfig{Mode: DeltaModeEnabled},
+		}
+		collector := NewBaseDeltaCollector(
+			MetricTypeTCP, "test", logr.Discard(), config, CollectorCapabilities{},
+		)
 
-		delta, rate, reset := calc.CalculateUint64Delta(100, 50, time.Second)
+		delta, rate, reset := collector.CalculateUint64Delta(100, 50, time.Second)
 
 		assert.Equal(t, uint64(50), delta)
 		require.NotNil(t, rate) // Rates enabled in enabled mode
@@ -64,13 +68,17 @@ func TestDeltaCalculator(t *testing.T) {
 	})
 
 	t.Run("delta calculation with rates", func(t *testing.T) {
-		config := DeltaConfig{
-			Mode:        DeltaModeEnabled,
-			MinInterval: 100 * time.Millisecond,
+		config := CollectionConfig{
+			Delta: DeltaConfig{
+				Mode:        DeltaModeEnabled,
+				MinInterval: 100 * time.Millisecond,
+			},
 		}
-		calc := NewDeltaCalculator(config)
+		collector := NewBaseDeltaCollector(
+			MetricTypeTCP, "test", logr.Discard(), config, CollectorCapabilities{},
+		)
 
-		delta, rate, reset := calc.CalculateUint64Delta(150, 50, time.Second)
+		delta, rate, reset := collector.CalculateUint64Delta(150, 50, time.Second)
 
 		assert.Equal(t, uint64(100), delta)
 		require.NotNil(t, rate)
@@ -79,11 +87,15 @@ func TestDeltaCalculator(t *testing.T) {
 	})
 
 	t.Run("counter reset detection", func(t *testing.T) {
-		config := DeltaConfig{Mode: DeltaModeEnabled}
-		calc := NewDeltaCalculator(config)
+		config := CollectionConfig{
+			Delta: DeltaConfig{Mode: DeltaModeEnabled},
+		}
+		collector := NewBaseDeltaCollector(
+			MetricTypeTCP, "test", logr.Discard(), config, CollectorCapabilities{},
+		)
 
 		// Current < previous indicates reset (simple case)
-		delta, rate, reset := calc.CalculateUint64Delta(10, 100, time.Second)
+		delta, rate, reset := collector.CalculateUint64Delta(10, 100, time.Second)
 
 		assert.Equal(t, uint64(0), delta)
 		assert.Nil(t, rate)
@@ -91,7 +103,7 @@ func TestDeltaCalculator(t *testing.T) {
 
 		// Large previous value, small current value = still a reset
 		// (no special rollover handling)
-		delta2, rate2, reset2 := calc.CalculateUint64Delta(5, ^uint64(0)-10, time.Second)
+		delta2, rate2, reset2 := collector.CalculateUint64Delta(5, ^uint64(0)-10, time.Second)
 
 		assert.Equal(t, uint64(0), delta2)
 		assert.Nil(t, rate2)
@@ -99,34 +111,41 @@ func TestDeltaCalculator(t *testing.T) {
 	})
 
 	t.Run("should calculate deltas validation", func(t *testing.T) {
-		config := DeltaConfig{
-			Mode:        DeltaModeEnabled,
-			MaxInterval: 5 * time.Minute,
+		config := CollectionConfig{
+			Delta: DeltaConfig{
+				Mode:        DeltaModeEnabled,
+				MaxInterval: 5 * time.Minute,
+			},
 		}
-		calc := NewDeltaCalculator(config)
+		collector := NewBaseDeltaCollector(
+			MetricTypeTCP, "test", logr.Discard(), config, CollectorCapabilities{},
+		)
 
 		now := time.Now()
 
 		// First collection - should not calculate
-		should, reason := calc.ShouldCalculateDeltas(now, time.Time{}, true)
+		should, reason := collector.ShouldCalculateDeltas(now)
 		assert.False(t, should)
 		assert.Contains(t, reason, "no previous state")
 
+		// Set up previous state
+		collector.IsFirst = false
+		collector.LastTime = now.Add(-time.Second)
+
 		// Normal interval - should calculate
-		lastTime := now.Add(-time.Second)
-		should, reason = calc.ShouldCalculateDeltas(now, lastTime, false)
+		should, reason = collector.ShouldCalculateDeltas(now)
 		assert.True(t, should)
 		assert.Empty(t, reason)
 
 		// Interval too large - should not calculate
-		lastTime = now.Add(-10 * time.Minute)
-		should, reason = calc.ShouldCalculateDeltas(now, lastTime, false)
+		collector.LastTime = now.Add(-10 * time.Minute)
+		should, reason = collector.ShouldCalculateDeltas(now)
 		assert.False(t, should)
 		assert.Contains(t, reason, "interval too large")
 
 		// Time went backwards - should not calculate
-		lastTime = now.Add(time.Second)
-		should, reason = calc.ShouldCalculateDeltas(now, lastTime, false)
+		collector.LastTime = now.Add(time.Second)
+		should, reason = collector.ShouldCalculateDeltas(now)
 		assert.False(t, should)
 		assert.Contains(t, reason, "time went backwards")
 	})

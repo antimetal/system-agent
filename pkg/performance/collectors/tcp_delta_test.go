@@ -39,8 +39,7 @@ func TestTCPCollector_DeltaAwareCollector(t *testing.T) {
 		assert.Contains(t, capabilities, "RetransSegs")
 		assert.Contains(t, capabilities, "InSegs")
 
-		err = collector.ResetDeltaState()
-		assert.NoError(t, err)
+		collector.ResetDeltaState()
 	})
 
 	t.Run("delta calculation progression", func(t *testing.T) {

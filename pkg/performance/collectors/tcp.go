@@ -28,8 +28,7 @@ func init() {
 	))
 }
 
-// Compile-time interface checks
-var _ performance.PointCollector = (*TCPCollector)(nil)
+// Compile-time interface check
 var _ performance.DeltaAwareCollector = (*TCPCollector)(nil)
 
 // TCPCollector collects TCP connection statistics from /proc/net/snmp, /proc/net/netstat, /proc/net/tcp*

@@ -30,8 +30,7 @@ func init() {
 	)
 }
 
-// Compile-time interface checks
-var _ performance.PointCollector = (*DiskCollector)(nil)
+// Compile-time interface check
 var _ performance.DeltaAwareCollector = (*DiskCollector)(nil)
 
 const (

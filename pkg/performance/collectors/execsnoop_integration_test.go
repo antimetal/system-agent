@@ -27,7 +27,7 @@ func TestExecSnoopCollector_Integration(t *testing.T) {
 	// Check kernel version first - ExecSnoop requires 5.8+ for ring buffer support
 	currentKernel, err := kernel.GetCurrentVersion()
 	require.NoError(t, err, "Failed to get current kernel version")
-	
+
 	if !currentKernel.IsAtLeast(5, 8) {
 		t.Skipf("ExecSnoop collector requires kernel 5.8+ for ring buffer support, current kernel is %s", currentKernel.String())
 	}

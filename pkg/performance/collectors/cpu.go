@@ -27,8 +27,7 @@ func init() {
 	))
 }
 
-// Compile-time interface checks
-var _ performance.PointCollector = (*CPUCollector)(nil)
+// Compile-time interface check
 var _ performance.DeltaAwareCollector = (*CPUCollector)(nil)
 
 // CPUCollector collects CPU statistics from /proc/stat

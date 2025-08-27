@@ -39,8 +39,7 @@ type NetworkCollector struct {
 	sysClassNetPath string
 }
 
-// Compile-time interface checks
-var _ performance.Collector = (*NetworkCollector)(nil)
+// Compile-time interface check
 var _ performance.DeltaAwareCollector = (*NetworkCollector)(nil)
 
 func init() {

@@ -28,8 +28,7 @@ func init() {
 	))
 }
 
-// Compile-time interface checks
-var _ performance.PointCollector = (*SystemStatsCollector)(nil)
+// Compile-time interface check
 var _ performance.DeltaAwareCollector = (*SystemStatsCollector)(nil)
 
 // SystemStatsCollector collects system-wide activity statistics from /proc/stat

@@ -28,8 +28,7 @@ func init() {
 	))
 }
 
-// Compile-time interface checks
-var _ performance.PointCollector = (*NUMAStatsCollector)(nil)
+// Compile-time interface check
 var _ performance.DeltaAwareCollector = (*NUMAStatsCollector)(nil)
 
 // NUMAStatsCollector collects runtime NUMA performance statistics

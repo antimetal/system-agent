@@ -28,8 +28,7 @@ func init() {
 	))
 }
 
-// Compile-time interface checks
-var _ performance.PointCollector = (*MemoryCollector)(nil)
+// Compile-time interface check
 var _ performance.DeltaAwareCollector = (*MemoryCollector)(nil)
 
 // MemoryCollector collects runtime memory statistics from /proc/meminfo

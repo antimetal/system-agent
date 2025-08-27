@@ -46,10 +46,13 @@ const (
 // DeltaConfig represents configuration for delta/rate calculations
 type DeltaConfig struct {
 	// Mode controls what types of delta calculations are performed
-	Mode              DeltaCalculationMode // EnabledCollectors specifies which collectors should calculate deltas
-	EnabledCollectors map[MetricType]bool  // MinInterval is the minimum collection interval for meaningful rate calculations
+	Mode DeltaCalculationMode
+	// EnabledCollectors specifies which collectors should calculate deltas
+	EnabledCollectors map[MetricType]bool
+	// MinInterval is the minimum collection interval for meaningful rate calculations
 	// Rates won't be calculated if the actual interval is less than this value
-	MinInterval time.Duration // MaxInterval is the maximum interval before deltas are considered stale
+	MinInterval time.Duration
+	// MaxInterval is the maximum interval before deltas are considered stale
 	// If more time passes, the collector will reset and skip delta calculation
 	MaxInterval time.Duration
 }
@@ -57,14 +60,7 @@ type DeltaConfig struct {
 // DefaultDeltaConfig returns a sensible default delta configuration
 func DefaultDeltaConfig() DeltaConfig {
 	return DeltaConfig{
-		Mode: DeltaModeDisabled, // Backward compatible default
-		EnabledCollectors: map[MetricType]bool{
-			MetricTypeTCP:     true,
-			MetricTypeNetwork: true,
-			MetricTypeCPU:     true,
-			MetricTypeSystem:  true,
-			MetricTypeDisk:    true,
-		},
+		Mode:        DeltaModeDisabled,      // Backward compatible default
 		MinInterval: 100 * time.Millisecond, // Avoid division by very small intervals
 		MaxInterval: 5 * time.Minute,        // Reset state if gap is too large
 	}
@@ -102,9 +98,12 @@ func (d DeltaConfig) isSupported(metricType MetricType) bool {
 // DeltaMetadata contains metadata about delta calculations
 type DeltaMetadata struct {
 	// CollectionInterval is the actual time elapsed since the last collection
-	CollectionInterval   time.Duration // LastCollectionTime is when the previous collection occurred
-	LastCollectionTime   time.Time     // IsFirstCollection indicates if this is the first collection (no deltas available)
-	IsFirstCollection    bool          // CounterResetDetected indicates if a counter reset/rollover was detected
+	CollectionInterval time.Duration
+	// LastCollectionTime is when the previous collection occurred
+	LastCollectionTime time.Time
+	// IsFirstCollection indicates if this is the first collection (no deltas available)
+	IsFirstCollection bool
+	// CounterResetDetected indicates if a counter reset/rollover was detected
 	CounterResetDetected bool
 }
 

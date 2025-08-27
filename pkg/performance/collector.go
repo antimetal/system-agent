@@ -56,7 +56,7 @@ type DeltaAwareCollector interface {
 
 	// ResetDeltaState clears internal state for delta calculations
 	// Useful when collector configuration changes or after long gaps
-	ResetDeltaState() error
+	ResetDeltaState()
 
 	// GetDeltaCapabilities returns which metric fields support delta calculations
 	// Used for validation and configuration assistance
