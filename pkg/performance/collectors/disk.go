@@ -86,18 +86,16 @@ func (c *DiskCollector) Collect(ctx context.Context) (any, error) {
 
 	currentTime := time.Now()
 
-	// If delta calculation is enabled and we have previous state, calculate deltas
-	if c.Config.IsEnabled(performance.MetricTypeDisk) {
-		if c.HasDeltaState() {
-			if should, reason := c.ShouldCalculateDeltas(currentTime); should {
-				previous := c.LastSnapshot.([]*performance.DiskStats)
-				c.calculateDiskDeltas(stats, previous, currentTime, c.Config)
-			} else {
-				c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
-			}
+	// Calculate deltas if we have previous state
+	if c.HasDeltaState() {
+		if should, reason := c.ShouldCalculateDeltas(currentTime); should {
+			previous := c.LastSnapshot.([]*performance.DiskStats)
+			c.calculateDiskDeltas(stats, previous, currentTime, c.Config)
+		} else {
+			c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
 		}
-		c.UpdateDeltaState(stats, currentTime)
 	}
+	c.UpdateDeltaState(stats, currentTime)
 
 	c.Logger().V(1).Info("Collected disk statistics", "devices", len(stats))
 	return stats, nil

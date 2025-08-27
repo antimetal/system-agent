@@ -106,11 +106,6 @@ func (c *TCPCollector) Collect(ctx context.Context) (any, error) {
 		return nil, err
 	}
 
-	// Check if delta calculation is enabled for this collector
-	if !c.Config.IsEnabled(performance.MetricTypeTCP) {
-		return currentStats, nil
-	}
-
 	shouldCalc, reason := c.ShouldCalculateDeltas(currentTime)
 	if !shouldCalc {
 		c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)

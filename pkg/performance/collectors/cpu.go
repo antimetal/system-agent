@@ -78,11 +78,6 @@ func (c *CPUCollector) Collect(ctx context.Context) (any, error) {
 		return nil, fmt.Errorf("failed to collect CPU stats: %w", err)
 	}
 
-	// Check if delta calculation is enabled for this collector
-	if !c.Config.IsEnabled(performance.MetricTypeCPU) {
-		return currentStats, nil
-	}
-
 	shouldCalc, reason := c.ShouldCalculateDeltas(currentTime)
 	if !shouldCalc {
 		c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)

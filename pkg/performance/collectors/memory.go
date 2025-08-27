@@ -104,12 +104,6 @@ func (c *MemoryCollector) Collect(ctx context.Context) (any, error) {
 		return nil, fmt.Errorf("failed to collect memory stats: %w", err)
 	}
 
-	// Check if delta calculation is enabled for this collector
-	if !c.Config.IsEnabled(performance.MetricTypeMemory) {
-		c.Logger().V(1).Info("Collected memory statistics")
-		return currentStats, nil
-	}
-
 	shouldCalc, reason := c.ShouldCalculateDeltas(currentTime)
 	if !shouldCalc {
 		c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
