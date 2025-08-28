@@ -9,23 +9,29 @@ package performance
 import (
 	"fmt"
 	"os"
+	"time"
 
+	"github.com/antimetal/agent/pkg/metrics"
 	"github.com/go-logr/logr"
 )
 
-// Manager coordinates collector registration and will eventually handle collection
+// Manager coordinates collector registration and handles performance collection
 type Manager struct {
 	config      CollectionConfig
 	logger      logr.Logger
 	nodeName    string
 	clusterName string
+
+	// Direct metrics publisher (no wrapper needed)
+	publisher metrics.Publisher
 }
 
 type ManagerOptions struct {
-	Config      CollectionConfig
-	Logger      logr.Logger
-	NodeName    string
-	ClusterName string
+	Config           CollectionConfig
+	Logger           logr.Logger
+	NodeName         string
+	ClusterName      string
+	MetricsPublisher metrics.Publisher // Optional metrics publisher
 }
 
 func NewManager(opts ManagerOptions) (*Manager, error) {
@@ -68,6 +74,12 @@ func NewManager(opts ManagerOptions) (*Manager, error) {
 		clusterName: opts.ClusterName,
 	}
 
+	// Store the metrics publisher directly
+	if opts.MetricsPublisher != nil {
+		m.publisher = opts.MetricsPublisher
+		m.logger.Info("Metrics publisher enabled for performance manager")
+	}
+
 	return m, nil
 }
 
@@ -86,9 +98,48 @@ func (m *Manager) GetClusterName() string {
 	return m.clusterName
 }
 
-// TODO: Add methods for:
-// - Starting/stopping collection based on external signals
-// - Performing on-demand collection
-// - Managing collector lifecycle
-// - Integrating with BadgerDB for storage
-// - Forwarding data to intake service
+// PublishCollectorData publishes data from a specific collector
+func (m *Manager) PublishCollectorData(metricType metrics.MetricType, data any) error {
+	if m.publisher == nil {
+		return nil // Silently ignore if no publisher
+	}
+
+	// Create the event directly - no need for a wrapper
+	event := metrics.MetricEvent{
+		Timestamp:   time.Now(),
+		Source:      "performance-collector",
+		NodeName:    m.nodeName,
+		ClusterName: m.clusterName,
+		MetricType:  metricType,
+		EventType:   determineEventType(metricType),
+		Data:        data,
+	}
+
+	if err := m.publisher.Publish(event); err != nil {
+		m.logger.Error(err, "Failed to publish collector data", "metric_type", metricType)
+		return err
+	}
+
+	m.logger.V(2).Info("Published collector data", "metric_type", metricType)
+	return nil
+}
+
+// HasMetricsPublisher returns true if the manager has a metrics publisher configured
+func (m *Manager) HasMetricsPublisher() bool {
+	return m.publisher != nil
+}
+
+// determineEventType maps metric types to appropriate event types
+func determineEventType(metricType metrics.MetricType) metrics.EventType {
+	switch metricType {
+	case metrics.MetricTypeLoad, metrics.MetricTypeMemory, metrics.MetricTypeCPU,
+		metrics.MetricTypeDisk, metrics.MetricTypeNetwork, metrics.MetricTypeProcess,
+		metrics.MetricTypeCPUInfo, metrics.MetricTypeMemoryInfo, metrics.MetricTypeDiskInfo,
+		metrics.MetricTypeNetworkInfo, metrics.MetricTypeNUMAStats:
+		return metrics.EventTypeGauge
+	case metrics.MetricTypeSystem, metrics.MetricTypeTCP, metrics.MetricTypeKernel:
+		return metrics.EventTypeCounter
+	default:
+		return metrics.EventTypeGauge
+	}
+}

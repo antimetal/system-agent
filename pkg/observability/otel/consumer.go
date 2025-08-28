@@ -326,5 +326,5 @@ func NewConsumerFromConfig(config Config, logger logr.Logger) (*Consumer, error)
 	return consumer, nil
 }
 
-// Compile-time check that Consumer implements ConsumerInterface
-var _ metrics.ConsumerInterface = (*Consumer)(nil)
+// Compile-time check that Consumer implements Consumer interface
+var _ metrics.Consumer = (*Consumer)(nil)

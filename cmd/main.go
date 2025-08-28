@@ -33,6 +33,8 @@ import (
 	k8sagent "github.com/antimetal/agent/internal/kubernetes/agent"
 	"github.com/antimetal/agent/internal/kubernetes/cluster"
 	"github.com/antimetal/agent/internal/kubernetes/scheme"
+	"github.com/antimetal/agent/pkg/metrics"
+	"github.com/antimetal/agent/pkg/observability/otel"
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/antimetal/agent/pkg/resource/store"
 )
@@ -62,6 +64,17 @@ var (
 	pprofAddr              string
 	dataDir                string
 	hardwareUpdateInterval time.Duration
+	// Metrics pipeline options
+	enableMetrics bool
+	// OpenTelemetry options
+	enableOtel             bool
+	otelEndpoint           string
+	otelInsecure           bool
+	otelCompression        string
+	otelTimeout            time.Duration
+	otelServiceName        string
+	otelServiceVersion     string
+	metricsPublishInterval time.Duration
 )
 
 func init() {
@@ -113,6 +126,29 @@ func init() {
 		"The directory where the agent will place its persistent data files. Set to empty string for in-memory mode.")
 	flag.DurationVar(&hardwareUpdateInterval, "hardware-update-interval", 5*time.Minute,
 		"Interval for hardware topology discovery updates")
+
+	// Metrics pipeline flags
+	flag.BoolVar(&enableMetrics, "enable-metrics", false,
+		"Enable metrics pipeline for external monitoring systems")
+
+	// OpenTelemetry flags
+	flag.BoolVar(&enableOtel, "enable-otel", false,
+		"Enable OpenTelemetry metrics consumer")
+	flag.StringVar(&otelEndpoint, "otel-endpoint", "localhost:4317",
+		"OpenTelemetry OTLP gRPC endpoint")
+	flag.BoolVar(&otelInsecure, "otel-insecure", false,
+		"Disable TLS for OpenTelemetry connection")
+	flag.StringVar(&otelCompression, "otel-compression", "gzip",
+		"OpenTelemetry compression: gzip or none")
+	flag.DurationVar(&otelTimeout, "otel-timeout", 30*time.Second,
+		"OpenTelemetry export timeout")
+	flag.StringVar(&otelServiceName, "otel-service-name", "antimetal-agent",
+		"OpenTelemetry service name")
+	flag.StringVar(&otelServiceVersion, "otel-service-version", "",
+		"OpenTelemetry service version")
+
+	flag.DurationVar(&metricsPublishInterval, "metrics-publish-interval", 30*time.Second,
+		"Interval for publishing performance metrics")
 
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
@@ -237,11 +273,58 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Setup Metrics Bus (if enabled)
+	var metricsPublisher metrics.Publisher
+	if enableMetrics {
+		// Configure metrics pipeline
+		metricsConfig := buildMetricsConfig()
+		bus := metrics.NewMetricsBus(metricsConfig.Bus, mgr.GetLogger())
+
+		// Register OpenTelemetry consumer if enabled
+		if enableOtel {
+			// Build OpenTelemetry configuration separately
+			otelConfig := otel.BuildFromFlags(
+				enableOtel,
+				otelEndpoint,
+				otelInsecure,
+				otelCompression,
+				otelTimeout,
+				otelServiceName,
+				otelServiceVersion,
+				os.Getenv("NODE_NAME"),
+				"", // TODO: Get cluster name from cluster provider
+				getVersion(),
+			)
+			otelConsumer, err := otel.NewConsumerFromConfig(otelConfig, mgr.GetLogger())
+			if err != nil {
+				setupLog.Error(err, "unable to create OpenTelemetry consumer")
+				os.Exit(1)
+			}
+			if otelConsumer != nil {
+				// Register OpenTelemetry consumer directly
+				if err := bus.RegisterConsumer(otelConsumer); err != nil {
+					setupLog.Error(err, "unable to register OpenTelemetry consumer")
+					os.Exit(1)
+				}
+				setupLog.Info("OpenTelemetry consumer registered")
+			}
+		}
+
+		// Add bus to manager
+		if err := mgr.Add(bus); err != nil {
+			setupLog.Error(err, "unable to register metrics bus")
+			os.Exit(1)
+		}
+		metricsPublisher = bus
+		setupLog.Info("Metrics pipeline enabled")
+	}
+
 	// Setup Performance Manager (for hardware discovery)
 	perfManager, err := performance.NewManager(performance.ManagerOptions{
-		Logger:      mgr.GetLogger().WithName("performance-manager"),
-		NodeName:    os.Getenv("NODE_NAME"),
-		ClusterName: "",
+		Logger:           mgr.GetLogger().WithName("performance-manager"),
+		NodeName:         os.Getenv("NODE_NAME"),
+		ClusterName:      "",
+		MetricsPublisher: metricsPublisher,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to create performance manager")
@@ -311,4 +394,28 @@ func getProviderOptions(logger logr.Logger) cluster.ProviderOptions {
 			ClusterName:  eksClusterName,
 		},
 	}
+}
+
+func buildMetricsConfig() metrics.Config {
+	config := metrics.DefaultConfig()
+
+	// Apply environment variable overrides for general metrics
+	if os.Getenv("ENABLE_METRICS") == "true" {
+		enableMetrics = true
+	}
+
+	config.Enabled = enableMetrics
+
+	// Configure performance integration
+	config.Performance.Enabled = enableMetrics
+	config.Performance.PublishInterval = metricsPublishInterval
+	config.Performance.Source = "performance-collector"
+
+	config.ApplyDefaults()
+	return config
+}
+
+func getVersion() string {
+	// This could be set via ldflags during build
+	return "dev"
 }

@@ -1,0 +1,40 @@
+receivers:
+  # OTLP gRPC receiver - matches our consumer configuration
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Add resource detection processor to enrich metrics
+  resourcedetection:
+    detectors: [env, system, docker]
+    timeout: 2s
+  
+  # Batch processor for efficiency
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+
+exporters:
+  # Prometheus exporter for metrics visualization
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    namespace: "antimetal"
+    resource_to_telemetry_conversion:
+      enabled: true
+  
+  # Debug exporter for troubleshooting
+  debug:
+    verbosity: detailed
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [resourcedetection, batch]
+      exporters: [prometheus, debug]

@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/go-logr/logr"
 	"go.opentelemetry.io/otel/attribute"
@@ -33,15 +34,23 @@ const (
 	DefaultSectorSize = 512
 )
 
+// instrumentCacheEntry tracks an instrument and its last access time for LRU eviction
+type instrumentCacheEntry struct {
+	instrument   interface{}
+	lastAccessed time.Time
+}
+
 // Transformer converts generic metrics events to OpenTelemetry metrics
 type Transformer struct {
 	meter  metric.Meter
 	logger logr.Logger
 
-	// Cached instruments for performance
-	instruments map[string]interface{}
+	// Cached instruments for performance with LRU tracking
+	instruments map[string]*instrumentCacheEntry
 	// instrumentsMutex protects the instruments map
 	instrumentsMutex sync.RWMutex
+	// Track total cache size for eviction
+	cacheSize int
 }
 
 // NewTransformer creates a new OpenTelemetry metrics transformer
@@ -49,8 +58,68 @@ func NewTransformer(meter metric.Meter, logger logr.Logger) *Transformer {
 	return &Transformer{
 		meter:       meter,
 		logger:      logger.WithName("otel-transformer"),
-		instruments: make(map[string]interface{}),
+		instruments: make(map[string]*instrumentCacheEntry),
+		cacheSize:   0,
 	}
+}
+
+// evictOldestInstrument removes the oldest accessed instrument from cache
+// Must be called with write lock held
+func (t *Transformer) evictOldestInstrument() {
+	if len(t.instruments) == 0 {
+		return
+	}
+
+	var oldestKey string
+	var oldestTime time.Time
+	first := true
+
+	for key, entry := range t.instruments {
+		if first || entry.lastAccessed.Before(oldestTime) {
+			oldestKey = key
+			oldestTime = entry.lastAccessed
+			first = false
+		}
+	}
+
+	if oldestKey != "" {
+		delete(t.instruments, oldestKey)
+		t.cacheSize--
+		t.logger.V(2).Info("Evicted oldest instrument from cache", "key", oldestKey)
+	}
+}
+
+// getCachedInstrument retrieves an instrument from cache and updates access time
+func (t *Transformer) getCachedInstrument(key string) (interface{}, bool) {
+	t.instrumentsMutex.RLock()
+	entry, exists := t.instruments[key]
+	t.instrumentsMutex.RUnlock()
+
+	if exists {
+		// Update access time with write lock
+		t.instrumentsMutex.Lock()
+		entry.lastAccessed = time.Now()
+		t.instrumentsMutex.Unlock()
+		return entry.instrument, true
+	}
+	return nil, false
+}
+
+// setCachedInstrument stores an instrument in cache with eviction if needed
+func (t *Transformer) setCachedInstrument(key string, instrument interface{}) {
+	t.instrumentsMutex.Lock()
+	defer t.instrumentsMutex.Unlock()
+
+	// Check if we need to evict
+	if t.cacheSize >= MaxInstrumentCacheSize {
+		t.evictOldestInstrument()
+	}
+
+	t.instruments[key] = &instrumentCacheEntry{
+		instrument:   instrument,
+		lastAccessed: time.Now(),
+	}
+	t.cacheSize++
 }
 
 // TransformAndRecord converts a metrics event to OpenTelemetry format and records it.
@@ -104,11 +173,6 @@ func (t *Transformer) buildAttributes(event metrics.MetricEvent) []attribute.Key
 		attrs = append(attrs, attribute.String("service.instance.id", event.Source))
 	}
 
-	// Add custom tags
-	for k, v := range event.Tags {
-		attrs = append(attrs, attribute.String(k, v))
-	}
-
 	return attrs
 }
 
@@ -116,32 +180,12 @@ func (t *Transformer) buildAttributes(event metrics.MetricEvent) []attribute.Key
 func (t *Transformer) getOrCreateFloat64Gauge(name, description, unit string) (metric.Float64Gauge, error) {
 	key := fmt.Sprintf("f64_gauge_%s", name)
 
-	// First, try to read with read lock
-	t.instrumentsMutex.RLock()
-	if inst, exists := t.instruments[key]; exists {
-		t.instrumentsMutex.RUnlock()
-		return inst.(metric.Float64Gauge), nil
-	}
-	t.instrumentsMutex.RUnlock()
-
-	// Need to create instrument, acquire write lock
-	t.instrumentsMutex.Lock()
-	defer t.instrumentsMutex.Unlock()
-
-	// Double-check after acquiring write lock
-	if inst, exists := t.instruments[key]; exists {
+	// Try to get from cache
+	if inst, exists := t.getCachedInstrument(key); exists {
 		return inst.(metric.Float64Gauge), nil
 	}
 
-	// Check cache size limit
-	if len(t.instruments) >= MaxInstrumentCacheSize {
-		t.logger.V(1).Info("Instrument cache size limit reached", "current_size", len(t.instruments), "limit", MaxInstrumentCacheSize)
-		// Still create the instrument, but don't cache it
-		return t.meter.Float64Gauge(name,
-			metric.WithDescription(description),
-			metric.WithUnit(unit))
-	}
-
+	// Create new instrument
 	gauge, err := t.meter.Float64Gauge(name,
 		metric.WithDescription(description),
 		metric.WithUnit(unit))
@@ -149,7 +193,8 @@ func (t *Transformer) getOrCreateFloat64Gauge(name, description, unit string) (m
 		return nil, err
 	}
 
-	t.instruments[key] = gauge
+	// Cache it with automatic eviction if needed
+	t.setCachedInstrument(key, gauge)
 	return gauge, nil
 }
 
@@ -157,32 +202,12 @@ func (t *Transformer) getOrCreateFloat64Gauge(name, description, unit string) (m
 func (t *Transformer) getOrCreateInt64Gauge(name, description, unit string) (metric.Int64Gauge, error) {
 	key := fmt.Sprintf("i64_gauge_%s", name)
 
-	// First, try to read with read lock
-	t.instrumentsMutex.RLock()
-	if inst, exists := t.instruments[key]; exists {
-		t.instrumentsMutex.RUnlock()
-		return inst.(metric.Int64Gauge), nil
-	}
-	t.instrumentsMutex.RUnlock()
-
-	// Need to create instrument, acquire write lock
-	t.instrumentsMutex.Lock()
-	defer t.instrumentsMutex.Unlock()
-
-	// Double-check after acquiring write lock
-	if inst, exists := t.instruments[key]; exists {
+	// Try to get from cache
+	if inst, exists := t.getCachedInstrument(key); exists {
 		return inst.(metric.Int64Gauge), nil
 	}
 
-	// Check cache size limit
-	if len(t.instruments) >= MaxInstrumentCacheSize {
-		t.logger.V(1).Info("Instrument cache size limit reached", "current_size", len(t.instruments), "limit", MaxInstrumentCacheSize)
-		// Still create the instrument, but don't cache it
-		return t.meter.Int64Gauge(name,
-			metric.WithDescription(description),
-			metric.WithUnit(unit))
-	}
-
+	// Create new instrument
 	gauge, err := t.meter.Int64Gauge(name,
 		metric.WithDescription(description),
 		metric.WithUnit(unit))
@@ -190,7 +215,8 @@ func (t *Transformer) getOrCreateInt64Gauge(name, description, unit string) (met
 		return nil, err
 	}
 
-	t.instruments[key] = gauge
+	// Cache it with automatic eviction if needed
+	t.setCachedInstrument(key, gauge)
 	return gauge, nil
 }
 
@@ -198,32 +224,12 @@ func (t *Transformer) getOrCreateInt64Gauge(name, description, unit string) (met
 func (t *Transformer) getOrCreateInt64Counter(name, description, unit string) (metric.Int64Counter, error) {
 	key := fmt.Sprintf("i64_counter_%s", name)
 
-	// First, try to read with read lock
-	t.instrumentsMutex.RLock()
-	if inst, exists := t.instruments[key]; exists {
-		t.instrumentsMutex.RUnlock()
-		return inst.(metric.Int64Counter), nil
-	}
-	t.instrumentsMutex.RUnlock()
-
-	// Need to create instrument, acquire write lock
-	t.instrumentsMutex.Lock()
-	defer t.instrumentsMutex.Unlock()
-
-	// Double-check after acquiring write lock
-	if inst, exists := t.instruments[key]; exists {
+	// Try to get from cache
+	if inst, exists := t.getCachedInstrument(key); exists {
 		return inst.(metric.Int64Counter), nil
 	}
 
-	// Check cache size limit
-	if len(t.instruments) >= MaxInstrumentCacheSize {
-		t.logger.V(1).Info("Instrument cache size limit reached", "current_size", len(t.instruments), "limit", MaxInstrumentCacheSize)
-		// Still create the instrument, but don't cache it
-		return t.meter.Int64Counter(name,
-			metric.WithDescription(description),
-			metric.WithUnit(unit))
-	}
-
+	// Create new instrument
 	counter, err := t.meter.Int64Counter(name,
 		metric.WithDescription(description),
 		metric.WithUnit(unit))
@@ -231,7 +237,8 @@ func (t *Transformer) getOrCreateInt64Counter(name, description, unit string) (m
 		return nil, err
 	}
 
-	t.instruments[key] = counter
+	// Cache it with automatic eviction if needed
+	t.setCachedInstrument(key, counter)
 	return counter, nil
 }
 

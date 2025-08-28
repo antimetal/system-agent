@@ -147,7 +147,7 @@ func (c *Consumer) processEvents(events <-chan metrics.MetricEvent) {
 
 			if err := c.processEvent(event); err != nil {
 				c.logger.Error(err, "Failed to process metrics event",
-					"metric_type", event.MetricType,
+					"metric_type", string(event.MetricType),
 					"source", event.Source)
 				c.errorsCount.Add(1)
 				c.lastError.Store(&err)
@@ -164,7 +164,7 @@ func (c *Consumer) processEvents(events <-chan metrics.MetricEvent) {
 
 func (c *Consumer) processEvent(event metrics.MetricEvent) error {
 	// Check filters
-	if !c.config.ShouldLogMetricType(event.MetricType) {
+	if !c.config.ShouldLogMetricType(string(event.MetricType)) {
 		return nil
 	}
 	if !c.config.ShouldLogSource(event.Source) {
@@ -186,12 +186,12 @@ func (c *Consumer) updateStats(event metrics.MetricEvent) {
 	defer c.statsMutex.Unlock()
 
 	// Track by type
-	if counter, exists := c.eventsByType[event.MetricType]; exists {
+	if counter, exists := c.eventsByType[string(event.MetricType)]; exists {
 		counter.Add(1)
 	} else {
 		counter := &atomic.Uint64{}
 		counter.Store(1)
-		c.eventsByType[event.MetricType] = counter
+		c.eventsByType[string(event.MetricType)] = counter
 	}
 
 	// Track by source
@@ -211,7 +211,6 @@ func (c *Consumer) logEventJSON(event metrics.MetricEvent) error {
 		Consumer: consumerName,
 		Message:  "Metrics event received",
 		Event:    c.createEventSummary(event),
-		Tags:     event.Tags,
 	}
 
 	if c.config.IncludeTimestamp {
@@ -241,7 +240,7 @@ func (c *Consumer) logEventText(event metrics.MetricEvent) error {
 	var parts []string
 
 	// Basic event info (level 0+)
-	parts = append(parts, fmt.Sprintf("Event: %s", event.MetricType))
+	parts = append(parts, fmt.Sprintf("Event: %s", string(event.MetricType)))
 
 	if c.config.LogLevel >= 1 {
 		// Add detailed info (level 1+)
@@ -254,8 +253,8 @@ func (c *Consumer) logEventText(event metrics.MetricEvent) error {
 		if event.ClusterName != "" {
 			parts = append(parts, fmt.Sprintf("Cluster: %s", event.ClusterName))
 		}
-		if event.EventType != "" {
-			parts = append(parts, fmt.Sprintf("Type: %s", event.EventType))
+		if string(event.EventType) != "" {
+			parts = append(parts, fmt.Sprintf("Type: %s", string(event.EventType)))
 		}
 	}
 
@@ -269,15 +268,6 @@ func (c *Consumer) logEventText(event metrics.MetricEvent) error {
 				dataStr := c.formatDataForText(event.Data)
 				parts = append(parts, fmt.Sprintf("Data: %s", dataStr))
 			}
-		}
-
-		// Add tags
-		if len(event.Tags) > 0 {
-			var tagParts []string
-			for k, v := range event.Tags {
-				tagParts = append(tagParts, fmt.Sprintf("%s=%s", k, v))
-			}
-			parts = append(parts, fmt.Sprintf("Tags: {%s}", strings.Join(tagParts, ", ")))
 		}
 	}
 
@@ -302,8 +292,8 @@ func (c *Consumer) logEventText(event metrics.MetricEvent) error {
 // createEventSummary creates a summary of the event for JSON logging
 func (c *Consumer) createEventSummary(event metrics.MetricEvent) *MetricEventSummary {
 	summary := &MetricEventSummary{
-		MetricType:  event.MetricType,
-		EventType:   event.EventType,
+		MetricType:  string(event.MetricType),
+		EventType:   string(event.EventType),
 		Source:      event.Source,
 		NodeName:    event.NodeName,
 		ClusterName: event.ClusterName,
@@ -426,4 +416,4 @@ func NewConsumerFromConfig(config Config, logger logr.Logger) (*Consumer, error)
 }
 
 // Compile-time check that Consumer implements ConsumerInterface
-var _ metrics.ConsumerInterface = (*Consumer)(nil)
+var _ metrics.Consumer = (*Consumer)(nil)

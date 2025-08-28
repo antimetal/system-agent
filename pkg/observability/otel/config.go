@@ -232,6 +232,49 @@ func (c *Config) Validate() error {
 	return nil
 }
 
+// BuildFromFlags builds an OTEL configuration from command-line flags and environment variables.
+// Precedence order (highest to lowest): command-line flags → environment variables → defaults.
+// This follows the standard convention where explicit command-line arguments override env vars.
+func BuildFromFlags(enabled bool, endpoint string, insecure bool, compression string,
+	timeout time.Duration, serviceName, serviceVersion, nodeName, clusterName, version string) Config {
+
+	config := DefaultConfig()
+
+	// Apply environment variables first (lower priority)
+	config.ApplyEnvironmentVariables()
+
+	// Then apply flag values which override env vars (higher priority)
+	// Flag values always override env vars when explicitly provided
+	config.Enabled = enabled
+	config.Endpoint = endpoint
+	config.Insecure = insecure
+	config.Compression = CompressionType(compression)
+	config.Timeout = timeout
+	config.ServiceName = serviceName
+	config.ServiceVersion = serviceVersion
+
+	// Add node and cluster information as global tags
+	tags := []string{
+		"service:" + config.ServiceName,
+	}
+
+	if version != "" {
+		tags = append(tags, "version:"+version)
+	}
+
+	if nodeName != "" {
+		tags = append(tags, "node:"+nodeName)
+	}
+
+	if clusterName != "" {
+		tags = append(tags, "cluster:"+clusterName)
+	}
+
+	config.GlobalTags = tags
+
+	return config
+}
+
 // Common errors
 var (
 	ErrEndpointRequired       = fmt.Errorf("OTLP endpoint is required when OpenTelemetry is enabled")

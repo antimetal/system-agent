@@ -1,0 +1,117 @@
+package main
+
+import (
+	"fmt"
+	"log"
+	"time"
+
+	"github.com/antimetal/agent/pkg/metrics/consumers/otel"
+	"github.com/go-logr/zapr"
+	"go.uber.org/zap"
+)
+
+func main() {
+	// Setup logger
+	zapLog, err := zap.NewDevelopment()
+	if err != nil {
+		log.Fatalf("Failed to create logger: %v", err)
+	}
+	logger := zapr.NewLogger(zapLog)
+
+	// Setup OpenTelemetry consumer
+	otelConfig := otel.Config{
+		Enabled:     true,
+		Endpoint:    "localhost:4317",
+		Insecure:    true,
+		Compression: "gzip",
+		Timeout:     30 * time.Second,
+		ServiceName: "test-agent",
+		GlobalTags:  []string{"env:test"},
+	}
+
+	consumer, err := otel.NewConsumerFromConfig(otelConfig, logger)
+	if err != nil {
+		log.Fatalf("Failed to create OpenTelemetry consumer: %v", err)
+	}
+
+	if consumer == nil {
+		log.Fatal("OpenTelemetry consumer is nil - check if enabled")
+	}
+
+	logger.Info("OpenTelemetry consumer created successfully")
+
+	// Create a channel for events
+	events := make(chan otel.MetricEvent, 10)
+
+	// Start the consumer
+	if err := consumer.Start(events); err != nil {
+		log.Fatalf("Failed to start consumer: %v", err)
+	}
+
+	logger.Info("Consumer started - sending test metrics")
+
+	// Send some test metrics
+	go func() {
+		defer close(events)
+
+		for i := 0; i < 5; i++ {
+			// CPU metrics
+			cpuEvent := otel.MetricEvent{
+				Timestamp:   time.Now(),
+				Source:      "test-collector",
+				NodeName:    "test-node", 
+				ClusterName: "test-cluster",
+				MetricType:  "cpu",
+				EventType:   "stats",
+				Data: otel.CPUStats{
+					CPUIndex: int32(i % 4),
+					User:     uint64(1000 + i*100),
+					Nice:     10,
+					System:   uint64(500 + i*50),
+					Idle:     uint64(8000 - i*50),
+					IOWait:   50,
+				},
+				Tags: map[string]string{
+					"cpu": fmt.Sprintf("%d", i%4),
+				},
+			}
+
+			// Memory metrics
+			memoryEvent := otel.MetricEvent{
+				Timestamp:   time.Now(),
+				Source:      "test-collector",
+				NodeName:    "test-node",
+				ClusterName: "test-cluster",
+				MetricType:  "memory",
+				EventType:   "stats",
+				Data: otel.MemoryStats{
+					MemTotal:     8589934592, // 8GB
+					MemFree:      uint64(2147483648 - i*10485760), // 2GB - decreasing
+					MemAvailable: uint64(3221225472 - i*5242880),  // 3GB - decreasing
+					Buffers:      134217728,
+					Cached:       536870912,
+				},
+				Tags: map[string]string{
+					"host": "test-host",
+				},
+			}
+
+			logger.Info(fmt.Sprintf("Sending metrics batch %d", i+1))
+			
+			events <- cpuEvent
+			events <- memoryEvent
+
+			time.Sleep(2 * time.Second)
+		}
+	}()
+
+	// Wait for processing to complete
+	time.Sleep(15 * time.Second)
+
+	// Stop the consumer
+	if err := consumer.Stop(); err != nil {
+		logger.Error(err, "Failed to stop consumer")
+	}
+
+	logger.Info("Test completed successfully")
+}
