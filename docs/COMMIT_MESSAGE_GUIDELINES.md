@@ -43,11 +43,16 @@ The scope should be the name of the component affected (as perceived by the pers
 
 The following is the list of supported scopes:
 
+#### **Control Plane Client**
+- **`api`** - Protocol buffer definitions, gRPC service definitions
+- **`config`** - Config agent
+
+#### **Infrastructure Graph**
+- **`intake`** - gRPC intake worker, streaming, batching
+- **`resource`** - Resource store
+
 #### **Kubernetes Agent**
 - **`k8s`** - Kubernetes controller, agent, indexer, handler changes
-- **`intake`** - gRPC intake worker, streaming, batching 
-- **`resource`** - resource store
-- **`api`** - Protocol buffer definitions, gRPC service definitions
 
 #### **Performance Monitoring Agent**
 - **`perf`** - Performance monitoring system and collectors
