@@ -14,6 +14,7 @@
 package agentv1
 
 import (
+	v1 "github.com/antimetal/agent/pkg/api/antimetal/types/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -28,128 +29,61 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Collectors defines the data collection capabilities that an Antimetal Agent
-// can support. Each collector represents a specific type of system data
-// collection functionality.
-//
-// Agents use these values to declare their supported collectors and to
-// specify which collector to configure. The server uses this information
-// to send only relevant configurations and avoid sending configs for
-// unsupported collectors.
-type Collectors int32
+// ConfigError represents an error that occurred during configuration processing.
+// This error type is used to indicate problems with configuration objects
+// such as validation failures, missing required fields, or invalid values.
+type ConfigError struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// config_ref is a reference to the configuration object that caused the error.
+	ConfigRef *v1.ObjectRef `protobuf:"bytes,1,opt,name=config_ref,json=configRef,proto3" json:"config_ref,omitempty"`
+	// reason provides a human-readable explanation of what went wrong with the configuration.
+	Reason        string `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
 
-const (
-	Collectors_COLLECTORS_UNSPECIFIED Collectors = 0
-	// SYS_CPU enables collection of system CPU metrics.
-	// Typically collected from /proc/stat on Linux systems.
-	Collectors_COLLECTORS_SYS_CPU Collectors = 1
-	// CPU_INFO enables collection of CPU hardware information including
-	// processor model, architecture, cache sizes, and feature flags.
-	// Typically collected from /proc/cpuinfo on Linux systems.
-	Collectors_COLLECTORS_CPU_INFO Collectors = 2
-	// SYS_MEM enables collection of system memory utilization metrics
-	// including total, available, used, and cached memory statistics.
-	// Typically collected from /proc/meminfo on Linux systems.
-	Collectors_COLLECTORS_SYS_MEM Collectors = 3
-	// MEM_INFO enables collection of detailed memory configuration information
-	// including DIMM details, memory topology, and hardware specifications.
-	Collectors_COLLECTORS_MEM_INFO Collectors = 4
-	// SYS_DISK enables collection of disk I/O statistics and utilization
-	// including read/write operations, bytes transferred, and queue metrics.
-	// Typically collected from /proc/diskstats on Linux systems.
-	Collectors_COLLECTORS_SYS_DISK Collectors = 5
-	// DISK_INFO enables collection of storage device information including
-	// device model, capacity, filesystem details, and mount point information.
-	// May require access to block device information and mount tables.
-	Collectors_COLLECTORS_DISK_INFO Collectors = 6
-	// KERNEL_MSG enables collection of kernel log messages and system events.
-	// Typically requires access to kernel ring buffer (/dev/kmsg).
-	Collectors_COLLECTORS_KERNEL_MSG Collectors = 7
-	// SYS_LOAD enables collection of system load average metrics including
-	// 1-minute, 5-minute, and 15-minute load averages and process counts.
-	// Typically collected from /proc/loadavg on Linux systems.
-	Collectors_COLLECTORS_SYS_LOAD Collectors = 8
-	// SYS_NET enables collection of system network I/O statistics including
-	// bytes/packets transmitted and received per network interface.
-	// Typically collected from /proc/net/dev on Linux systems.
-	Collectors_COLLECTORS_SYS_NET Collectors = 9
-	// NETWORK_INFO enables collection of network interface configuration
-	// including IP addresses, MAC addresses, MTU, and interface status.
-	Collectors_COLLECTORS_NETWORK_INFO Collectors = 10
-	// SYS_NUMA enables collection of NUMA (Non-Uniform Memory Access) topology
-	// and memory allocation statistics across NUMA nodes.
-	// Typically collected from /proc/buddyinfo and /sys/devices/system/node.
-	Collectors_COLLECTORS_SYS_NUMA Collectors = 11
-	// SYS_PROC enables collection of per-process statistics.
-	// Typically collected from /proc/[pid]/ directories on Linux systems.
-	Collectors_COLLECTORS_SYS_PROC Collectors = 12
-	// SYS_TCP enables collection of TCP connection statistics including
-	// connection states, socket statistics, and network protocol metrics.
-	// Typically collected from /proc/net/tcp and related files.
-	Collectors_COLLECTORS_SYS_TCP Collectors = 13
-)
+func (x *ConfigError) Reset() {
+	*x = ConfigError{}
+	mi := &file_antimetal_agent_v1_config_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
 
-// Enum value maps for Collectors.
-var (
-	Collectors_name = map[int32]string{
-		0:  "COLLECTORS_UNSPECIFIED",
-		1:  "COLLECTORS_SYS_CPU",
-		2:  "COLLECTORS_CPU_INFO",
-		3:  "COLLECTORS_SYS_MEM",
-		4:  "COLLECTORS_MEM_INFO",
-		5:  "COLLECTORS_SYS_DISK",
-		6:  "COLLECTORS_DISK_INFO",
-		7:  "COLLECTORS_KERNEL_MSG",
-		8:  "COLLECTORS_SYS_LOAD",
-		9:  "COLLECTORS_SYS_NET",
-		10: "COLLECTORS_NETWORK_INFO",
-		11: "COLLECTORS_SYS_NUMA",
-		12: "COLLECTORS_SYS_PROC",
-		13: "COLLECTORS_SYS_TCP",
+func (x *ConfigError) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfigError) ProtoMessage() {}
+
+func (x *ConfigError) ProtoReflect() protoreflect.Message {
+	mi := &file_antimetal_agent_v1_config_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
 	}
-	Collectors_value = map[string]int32{
-		"COLLECTORS_UNSPECIFIED":  0,
-		"COLLECTORS_SYS_CPU":      1,
-		"COLLECTORS_CPU_INFO":     2,
-		"COLLECTORS_SYS_MEM":      3,
-		"COLLECTORS_MEM_INFO":     4,
-		"COLLECTORS_SYS_DISK":     5,
-		"COLLECTORS_DISK_INFO":    6,
-		"COLLECTORS_KERNEL_MSG":   7,
-		"COLLECTORS_SYS_LOAD":     8,
-		"COLLECTORS_SYS_NET":      9,
-		"COLLECTORS_NETWORK_INFO": 10,
-		"COLLECTORS_SYS_NUMA":     11,
-		"COLLECTORS_SYS_PROC":     12,
-		"COLLECTORS_SYS_TCP":      13,
-	}
-)
-
-func (x Collectors) Enum() *Collectors {
-	p := new(Collectors)
-	*p = x
-	return p
+	return mi.MessageOf(x)
 }
 
-func (x Collectors) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (Collectors) Descriptor() protoreflect.EnumDescriptor {
-	return file_antimetal_agent_v1_config_proto_enumTypes[0].Descriptor()
-}
-
-func (Collectors) Type() protoreflect.EnumType {
-	return &file_antimetal_agent_v1_config_proto_enumTypes[0]
-}
-
-func (x Collectors) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use Collectors.Descriptor instead.
-func (Collectors) EnumDescriptor() ([]byte, []int) {
+// Deprecated: Use ConfigError.ProtoReflect.Descriptor instead.
+func (*ConfigError) Descriptor() ([]byte, []int) {
 	return file_antimetal_agent_v1_config_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *ConfigError) GetConfigRef() *v1.ObjectRef {
+	if x != nil {
+		return x.ConfigRef
+	}
+	return nil
+}
+
+func (x *ConfigError) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
 }
 
 // HostStatsCollectionConfig configures collection of host system statistics.
@@ -158,18 +92,7 @@ func (Collectors) EnumDescriptor() ([]byte, []int) {
 type HostStatsCollectionConfig struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// collector specifies which system statistics collector to configure.
-	//
-	// Supported collectors:
-	//   - COLLECTORS_SYS_CPU
-	//   - COLLECTORS_SYS_MEM
-	//   - COLLECTORS_SYS_DISK
-	//   - COLLECTORS_KERNEL_MSG
-	//   - COLLECTORS_SYS_LOAD
-	//   - COLLECTORS_SYS_NET
-	//   - COLLECTORS_SYS_NUMA
-	//   - COLLECTORS_SYS_PROC
-	//   - COLLECTORS_SYS_TCP
-	Collector Collectors `protobuf:"varint,1,opt,name=collector,proto3,enum=antimetal.agent.v1.Collectors" json:"collector,omitempty"`
+	Collector string `protobuf:"bytes,1,opt,name=collector,proto3" json:"collector,omitempty"`
 	// interval specifies the collection interval in seconds if applicable
 	IntervalSeconds uint32 `protobuf:"varint,2,opt,name=interval_seconds,json=intervalSeconds,proto3" json:"interval_seconds,omitempty"`
 	unknownFields   protoimpl.UnknownFields
@@ -178,7 +101,7 @@ type HostStatsCollectionConfig struct {
 
 func (x *HostStatsCollectionConfig) Reset() {
 	*x = HostStatsCollectionConfig{}
-	mi := &file_antimetal_agent_v1_config_proto_msgTypes[0]
+	mi := &file_antimetal_agent_v1_config_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -190,7 +113,7 @@ func (x *HostStatsCollectionConfig) String() string {
 func (*HostStatsCollectionConfig) ProtoMessage() {}
 
 func (x *HostStatsCollectionConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_antimetal_agent_v1_config_proto_msgTypes[0]
+	mi := &file_antimetal_agent_v1_config_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -203,14 +126,14 @@ func (x *HostStatsCollectionConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HostStatsCollectionConfig.ProtoReflect.Descriptor instead.
 func (*HostStatsCollectionConfig) Descriptor() ([]byte, []int) {
-	return file_antimetal_agent_v1_config_proto_rawDescGZIP(), []int{0}
+	return file_antimetal_agent_v1_config_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *HostStatsCollectionConfig) GetCollector() Collectors {
+func (x *HostStatsCollectionConfig) GetCollector() string {
 	if x != nil {
 		return x.Collector
 	}
-	return Collectors_COLLECTORS_UNSPECIFIED
+	return ""
 }
 
 func (x *HostStatsCollectionConfig) GetIntervalSeconds() uint32 {
@@ -224,27 +147,14 @@ var File_antimetal_agent_v1_config_proto protoreflect.FileDescriptor
 
 const file_antimetal_agent_v1_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1fantimetal/agent/v1/config.proto\x12\x12antimetal.agent.v1\"\x84\x01\n" +
-	"\x19HostStatsCollectionConfig\x12<\n" +
-	"\tcollector\x18\x01 \x01(\x0e2\x1e.antimetal.agent.v1.CollectorsR\tcollector\x12)\n" +
-	"\x10interval_seconds\x18\x02 \x01(\rR\x0fintervalSeconds*\xf0\x02\n" +
+	"\x1fantimetal/agent/v1/config.proto\x12\x12antimetal.agent.v1\x1a\x1fantimetal/types/v1/object.proto\"c\n" +
+	"\vConfigError\x12<\n" +
 	"\n" +
-	"Collectors\x12\x1a\n" +
-	"\x16COLLECTORS_UNSPECIFIED\x10\x00\x12\x16\n" +
-	"\x12COLLECTORS_SYS_CPU\x10\x01\x12\x17\n" +
-	"\x13COLLECTORS_CPU_INFO\x10\x02\x12\x16\n" +
-	"\x12COLLECTORS_SYS_MEM\x10\x03\x12\x17\n" +
-	"\x13COLLECTORS_MEM_INFO\x10\x04\x12\x17\n" +
-	"\x13COLLECTORS_SYS_DISK\x10\x05\x12\x18\n" +
-	"\x14COLLECTORS_DISK_INFO\x10\x06\x12\x19\n" +
-	"\x15COLLECTORS_KERNEL_MSG\x10\a\x12\x17\n" +
-	"\x13COLLECTORS_SYS_LOAD\x10\b\x12\x16\n" +
-	"\x12COLLECTORS_SYS_NET\x10\t\x12\x1b\n" +
-	"\x17COLLECTORS_NETWORK_INFO\x10\n" +
-	"\x12\x17\n" +
-	"\x13COLLECTORS_SYS_NUMA\x10\v\x12\x17\n" +
-	"\x13COLLECTORS_SYS_PROC\x10\f\x12\x16\n" +
-	"\x12COLLECTORS_SYS_TCP\x10\rB\xce\x01\n" +
+	"config_ref\x18\x01 \x01(\v2\x1d.antimetal.types.v1.ObjectRefR\tconfigRef\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"d\n" +
+	"\x19HostStatsCollectionConfig\x12\x1c\n" +
+	"\tcollector\x18\x01 \x01(\tR\tcollector\x12)\n" +
+	"\x10interval_seconds\x18\x02 \x01(\rR\x0fintervalSecondsB\xce\x01\n" +
 	"\x16com.antimetal.agent.v1B\vConfigProtoP\x01Z=github.com/antimetal/agent/pkg/api/antimetal/agent/v1;agentv1\xa2\x02\x03AAX\xaa\x02\x12Antimetal.Agent.V1\xca\x02\x12Antimetal\\Agent\\V1\xe2\x02\x1eAntimetal\\Agent\\V1\\GPBMetadata\xea\x02\x14Antimetal::Agent::V1b\x06proto3"
 
 var (
@@ -259,14 +169,14 @@ func file_antimetal_agent_v1_config_proto_rawDescGZIP() []byte {
 	return file_antimetal_agent_v1_config_proto_rawDescData
 }
 
-var file_antimetal_agent_v1_config_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_antimetal_agent_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_antimetal_agent_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_antimetal_agent_v1_config_proto_goTypes = []any{
-	(Collectors)(0),                   // 0: antimetal.agent.v1.Collectors
+	(*ConfigError)(nil),               // 0: antimetal.agent.v1.ConfigError
 	(*HostStatsCollectionConfig)(nil), // 1: antimetal.agent.v1.HostStatsCollectionConfig
+	(*v1.ObjectRef)(nil),              // 2: antimetal.types.v1.ObjectRef
 }
 var file_antimetal_agent_v1_config_proto_depIdxs = []int32{
-	0, // 0: antimetal.agent.v1.HostStatsCollectionConfig.collector:type_name -> antimetal.agent.v1.Collectors
+	2, // 0: antimetal.agent.v1.ConfigError.config_ref:type_name -> antimetal.types.v1.ObjectRef
 	1, // [1:1] is the sub-list for method output_type
 	1, // [1:1] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
@@ -284,14 +194,13 @@ func file_antimetal_agent_v1_config_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_antimetal_agent_v1_config_proto_rawDesc), len(file_antimetal_agent_v1_config_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   1,
+			NumEnums:      0,
+			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_antimetal_agent_v1_config_proto_goTypes,
 		DependencyIndexes: file_antimetal_agent_v1_config_proto_depIdxs,
-		EnumInfos:         file_antimetal_agent_v1_config_proto_enumTypes,
 		MessageInfos:      file_antimetal_agent_v1_config_proto_msgTypes,
 	}.Build()
 	File_antimetal_agent_v1_config_proto = out.File
