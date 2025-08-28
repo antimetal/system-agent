@@ -16,7 +16,6 @@ package typesv1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -85,108 +84,14 @@ func (x *TypeDescriptor) GetType() string {
 	return ""
 }
 
-// Object is an instance of a type specified in TypeDescriptor
-type Object struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// type of the object
-	Type *TypeDescriptor `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	// name of the object
-	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	// data SHOULD be the protobuf serialized object data
-	Data []byte `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
-	// The TTL feature is meant to support cleaning up objects in the event of
-	// a systems-agent removal/failure. For example, if the Kubernetes cluster
-	// where the systems agent is deployed in is spun down, then all the resources
-	// from the cluster will be deleted from the graph once the TTL expires.
-	Ttl *durationpb.Duration `protobuf:"bytes,4,opt,name=ttl,proto3" json:"ttl,omitempty"`
-	// version of the object. It is used to keep track of the state of individual objects.
-	//
-	// NOTE: the version string should only be used for comparisions!
-	// It is not guaranteed that the version string is monotonically increasing.
-	Version       string `protobuf:"bytes,5,opt,name=version,proto3" json:"version,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Object) Reset() {
-	*x = Object{}
-	mi := &file_antimetal_types_v1_types_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Object) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Object) ProtoMessage() {}
-
-func (x *Object) ProtoReflect() protoreflect.Message {
-	mi := &file_antimetal_types_v1_types_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Object.ProtoReflect.Descriptor instead.
-func (*Object) Descriptor() ([]byte, []int) {
-	return file_antimetal_types_v1_types_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *Object) GetType() *TypeDescriptor {
-	if x != nil {
-		return x.Type
-	}
-	return nil
-}
-
-func (x *Object) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *Object) GetData() []byte {
-	if x != nil {
-		return x.Data
-	}
-	return nil
-}
-
-func (x *Object) GetTtl() *durationpb.Duration {
-	if x != nil {
-		return x.Ttl
-	}
-	return nil
-}
-
-func (x *Object) GetVersion() string {
-	if x != nil {
-		return x.Version
-	}
-	return ""
-}
-
 var File_antimetal_types_v1_types_proto protoreflect.FileDescriptor
 
 const file_antimetal_types_v1_types_proto_rawDesc = "" +
 	"\n" +
-	"\x1eantimetal/types/v1/types.proto\x12\x12antimetal.types.v1\x1a\x1egoogle/protobuf/duration.proto\"8\n" +
+	"\x1eantimetal/types/v1/types.proto\x12\x12antimetal.types.v1\"8\n" +
 	"\x0eTypeDescriptor\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x12\n" +
-	"\x04type\x18\x02 \x01(\tR\x04type\"\xaf\x01\n" +
-	"\x06Object\x126\n" +
-	"\x04type\x18\x01 \x01(\v2\".antimetal.types.v1.TypeDescriptorR\x04type\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
-	"\x04data\x18\x03 \x01(\fR\x04data\x12+\n" +
-	"\x03ttl\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\x03ttl\x12\x18\n" +
-	"\aversion\x18\x05 \x01(\tR\aversionB\xcd\x01\n" +
+	"\x04type\x18\x02 \x01(\tR\x04typeB\xcd\x01\n" +
 	"\x16com.antimetal.types.v1B\n" +
 	"TypesProtoP\x01Z=github.com/antimetal/agent/pkg/api/antimetal/types/v1;typesv1\xa2\x02\x03ATX\xaa\x02\x12Antimetal.Types.V1\xca\x02\x12Antimetal\\Types\\V1\xe2\x02\x1eAntimetal\\Types\\V1\\GPBMetadata\xea\x02\x14Antimetal::Types::V1b\x06proto3"
 
@@ -202,20 +107,16 @@ func file_antimetal_types_v1_types_proto_rawDescGZIP() []byte {
 	return file_antimetal_types_v1_types_proto_rawDescData
 }
 
-var file_antimetal_types_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_antimetal_types_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_antimetal_types_v1_types_proto_goTypes = []any{
-	(*TypeDescriptor)(nil),      // 0: antimetal.types.v1.TypeDescriptor
-	(*Object)(nil),              // 1: antimetal.types.v1.Object
-	(*durationpb.Duration)(nil), // 2: google.protobuf.Duration
+	(*TypeDescriptor)(nil), // 0: antimetal.types.v1.TypeDescriptor
 }
 var file_antimetal_types_v1_types_proto_depIdxs = []int32{
-	0, // 0: antimetal.types.v1.Object.type:type_name -> antimetal.types.v1.TypeDescriptor
-	2, // 1: antimetal.types.v1.Object.ttl:type_name -> google.protobuf.Duration
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	0, // [0:0] is the sub-list for method output_type
+	0, // [0:0] is the sub-list for method input_type
+	0, // [0:0] is the sub-list for extension type_name
+	0, // [0:0] is the sub-list for extension extendee
+	0, // [0:0] is the sub-list for field type_name
 }
 
 func init() { file_antimetal_types_v1_types_proto_init() }
@@ -229,7 +130,7 @@ func file_antimetal_types_v1_types_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_antimetal_types_v1_types_proto_rawDesc), len(file_antimetal_types_v1_types_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   1,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

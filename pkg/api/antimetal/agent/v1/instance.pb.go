@@ -14,6 +14,7 @@
 package agentv1
 
 import (
+	v1 "github.com/antimetal/agent/pkg/api/antimetal/runtime/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -160,9 +161,15 @@ type Instance struct {
 	// The id SHOULD remain unchanged for the lifetime of the Agent process.
 	Id []byte `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	// build used for the running Antimetal Agent process.
-	Build         *Build `protobuf:"bytes,2,opt,name=build,proto3" json:"build,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Build *Build `protobuf:"bytes,2,opt,name=build,proto3" json:"build,omitempty"`
+	// linux_runtime contains Linux-specific runtime information including
+	// system resources, kernel version, installed packages, and OS details.
+	LinuxRuntime *v1.Linux `protobuf:"bytes,3,opt,name=linux_runtime,json=linuxRuntime,proto3" json:"linux_runtime,omitempty"`
+	// supported_collectors lists the data collection modules that this
+	// agent instance supports. E.g. "sys.cpu", "sys.mem", etc.
+	SupportedCollectors []string `protobuf:"bytes,4,rep,name=supported_collectors,json=supportedCollectors,proto3" json:"supported_collectors,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *Instance) Reset() {
@@ -209,21 +216,37 @@ func (x *Instance) GetBuild() *Build {
 	return nil
 }
 
+func (x *Instance) GetLinuxRuntime() *v1.Linux {
+	if x != nil {
+		return x.LinuxRuntime
+	}
+	return nil
+}
+
+func (x *Instance) GetSupportedCollectors() []string {
+	if x != nil {
+		return x.SupportedCollectors
+	}
+	return nil
+}
+
 var File_antimetal_agent_v1_instance_proto protoreflect.FileDescriptor
 
 const file_antimetal_agent_v1_instance_proto_rawDesc = "" +
 	"\n" +
-	"!antimetal/agent/v1/instance.proto\x12\x12antimetal.agent.v1\"S\n" +
+	"!antimetal/agent/v1/instance.proto\x12\x12antimetal.agent.v1\x1a antimetal/runtime/v1/linux.proto\"S\n" +
 	"\x0fSemanticVersion\x12\x14\n" +
 	"\x05major\x18\x01 \x01(\rR\x05major\x12\x14\n" +
 	"\x05minor\x18\x02 \x01(\rR\x05minor\x12\x14\n" +
 	"\x05patch\x18\x03 \x01(\rR\x05patch\"b\n" +
 	"\x05Build\x12=\n" +
 	"\aversion\x18\x01 \x01(\v2#.antimetal.agent.v1.SemanticVersionR\aversion\x12\x1a\n" +
-	"\brevision\x18\x02 \x01(\tR\brevision\"K\n" +
+	"\brevision\x18\x02 \x01(\tR\brevision\"\xc0\x01\n" +
 	"\bInstance\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\fR\x02id\x12/\n" +
-	"\x05build\x18\x02 \x01(\v2\x19.antimetal.agent.v1.BuildR\x05buildB\xd0\x01\n" +
+	"\x05build\x18\x02 \x01(\v2\x19.antimetal.agent.v1.BuildR\x05build\x12@\n" +
+	"\rlinux_runtime\x18\x03 \x01(\v2\x1b.antimetal.runtime.v1.LinuxR\flinuxRuntime\x121\n" +
+	"\x14supported_collectors\x18\x04 \x03(\tR\x13supportedCollectorsB\xd0\x01\n" +
 	"\x16com.antimetal.agent.v1B\rInstanceProtoP\x01Z=github.com/antimetal/agent/pkg/api/antimetal/agent/v1;agentv1\xa2\x02\x03AAX\xaa\x02\x12Antimetal.Agent.V1\xca\x02\x12Antimetal\\Agent\\V1\xe2\x02\x1eAntimetal\\Agent\\V1\\GPBMetadata\xea\x02\x14Antimetal::Agent::V1b\x06proto3"
 
 var (
@@ -243,15 +266,17 @@ var file_antimetal_agent_v1_instance_proto_goTypes = []any{
 	(*SemanticVersion)(nil), // 0: antimetal.agent.v1.SemanticVersion
 	(*Build)(nil),           // 1: antimetal.agent.v1.Build
 	(*Instance)(nil),        // 2: antimetal.agent.v1.Instance
+	(*v1.Linux)(nil),        // 3: antimetal.runtime.v1.Linux
 }
 var file_antimetal_agent_v1_instance_proto_depIdxs = []int32{
 	0, // 0: antimetal.agent.v1.Build.version:type_name -> antimetal.agent.v1.SemanticVersion
 	1, // 1: antimetal.agent.v1.Instance.build:type_name -> antimetal.agent.v1.Build
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	3, // 2: antimetal.agent.v1.Instance.linux_runtime:type_name -> antimetal.runtime.v1.Linux
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_antimetal_agent_v1_instance_proto_init() }
