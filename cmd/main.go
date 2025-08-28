@@ -34,6 +34,9 @@ import (
 	"github.com/antimetal/agent/internal/kubernetes/cluster"
 	"github.com/antimetal/agent/internal/kubernetes/scheme"
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
+	"github.com/antimetal/agent/pkg/metrics"
+	"github.com/antimetal/agent/pkg/metrics/consumers/debug"
+	"github.com/antimetal/agent/pkg/observability/otel"
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/antimetal/agent/pkg/resource/store"
 )
@@ -63,6 +66,21 @@ var (
 	pprofAddr              string
 	dataDir                string
 	hardwareUpdateInterval time.Duration
+	// Metrics pipeline options
+	enableMetrics bool
+	// OpenTelemetry options
+	enableOtel             bool
+	otelEndpoint           string
+	otelInsecure           bool
+	otelCompression        string
+	otelTimeout            time.Duration
+	otelServiceName        string
+	otelServiceVersion     string
+	metricsPublishInterval time.Duration
+	// Debug consumer options
+	enableDebugConsumer bool
+	debugLogLevel       string
+	debugLogFormat      string
 )
 
 func init() {
@@ -115,6 +133,37 @@ func init() {
 	flag.DurationVar(&hardwareUpdateInterval, "hardware-update-interval", 5*time.Minute,
 		"Interval for hardware topology discovery updates")
 
+	// Metrics pipeline flags
+	flag.BoolVar(&enableMetrics, "enable-metrics", false,
+		"Enable metrics pipeline for external monitoring systems")
+
+	// OpenTelemetry flags
+	flag.BoolVar(&enableOtel, "enable-otel", false,
+		"Enable OpenTelemetry metrics consumer")
+	flag.StringVar(&otelEndpoint, "otel-endpoint", "localhost:4317",
+		"OpenTelemetry OTLP gRPC endpoint")
+	flag.BoolVar(&otelInsecure, "otel-insecure", false,
+		"Disable TLS for OpenTelemetry connection")
+	flag.StringVar(&otelCompression, "otel-compression", "gzip",
+		"OpenTelemetry compression: gzip or none")
+	flag.DurationVar(&otelTimeout, "otel-timeout", 30*time.Second,
+		"OpenTelemetry export timeout")
+	flag.StringVar(&otelServiceName, "otel-service-name", "antimetal-agent",
+		"OpenTelemetry service name")
+	flag.StringVar(&otelServiceVersion, "otel-service-version", "",
+		"OpenTelemetry service version")
+
+	flag.DurationVar(&metricsPublishInterval, "metrics-publish-interval", 30*time.Second,
+		"Interval for publishing performance metrics")
+
+	// Debug consumer flags
+	flag.BoolVar(&enableDebugConsumer, "enable-debug-consumer", false,
+		"Enable debug consumer for logging metrics events")
+	flag.StringVar(&debugLogLevel, "debug-log-level", "basic",
+		"Debug consumer log level: basic, details, or verbose")
+	flag.StringVar(&debugLogFormat, "debug-log-format", "json",
+		"Debug consumer log format: json or text")
+
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
@@ -125,6 +174,19 @@ func init() {
 
 func main() {
 	ctx := ctrl.SetupSignalHandler()
+
+	// Validate and adjust flag combinations
+	if enableOtel && !enableMetrics {
+		setupLog.Info("OpenTelemetry is enabled but metrics pipeline is not - automatically enabling metrics pipeline",
+			"reason", "OpenTelemetry requires the metrics pipeline to function")
+		enableMetrics = true
+	}
+
+	if enableDebugConsumer && !enableMetrics {
+		setupLog.Info("Debug consumer is enabled but metrics pipeline is not - automatically enabling metrics pipeline",
+			"reason", "Debug consumer requires the metrics pipeline to function")
+		enableMetrics = true
+	}
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will
@@ -258,11 +320,75 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Setup Metrics Bus (if enabled)
+	var metricsPublisher metrics.Publisher
+	if enableMetrics {
+		// Configure metrics pipeline
+		metricsConfig := buildMetricsConfig()
+		bus := metrics.NewMetricsBus(metricsConfig.Bus, mgr.GetLogger())
+
+		// Register OpenTelemetry consumer if enabled
+		if enableOtel {
+			// Build OpenTelemetry configuration separately
+			otelConfig := otel.BuildFromFlags(
+				enableOtel,
+				otelEndpoint,
+				otelInsecure,
+				otelCompression,
+				otelTimeout,
+				otelServiceName,
+				otelServiceVersion,
+				os.Getenv("NODE_NAME"),
+				"", // TODO: Get cluster name from cluster provider
+				getVersion(),
+			)
+			otelConsumer, err := otel.NewConsumerFromConfig(otelConfig, mgr.GetLogger())
+			if err != nil {
+				setupLog.Error(err, "unable to create OpenTelemetry consumer")
+				os.Exit(1)
+			}
+			if otelConsumer != nil {
+				// Register OpenTelemetry consumer directly
+				if err := bus.RegisterConsumer(otelConsumer); err != nil {
+					setupLog.Error(err, "unable to register OpenTelemetry consumer")
+					os.Exit(1)
+				}
+				setupLog.Info("OpenTelemetry consumer registered")
+			}
+		}
+
+		// Register Debug consumer if enabled
+		if enableDebugConsumer {
+			debugConfig := buildDebugConsumerConfig()
+			debugConsumer, err := debug.NewConsumer(debugConfig, mgr.GetLogger())
+			if err != nil {
+				setupLog.Error(err, "unable to create debug consumer")
+				os.Exit(1)
+			}
+			if err := bus.RegisterConsumer(debugConsumer); err != nil {
+				setupLog.Error(err, "unable to register debug consumer")
+				os.Exit(1)
+			}
+			setupLog.Info("Debug consumer registered",
+				"log_level", debugLogLevel,
+				"log_format", debugLogFormat)
+		}
+
+		// Add bus to manager
+		if err := mgr.Add(bus); err != nil {
+			setupLog.Error(err, "unable to register metrics bus")
+			os.Exit(1)
+		}
+		metricsPublisher = bus
+		setupLog.Info("Metrics pipeline enabled")
+	}
+
 	// Setup Performance Manager (for hardware discovery)
 	perfManager, err := performance.NewManager(performance.ManagerOptions{
-		Logger:      mgr.GetLogger().WithName("performance-manager"),
-		NodeName:    os.Getenv("NODE_NAME"),
-		ClusterName: "",
+		Logger:           mgr.GetLogger().WithName("performance-manager"),
+		NodeName:         os.Getenv("NODE_NAME"),
+		ClusterName:      "",
+		MetricsPublisher: metricsPublisher,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to create performance manager")
@@ -332,4 +458,58 @@ func getProviderOptions(logger logr.Logger) cluster.ProviderOptions {
 			ClusterName:  eksClusterName,
 		},
 	}
+}
+
+func buildMetricsConfig() metrics.Config {
+	config := metrics.DefaultConfig()
+
+	// Apply environment variable overrides for general metrics
+	if os.Getenv("ENABLE_METRICS") == "true" {
+		enableMetrics = true
+	}
+
+	config.Enabled = enableMetrics
+
+	// Configure performance integration
+	config.Performance.Enabled = enableMetrics
+	config.Performance.PublishInterval = metricsPublishInterval
+	config.Performance.Source = "performance-collector"
+
+	config.ApplyDefaults()
+	return config
+}
+
+func buildDebugConsumerConfig() debug.Config {
+	// Parse log level
+	var logLevel debug.LogLevel
+	switch debugLogLevel {
+	case "verbose":
+		logLevel = debug.LogLevelVerbose
+	case "details":
+		logLevel = debug.LogLevelDetails
+	default:
+		logLevel = debug.LogLevelBasic
+	}
+
+	// Parse log format
+	var logFormat debug.LogFormat
+	if debugLogFormat == "text" {
+		logFormat = debug.LogFormatText
+	} else {
+		logFormat = debug.LogFormatJSON
+	}
+
+	return debug.Config{
+		Enabled:          true,
+		LogLevel:         logLevel,
+		LogFormat:        logFormat,
+		IncludeTimestamp: true,
+		IncludeEventData: logLevel >= debug.LogLevelDetails,
+		MaxDataLength:    1024,
+	}
+}
+
+func getVersion() string {
+	// This could be set via ldflags during build
+	return "dev"
 }
