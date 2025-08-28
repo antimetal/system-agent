@@ -6,28 +6,25 @@
 
 package metrics
 
-// MetricEvent represents a metrics event flowing through the pipeline
-type MetricEvent struct {
-	Timestamp   interface{}
-	Source      string
-	NodeName    string
-	ClusterName string
-	MetricType  string
-	EventType   string
-	Data        any // Contains performance types (LoadStats, MemoryStats, etc.)
-	Tags        map[string]string
-}
-
-type ConsumerInterface interface {
+// Consumer defines the interface for processing metrics events
+type Consumer interface {
+	// Name returns a unique identifier for this consumer
 	Name() string
+
+	// Start begins consuming metrics events from the provided channel
 	Start(events <-chan MetricEvent) error
+
+	// Stop gracefully shuts down the consumer
 	Stop() error
+
+	// Health returns the current health status of the consumer
 	Health() ConsumerHealth
 }
 
+// ConsumerHealth represents the health status of a consumer
 type ConsumerHealth struct {
 	Healthy     bool
 	LastError   error
-	EventsCount uint64
-	ErrorsCount uint64
+	EventsCount uint64 // Total events processed
+	ErrorsCount uint64 // Total errors encountered
 }
