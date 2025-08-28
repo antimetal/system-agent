@@ -43,12 +43,10 @@ jobs:
           ${{ runner.os }}-tools-${{ hashFiles('Makefile') }}-
           ${{ runner.os }}-tools-
 
-    - name: Cache buf modules and generated files
+    - name: Cache buf modules
       uses: actions/cache@v4
       with:
-        path: |
-          ~/.cache/buf
-          pkg/api/**/*.pb.go
+        path: ~/.cache/buf
         key: ${{ runner.os }}-buf-${{ hashFiles('buf.gen.yaml') }}
         restore-keys: |
           ${{ runner.os }}-buf-
