@@ -539,10 +539,10 @@ func TestTCPCollector_DeltaAwareCollector(t *testing.T) {
 
 		// Update collector state to simulate progression
 		collector.UpdateDeltaState(secondStats, secondTime)
-		
+
 		// Verify the collector now has delta state
 		assert.True(t, collector.HasDeltaState())
-		
+
 		// Verify delta calculation would be performed for valid intervals
 		should, reason = collector.ShouldCalculateDeltas(secondTime.Add(time.Second))
 		assert.True(t, should)
@@ -585,7 +585,7 @@ func TestTCPCollector_DeltaAwareCollector(t *testing.T) {
 		// Test counter reset detection through public interface
 		// Update state again - reset detection would happen through normal collection
 		collector.UpdateDeltaState(secondStats, secondTime)
-		
+
 		// Verify collector maintains delta state even after reset
 		assert.True(t, collector.HasDeltaState())
 	})

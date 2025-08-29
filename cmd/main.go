@@ -33,6 +33,7 @@ import (
 	k8sagent "github.com/antimetal/agent/internal/kubernetes/agent"
 	"github.com/antimetal/agent/internal/kubernetes/cluster"
 	"github.com/antimetal/agent/internal/kubernetes/scheme"
+	"github.com/antimetal/agent/internal/runtime"
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/antimetal/agent/pkg/resource/store"
 )
@@ -62,6 +63,7 @@ var (
 	pprofAddr              string
 	dataDir                string
 	hardwareUpdateInterval time.Duration
+	runtimeUpdateInterval  time.Duration
 )
 
 func init() {
@@ -113,6 +115,8 @@ func init() {
 		"The directory where the agent will place its persistent data files. Set to empty string for in-memory mode.")
 	flag.DurationVar(&hardwareUpdateInterval, "hardware-update-interval", 5*time.Minute,
 		"Interval for hardware topology discovery updates")
+	flag.DurationVar(&runtimeUpdateInterval, "runtime-update-interval", 30*time.Second,
+		"Interval for container and process discovery updates")
 
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
@@ -263,6 +267,24 @@ func main() {
 	}
 	if err := mgr.Add(hwManager); err != nil {
 		setupLog.Error(err, "unable to register hardware manager")
+		os.Exit(1)
+	}
+
+	// Setup Runtime Manager (for container/process discovery)
+	rtManager, err := runtime.NewManager(
+		mgr.GetLogger().WithName("runtime-manager"),
+		runtime.ManagerConfig{
+			Store:              rsrcStore,
+			PerformanceManager: perfManager,
+			UpdateInterval:     runtimeUpdateInterval,
+		},
+	)
+	if err != nil {
+		setupLog.Error(err, "unable to create runtime manager")
+		os.Exit(1)
+	}
+	if err := mgr.Add(rtManager); err != nil {
+		setupLog.Error(err, "unable to register runtime manager")
 		os.Exit(1)
 	}
 

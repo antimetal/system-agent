@@ -1,0 +1,160 @@
+# Copyright Antimetal, Inc. All rights reserved.
+#
+# Use of this source code is governed by a source available license that can be found in the
+# LICENSE file or at:
+# https://polyformproject.org/wp-content/uploads/2020/06/PolyForm-Shield-1.0.0.txt
+
+# Complete KIND cluster configuration for container-process-hardware topology testing
+# Usage: kind create cluster --config config/test/kind-topology-cluster.yaml
+#
+# This configuration creates a multi-node cluster with:
+# - Host filesystem access for topology discovery
+# - Container runtime access for container detection
+# - Test workloads automatically deployed
+# - Antimetal agent DaemonSet for testing
+
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: antimetal-topology-test
+
+# Enable feature gates for testing
+featureGates:
+  "EphemeralContainers": true
+  "TopologyManagerPolicyOptions": true
+
+# Networking configuration
+networking:
+  podSubnet: "10.244.0.0/16"
+  serviceSubnet: "10.96.0.0/12"
+
+nodes:
+- role: control-plane
+  # Resource limits to simulate constrained environment
+  kubeadmConfigPatches:
+  - |
+    kind: InitConfiguration
+    nodeRegistration:
+      kubeletExtraArgs:
+        # Enable cgroup v2 support
+        cgroup-driver: systemd
+        # Enable CPU manager for better CPU affinity testing
+        cpu-manager-policy: static
+        # Reserve resources for system
+        system-reserved: cpu=100m,memory=100Mi
+        kube-reserved: cpu=100m,memory=100Mi
+        # Enable topology manager for NUMA testing
+        topology-manager-policy: best-effort
+        # Container runtime endpoint
+        container-runtime-endpoint: unix:///run/containerd/containerd.sock
+  - |
+    kind: ClusterConfiguration
+    apiServer:
+      extraArgs:
+        enable-admission-plugins: NodeRestriction,ResourceQuota,LimitRanger
+  # Mount paths for system access
+  extraMounts:
+  - hostPath: /proc
+    containerPath: /host/proc
+    readOnly: true
+    propagation: HostToContainer
+  - hostPath: /sys
+    containerPath: /host/sys
+    readOnly: true
+    propagation: HostToContainer
+  - hostPath: /dev
+    containerPath: /host/dev
+    readOnly: true
+    propagation: HostToContainer
+  - hostPath: /sys/fs/cgroup
+    containerPath: /host/sys/fs/cgroup
+    readOnly: true
+    propagation: HostToContainer
+  - hostPath: /var/lib/docker
+    containerPath: /host/var/lib/docker
+    readOnly: true
+    propagation: HostToContainer
+  - hostPath: /run/containerd
+    containerPath: /host/run/containerd
+    readOnly: true
+    propagation: HostToContainer
+  - hostPath: /var/run/docker.sock
+    containerPath: /var/run/docker.sock
+    readOnly: true
+
+- role: worker
+  labels:
+    node.antimetal.io/test-type: "cpu-intensive"
+  kubeadmConfigPatches:
+  - |
+    kind: JoinConfiguration
+    nodeRegistration:
+      kubeletExtraArgs:
+        cgroup-driver: systemd
+        cpu-manager-policy: static
+        system-reserved: cpu=100m,memory=100Mi
+        kube-reserved: cpu=100m,memory=100Mi
+        topology-manager-policy: best-effort
+        container-runtime-endpoint: unix:///run/containerd/containerd.sock
+  extraMounts:
+  - hostPath: /proc
+    containerPath: /host/proc
+    readOnly: true
+    propagation: HostToContainer
+  - hostPath: /sys
+    containerPath: /host/sys
+    readOnly: true
+    propagation: HostToContainer
+  - hostPath: /dev
+    containerPath: /host/dev
+    readOnly: true
+    propagation: HostToContainer
+  - hostPath: /sys/fs/cgroup
+    containerPath: /host/sys/fs/cgroup
+    readOnly: true
+    propagation: HostToContainer
+  - hostPath: /var/lib/docker
+    containerPath: /host/var/lib/docker
+    readOnly: true
+    propagation: HostToContainer
+  - hostPath: /run/containerd
+    containerPath: /host/run/containerd
+    readOnly: true
+    propagation: HostToContainer
+
+- role: worker
+  labels:
+    node.antimetal.io/test-type: "memory-intensive"
+  kubeadmConfigPatches:
+  - |
+    kind: JoinConfiguration
+    nodeRegistration:
+      kubeletExtraArgs:
+        cgroup-driver: systemd
+        system-reserved: cpu=50m,memory=200Mi
+        kube-reserved: cpu=50m,memory=200Mi
+        container-runtime-endpoint: unix:///run/containerd/containerd.sock
+  extraMounts:
+  - hostPath: /proc
+    containerPath: /host/proc
+    readOnly: true
+    propagation: HostToContainer
+  - hostPath: /sys
+    containerPath: /host/sys
+    readOnly: true
+    propagation: HostToContainer
+  - hostPath: /dev
+    containerPath: /host/dev
+    readOnly: true
+    propagation: HostToContainer
+  - hostPath: /sys/fs/cgroup
+    containerPath: /host/sys/fs/cgroup
+    readOnly: true
+    propagation: HostToContainer
+  - hostPath: /var/lib/docker
+    containerPath: /host/var/lib/docker
+    readOnly: true
+    propagation: HostToContainer
+  - hostPath: /run/containerd
+    containerPath: /host/run/containerd
+    readOnly: true
+    propagation: HostToContainer
