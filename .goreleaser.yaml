@@ -16,9 +16,10 @@ builds:
     env:
       - CGO_ENABLED=0
     ldflags:
-      - -X "main.Version={{ .Version }}"
-      - -X "main.Commit={{ .Commit }}"
-      - -X "main.BuildDate={{ .Date }}"
+      - -X "github.com/antimetal/agent/internal/runtime.buildMajor={{ .Major }}"
+      - -X "github.com/antimetal/agent/internal/runtime.buildMinor={{ .Minor }}"
+      - -X "github.com/antimetal/agent/internal/runtime.buildPatch={{ .Patch }}"
+      - -X "github.com/antimetal/agent/internal/runtime.buildRev={{ .ShortCommit }}"
     goos:
       - linux
     goarch:
