@@ -132,8 +132,8 @@ func TestManager_CollectRuntimeSnapshot(t *testing.T) {
 	
 	// Create mock cgroup structure for a container
 	containerPath := filepath.Join(cgroupPath, "system.slice", "docker.service", "docker", "test1")
-	os.MkdirAll(containerPath, 0755)
-	os.WriteFile(filepath.Join(containerPath, "cgroup.controllers"), []byte("cpu memory"), 0644)
+	require.NoError(t, os.MkdirAll(containerPath, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(containerPath, "cgroup.controllers"), []byte("cpu memory"), 0644))
 
 	manager := &Manager{
 		logger:      logger,
@@ -165,8 +165,8 @@ func TestManager_UpdateRuntimeGraph(t *testing.T) {
 	tmpDir := t.TempDir()
 	cgroupPath := filepath.Join(tmpDir, "cgroup")
 	containerPath := filepath.Join(cgroupPath, "docker", "abc123")
-	os.MkdirAll(containerPath, 0755)
-	os.WriteFile(filepath.Join(containerPath, "cgroup.controllers"), []byte("cpu memory"), 0644)
+	require.NoError(t, os.MkdirAll(containerPath, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(containerPath, "cgroup.controllers"), []byte("cpu memory"), 0644))
 
 	manager := &Manager{
 		logger:      logger,
@@ -200,7 +200,7 @@ func TestManager_Start(t *testing.T) {
 	// Create empty cgroup directory for testing
 	tmpDir := t.TempDir()
 	cgroupPath := filepath.Join(tmpDir, "cgroup")
-	os.MkdirAll(cgroupPath, 0755)
+	require.NoError(t, os.MkdirAll(cgroupPath, 0755))
 
 	manager := &Manager{
 		logger:      logger,
@@ -315,8 +315,8 @@ func TestManager_Metrics(t *testing.T) {
 	// Create multiple containers in cgroup structure
 	for i := 0; i < 3; i++ {
 		containerPath := filepath.Join(cgroupPath, "docker", fmt.Sprintf("container%d", i))
-		os.MkdirAll(containerPath, 0755)
-		os.WriteFile(filepath.Join(containerPath, "cgroup.controllers"), []byte("cpu memory"), 0644)
+		require.NoError(t, os.MkdirAll(containerPath, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(containerPath, "cgroup.controllers"), []byte("cpu memory"), 0644))
 	}
 
 	manager := &Manager{
