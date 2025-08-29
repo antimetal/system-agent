@@ -184,15 +184,29 @@ func (b *Builder) findProcessContainer(pid int32, containers []ContainerInfo) st
 	// First check if the process directory exists
 	procDir := filepath.Join("/proc", strconv.Itoa(int(pid)))
 	if _, err := os.Stat(procDir); os.IsNotExist(err) {
-		// Process no longer exists, this is normal
+		// Process no longer exists, this is normal during container churn
 		b.logger.V(2).Info("Process directory does not exist", "pid", pid)
+		return ""
+	} else if err != nil {
+		// Unexpected error accessing proc directory
+		b.logger.Error(err, "Failed to stat process directory", "pid", pid, "path", procDir)
 		return ""
 	}
 
 	cgroupPath := filepath.Join(procDir, "cgroup")
 	cgroupData, err := os.ReadFile(cgroupPath)
 	if err != nil {
-		b.logger.V(2).Info("Failed to read process cgroup", "pid", pid, "error", err)
+		// Distinguish between different error types for better debugging
+		if os.IsNotExist(err) {
+			// Process may have exited between stat and read
+			b.logger.V(2).Info("Process cgroup file no longer exists", "pid", pid, "path", cgroupPath)
+		} else if os.IsPermission(err) {
+			// Permission issues should be logged at higher level as they indicate configuration problems
+			b.logger.V(1).Info("Permission denied reading process cgroup", "pid", pid, "path", cgroupPath)
+		} else {
+			// Unexpected errors should be logged with full context
+			b.logger.Error(err, "Failed to read process cgroup file", "pid", pid, "path", cgroupPath)
+		}
 		return ""
 	}
 

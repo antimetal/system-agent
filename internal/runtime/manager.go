@@ -32,6 +32,21 @@ type Manager struct {
 	interval   time.Duration
 	lastUpdate time.Time
 	mu         sync.RWMutex
+
+	// Metrics for monitoring discovery performance
+	metrics *DiscoveryMetrics
+}
+
+// DiscoveryMetrics tracks performance metrics for runtime discovery
+type DiscoveryMetrics struct {
+	mu                     sync.RWMutex
+	LastDiscoveryDuration  time.Duration
+	LastContainerCount     int
+	LastProcessCount       int
+	LastDiscoveryErrors    int
+	TotalDiscoveries       uint64
+	TotalDiscoveryErrors   uint64
+	LastDiscoveryTimestamp time.Time
 }
 
 type ManagerConfig struct {
@@ -72,6 +87,7 @@ func NewManager(logger logr.Logger, config ManagerConfig) (*Manager, error) {
 		builder:     graph.NewBuilder(logger, config.Store),
 		discovery:   containers.NewDiscovery(cgroupPath),
 		interval:    interval,
+		metrics:     &DiscoveryMetrics{},
 	}, nil
 }
 
@@ -110,11 +126,17 @@ func (m *Manager) runPeriodicUpdates(ctx context.Context) {
 }
 
 func (m *Manager) updateRuntimeGraph(ctx context.Context) error {
+	startTime := time.Now()
 	m.logger.V(1).Info("Updating runtime graph")
+
+	// Track discovery attempt
+	errorCount := 0
 
 	// Collect a snapshot of all runtime information
 	snapshot, err := m.collectRuntimeSnapshot(ctx)
 	if err != nil {
+		errorCount++
+		m.updateMetrics(startTime, nil, errorCount)
 		return fmt.Errorf("failed to collect runtime snapshot: %w", err)
 	}
 
@@ -123,15 +145,25 @@ func (m *Manager) updateRuntimeGraph(ctx context.Context) error {
 	defer cancel()
 
 	if err := m.builder.BuildFromSnapshot(buildCtx, snapshot); err != nil {
+		errorCount++
+		m.updateMetrics(startTime, snapshot, errorCount)
 		return fmt.Errorf("failed to build runtime graph: %w", err)
 	}
+
+	// Update metrics with successful discovery
+	m.updateMetrics(startTime, snapshot, errorCount)
 
 	// Update last update time
 	m.mu.Lock()
 	m.lastUpdate = time.Now()
 	m.mu.Unlock()
 
-	m.logger.Info("Runtime graph updated successfully")
+	// Log with metrics
+	duration := time.Since(startTime)
+	m.logger.Info("Runtime graph updated successfully",
+		"duration", duration,
+		"containers", len(snapshot.Containers),
+		"processes", len(snapshot.ProcessStats.Processes))
 	return nil
 }
 
@@ -221,7 +253,14 @@ func (m *Manager) collectRuntimeSnapshot(ctx context.Context) (*RuntimeSnapshot,
 			defer cancel()
 
 			if dataChannel, err := processCollector.Start(ctx); err == nil {
-				// Read the first data point and stop
+				// Ensure collector is always stopped to prevent resource leaks
+				defer func() {
+					if err := processCollector.Stop(); err != nil {
+						m.logger.V(1).Info("Failed to stop process collector", "error", err)
+					}
+				}()
+
+				// Read the first data point
 				select {
 				case data := <-dataChannel:
 					if snapshot, ok := data.(*performance.ProcessSnapshot); ok {
@@ -229,9 +268,7 @@ func (m *Manager) collectRuntimeSnapshot(ctx context.Context) (*RuntimeSnapshot,
 					}
 				case <-ctx.Done():
 					m.logger.V(1).Info("Process collection timed out")
-				}
-				if err := processCollector.Stop(); err != nil {
-					m.logger.V(1).Info("Failed to stop process collector", "error", err)
+					// Stop() will be called by the defer above
 				}
 			}
 		}
@@ -266,6 +303,47 @@ func (m *Manager) GetLastUpdateTime() time.Time {
 
 func (m *Manager) ForceUpdate(ctx context.Context) error {
 	return m.updateRuntimeGraph(ctx)
+}
+
+// updateMetrics updates discovery performance metrics
+func (m *Manager) updateMetrics(startTime time.Time, snapshot *RuntimeSnapshot, errorCount int) {
+	duration := time.Since(startTime)
+
+	m.metrics.mu.Lock()
+	defer m.metrics.mu.Unlock()
+
+	m.metrics.LastDiscoveryDuration = duration
+	m.metrics.LastDiscoveryTimestamp = startTime
+	m.metrics.LastDiscoveryErrors = errorCount
+	m.metrics.TotalDiscoveries++
+
+	if errorCount > 0 {
+		m.metrics.TotalDiscoveryErrors += uint64(errorCount)
+	}
+
+	if snapshot != nil {
+		m.metrics.LastContainerCount = len(snapshot.Containers)
+		if snapshot.ProcessStats != nil {
+			m.metrics.LastProcessCount = len(snapshot.ProcessStats.Processes)
+		}
+	}
+}
+
+// GetMetrics returns a copy of the current discovery metrics
+func (m *Manager) GetMetrics() DiscoveryMetrics {
+	m.metrics.mu.RLock()
+	defer m.metrics.mu.RUnlock()
+
+	// Return a copy to avoid race conditions
+	return DiscoveryMetrics{
+		LastDiscoveryDuration:  m.metrics.LastDiscoveryDuration,
+		LastContainerCount:     m.metrics.LastContainerCount,
+		LastProcessCount:       m.metrics.LastProcessCount,
+		LastDiscoveryErrors:    m.metrics.LastDiscoveryErrors,
+		TotalDiscoveries:       m.metrics.TotalDiscoveries,
+		TotalDiscoveryErrors:   m.metrics.TotalDiscoveryErrors,
+		LastDiscoveryTimestamp: m.metrics.LastDiscoveryTimestamp,
+	}
 }
 
 // TODO: parseImageNameTag will be used when container metadata extraction is implemented

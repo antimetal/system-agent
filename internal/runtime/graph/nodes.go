@@ -16,6 +16,18 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
+// Constants for resource metadata
+const (
+	// RuntimePseudoCluster is used as the cluster name for runtime-discovered resources
+	RuntimePseudoCluster = "runtime"
+
+	// SystemNamespace is the default namespace for runtime resources
+	SystemNamespace = "antimetal-system"
+
+	// RuntimeService identifies the service that created these resources
+	RuntimeService = "runtime"
+)
+
 // createContainerNode creates a container node and its resource reference
 func (b *Builder) createContainerNode(container *ContainerInfo) (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
 	// Runtime is already an enum, no conversion needed
@@ -80,13 +92,13 @@ func (b *Builder) createContainerNode(container *ContainerInfo) (*resourcev1.Res
 		},
 		Metadata: &resourcev1.ResourceMeta{
 			Provider: resourcev1.Provider_PROVIDER_KUBERNETES,
-			Service:  "runtime",
+			Service:  RuntimeService,
 			Name:     containerName,
 			Namespace: &resourcev1.Namespace{
 				Namespace: &resourcev1.Namespace_Kube{
 					Kube: &resourcev1.KubernetesNamespace{
-						Cluster:   "runtime", // Using "runtime" as a pseudo-cluster
-						Namespace: "antimetal-system",
+						Cluster:   RuntimePseudoCluster,
+						Namespace: SystemNamespace,
 					},
 				},
 			},
@@ -154,13 +166,13 @@ func (b *Builder) createProcessNode(process *ProcessInfo) (*resourcev1.Resource,
 		},
 		Metadata: &resourcev1.ResourceMeta{
 			Provider: resourcev1.Provider_PROVIDER_KUBERNETES,
-			Service:  "runtime",
+			Service:  RuntimeService,
 			Name:     processName,
 			Namespace: &resourcev1.Namespace{
 				Namespace: &resourcev1.Namespace_Kube{
 					Kube: &resourcev1.KubernetesNamespace{
-						Cluster:   "runtime", // Using "runtime" as a pseudo-cluster
-						Namespace: "antimetal-system",
+						Cluster:   RuntimePseudoCluster,
+						Namespace: SystemNamespace,
 					},
 				},
 			},

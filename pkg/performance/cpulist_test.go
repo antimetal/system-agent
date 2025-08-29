@@ -256,6 +256,8 @@ func BenchmarkParseCPUList(b *testing.B) {
 		{"mixed_small", "0-3,6,8-10"},
 		{"mixed_large", "0-31,48-63,96,128-191"},
 		{"high_core_count", "0-255"},
+		{"complex_numa", "0-7,16-23,32-39,48-55"},
+		{"many_individual", "0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30"},
 	}
 
 	for _, bm := range benchmarks {
@@ -265,6 +267,17 @@ func BenchmarkParseCPUList(b *testing.B) {
 			}
 		})
 	}
+}
+
+// BenchmarkParseCPUListParallel benchmarks concurrent parsing
+func BenchmarkParseCPUListParallel(b *testing.B) {
+	input := "0-31,48-63,96,128-191" // Complex NUMA topology
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_, _ = ParseCPUList(input)
+		}
+	})
 }
 
 // Helper function to generate a range of integers
