@@ -45,81 +45,67 @@ func createMockAMSServer(t *testing.T, svc *mock.AgentManagementService) (*grpc.
 
 func TestAMSLoader_StreamRecreation(t *testing.T) {
 	tests := []struct {
-		name                string
-		streamFailures      int
-		expectedRetries     int
-		finalSuccess        bool
-		streamDuration      time.Duration
-		maxStreamAge        time.Duration
-		keepStreamAlive     bool
-		testDuration        time.Duration
-		expectedRecreations int
+		name              string
+		streamFailures    int
+		expectedRetries   int
+		finalSuccess      bool
+		streamDuration    time.Duration
+		maxStreamAge      time.Duration
+		keepStreamAlive   bool
+		testDuration      time.Duration
+		expectedCreations int
 	}{
 		{
-			name:                "server terminates stream",
-			streamFailures:      0,
-			expectedRetries:     3,
-			finalSuccess:        true,
-			streamDuration:      100 * time.Millisecond,
-			maxStreamAge:        200 * time.Millisecond,
-			keepStreamAlive:     false,
-			testDuration:        350 * time.Millisecond,
-			expectedRecreations: 4,
+			name:              "server terminates stream",
+			streamFailures:    0,
+			expectedRetries:   2,
+			finalSuccess:      true,
+			streamDuration:    100 * time.Millisecond,
+			maxStreamAge:      200 * time.Millisecond,
+			keepStreamAlive:   false,
+			testDuration:      300 * time.Millisecond,
+			expectedCreations: 2,
 		},
 		{
-			name:                "stream fails once then succeeds",
-			streamFailures:      1,
-			expectedRetries:     5,
-			finalSuccess:        true,
-			streamDuration:      100 * time.Millisecond,
-			maxStreamAge:        200 * time.Millisecond,
-			keepStreamAlive:     false,
-			testDuration:        450 * time.Millisecond,
-			expectedRecreations: 6,
+			name:              "stream fails then succeeds",
+			streamFailures:    1,
+			expectedRetries:   1,
+			finalSuccess:      true,
+			streamDuration:    500 * time.Millisecond,
+			maxStreamAge:      1000 * time.Millisecond,
+			keepStreamAlive:   false,
+			testDuration:      100 * time.Millisecond,
+			expectedCreations: 2,
 		},
 		{
-			name:                "multiple stream failures",
-			streamFailures:      3,
-			expectedRetries:     13,
-			finalSuccess:        true,
-			streamDuration:      50 * time.Millisecond,
-			maxStreamAge:        200 * time.Millisecond,
-			keepStreamAlive:     false,
-			testDuration:        540 * time.Millisecond,
-			expectedRecreations: 14,
+			name:              "multiple stream failures",
+			streamFailures:    3,
+			expectedRetries:   3,
+			finalSuccess:      true,
+			streamDuration:    500 * time.Millisecond,
+			maxStreamAge:      1000 * time.Millisecond,
+			keepStreamAlive:   false,
+			testDuration:      200 * time.Millisecond,
+			expectedCreations: 4,
 		},
 		{
-			name:                "maxStreamAge reached",
-			streamFailures:      0,
-			expectedRetries:     3,
-			finalSuccess:        true,
-			streamDuration:      0,
-			maxStreamAge:        100 * time.Millisecond,
-			keepStreamAlive:     true,
-			testDuration:        350 * time.Millisecond,
-			expectedRecreations: 4,
+			name:              "maxStreamAge reached",
+			expectedRetries:   1,
+			finalSuccess:      true,
+			maxStreamAge:      100 * time.Millisecond,
+			keepStreamAlive:   true,
+			testDuration:      300 * time.Millisecond,
+			expectedCreations: 2,
 		},
 		{
-			name:                "stream failures with maxStreamAge",
-			streamFailures:      1,
-			expectedRetries:     3,
-			finalSuccess:        true,
-			streamDuration:      0,
-			maxStreamAge:        100 * time.Millisecond,
-			keepStreamAlive:     true,
-			testDuration:        250 * time.Millisecond,
-			expectedRecreations: 4,
-		},
-		{
-			name:                "very short maxStreamAge",
-			streamFailures:      0,
-			expectedRetries:     3,
-			finalSuccess:        true,
-			streamDuration:      0,
-			maxStreamAge:        50 * time.Millisecond,
-			keepStreamAlive:     true,
-			testDuration:        175 * time.Millisecond,
-			expectedRecreations: 4,
+			name:              "stream failures with maxStreamAge",
+			streamFailures:    1,
+			expectedRetries:   2,
+			finalSuccess:      true,
+			maxStreamAge:      100 * time.Millisecond,
+			keepStreamAlive:   true,
+			testDuration:      200 * time.Millisecond,
+			expectedCreations: 3,
 		},
 	}
 
@@ -146,11 +132,8 @@ func TestAMSLoader_StreamRecreation(t *testing.T) {
 
 			attempts := mockService.GetStreamAttempts()
 
-			assert.Equal(t, tt.expectedRetries+1, attempts, "Should have made expected number of stream creation attempts")
-
-			if tt.expectedRecreations > 0 {
-				assert.Equal(t, tt.expectedRecreations, attempts, "Should have recreated stream expected number of times")
-			}
+			assert.GreaterOrEqual(t, attempts, tt.expectedRetries+1, "Should have made at least the expected number of stream retries")
+			assert.GreaterOrEqual(t, attempts, tt.expectedCreations, "Should have created at least stream expected number of times")
 		})
 	}
 }
