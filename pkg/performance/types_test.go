@@ -32,6 +32,9 @@ func TestCollectionConfig_ApplyDefaults(t *testing.T) {
 					MetricTypeTCP:     true,
 					MetricTypeSystem:  true,
 					MetricTypeKernel:  true,
+					// Runtime container resource collectors
+					MetricTypeCgroupCPU:    true,
+					MetricTypeCgroupMemory: true,
 					// Hardware configuration collectors
 					MetricTypeCPUInfo:     true,
 					MetricTypeMemoryInfo:  true,
@@ -62,6 +65,9 @@ func TestCollectionConfig_ApplyDefaults(t *testing.T) {
 					MetricTypeTCP:     true,
 					MetricTypeSystem:  true,
 					MetricTypeKernel:  true,
+					// Runtime container resource collectors
+					MetricTypeCgroupCPU:    true,
+					MetricTypeCgroupMemory: true,
 					// Hardware configuration collectors
 					MetricTypeCPUInfo:     true,
 					MetricTypeMemoryInfo:  true,
