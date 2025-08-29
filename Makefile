@@ -128,7 +128,7 @@ test: test-unit test-integration ## Run all tests (unit and integration).
 .PHONY: test-unit
 test-unit: generate ## Run unit tests with coverage.
 	@mkdir -p coverage
-	go test ./... -v -timeout 30s -coverprofile=coverage/coverage-unit.out -covermode=atomic
+	go test -tags '!integration' ./... -v -timeout 30s -coverprofile=coverage/coverage-unit.out -covermode=atomic
 	@echo "Unit test coverage saved to coverage/coverage-unit.out"
 
 .PHONY: test-integration
