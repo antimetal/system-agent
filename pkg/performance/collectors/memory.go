@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/go-logr/logr"
@@ -63,7 +64,7 @@ var _ performance.PointCollector = (*MemoryCollector)(nil)
 //
 // Reference: https://www.kernel.org/doc/html/latest/filesystems/proc.html#meminfo
 type MemoryCollector struct {
-	performance.BaseCollector
+	performance.BaseDeltaCollector
 	meminfoPath string
 	vmstatPath  string
 }
@@ -81,7 +82,7 @@ func NewMemoryCollector(logger logr.Logger, config performance.CollectionConfig)
 	}
 
 	return &MemoryCollector{
-		BaseCollector: performance.NewBaseCollector(
+		BaseDeltaCollector: performance.NewBaseDeltaCollector(
 			performance.MetricTypeMemory,
 			"System Memory Collector",
 			logger,
@@ -95,13 +96,36 @@ func NewMemoryCollector(logger logr.Logger, config performance.CollectionConfig)
 
 // Collect performs a one-shot collection of memory statistics
 func (c *MemoryCollector) Collect(ctx context.Context) (any, error) {
-	stats, err := c.collectMemoryStats()
+	currentTime := time.Now()
+
+	// Collect current statistics
+	currentStats, err := c.collectMemoryStats()
 	if err != nil {
 		return nil, fmt.Errorf("failed to collect memory stats: %w", err)
 	}
 
-	c.Logger().V(1).Info("Collected memory statistics")
-	return stats, nil
+	shouldCalc, reason := c.ShouldCalculateDeltas(currentTime)
+	if !shouldCalc {
+		c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
+		if c.IsFirst {
+			c.UpdateDeltaState(currentStats, currentTime)
+		}
+		c.Logger().V(1).Info("Collected memory statistics")
+		return currentStats, nil
+	}
+
+	previousStats, ok := c.LastSnapshot.(*performance.MemoryStats)
+	if !ok || previousStats == nil {
+		c.UpdateDeltaState(currentStats, currentTime)
+		c.Logger().V(1).Info("Collected memory statistics")
+		return currentStats, nil
+	}
+
+	c.calculateMemoryDeltas(currentStats, previousStats, currentTime, c.Config)
+	c.UpdateDeltaState(currentStats, currentTime)
+
+	c.Logger().V(1).Info("Collected memory statistics with delta support")
+	return currentStats, nil
 }
 
 // collectMemoryStats reads and parses runtime memory statistics from /proc/meminfo and /proc/vmstat
@@ -371,5 +395,44 @@ func (c *MemoryCollector) collectSwapActivity(stats *performance.MemoryStats) {
 
 	if err := scanner.Err(); err != nil {
 		c.Logger().V(2).Info("Error reading vmstat file", "path", c.vmstatPath, "error", err)
+	}
+}
+
+func (c *MemoryCollector) calculateMemoryDeltas(
+	current, previous *performance.MemoryStats,
+	currentTime time.Time,
+	config performance.DeltaConfig,
+) {
+	interval := currentTime.Sub(c.LastTime)
+	var resetDetected bool
+
+	// Create nested delta data structure
+	delta := &performance.MemoryDeltaData{}
+
+	calculateField := func(currentVal, previousVal uint64) uint64 {
+		deltaVal, reset := c.CalculateUint64Delta(currentVal, previousVal, interval)
+		resetDetected = resetDetected || reset
+		return deltaVal
+	}
+
+	// Calculate delta values
+	delta.SwapIn = calculateField(current.SwapIn, previous.SwapIn)
+	delta.SwapOut = calculateField(current.SwapOut, previous.SwapOut)
+
+	// Calculate rates if no reset detected
+	if !resetDetected {
+		intervalSecs := interval.Seconds()
+		if intervalSecs > 0 {
+			delta.SwapInPerSec = uint64(float64(delta.SwapIn) / intervalSecs)
+			delta.SwapOutPerSec = uint64(float64(delta.SwapOut) / intervalSecs)
+		}
+	}
+
+	// Use composition helper to set metadata
+	c.PopulateMetadata(delta, currentTime, resetDetected)
+	current.Delta = delta
+
+	if resetDetected {
+		c.Logger().V(1).Info("Counter reset detected in memory statistics")
 	}
 }

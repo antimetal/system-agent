@@ -39,6 +39,69 @@ const (
 	MetricTypeNetworkInfo MetricType = "network_info"
 )
 
+// DeltaCalculationMode represents how delta/rate calculations are performed
+type DeltaCalculationMode string
+
+const (
+	// DeltaModeDisabled disables all delta calculations (default for backward compatibility)
+	DeltaModeDisabled DeltaCalculationMode = "disabled"
+	// DeltaModeEnabled enables delta and rate calculations
+	DeltaModeEnabled DeltaCalculationMode = "enabled"
+)
+
+// DeltaConfig represents configuration for delta/rate calculations
+type DeltaConfig struct {
+	// Mode controls what types of delta calculations are performed
+	Mode DeltaCalculationMode
+	// MinInterval is the minimum collection interval for meaningful rate calculations
+	// Rates won't be calculated if the actual interval is less than this value
+	MinInterval time.Duration
+	// MaxInterval is the maximum interval before deltas are considered stale
+	// If more time passes, the collector will reset and skip delta calculation
+	MaxInterval time.Duration
+}
+
+// DefaultDeltaConfig returns a sensible default delta configuration
+func DefaultDeltaConfig() DeltaConfig {
+	return DeltaConfig{
+		Mode:        DeltaModeDisabled,      // Backward compatible default
+		MinInterval: 100 * time.Millisecond, // Avoid division by very small intervals
+		MaxInterval: 5 * time.Minute,        // Reset state if gap is too large
+	}
+}
+
+// IsEnabled returns whether delta calculation is enabled for a specific collector type
+func (d DeltaConfig) IsEnabled(metricType MetricType) bool {
+	if d.Mode == DeltaModeDisabled {
+		return false
+	}
+
+	return d.isSupported(metricType)
+}
+
+
+// isSupported returns whether a metric type supports delta calculations
+func (d DeltaConfig) isSupported(metricType MetricType) bool {
+	switch metricType {
+	case MetricTypeTCP, MetricTypeNetwork, MetricTypeCPU, MetricTypeSystem, MetricTypeDisk, MetricTypeMemory, MetricTypeNUMAStats:
+		return true
+	default:
+		return false
+	}
+}
+
+// DeltaMetadata contains metadata about delta calculations
+type DeltaMetadata struct {
+	// CollectionInterval is the actual time elapsed since the last collection
+	CollectionInterval time.Duration
+	// LastCollectionTime is when the previous collection occurred
+	LastCollectionTime time.Time
+	// IsFirstCollection indicates if this is the first collection (no deltas available)
+	IsFirstCollection bool
+	// CounterResetDetected indicates if a counter reset/rollover was detected
+	CounterResetDetected bool
+}
+
 // CollectorStatus represents the operational status of a collector
 type CollectorStatus string
 
@@ -127,6 +190,9 @@ type MemoryStats struct {
 	// Swap activity (cumulative counters from /proc/vmstat)
 	SwapIn  uint64 // pswpin: Pages swapped in since boot
 	SwapOut uint64 // pswpout: Pages swapped out since boot
+
+	Delta *MemoryDeltaData // Delta data structure containing all calculated deltas and rates
+
 	// Dirty pages
 	Dirty     uint64 // Dirty: Memory waiting to be written back to disk
 	Writeback uint64 // Writeback: Memory actively being written back to disk
@@ -156,6 +222,20 @@ type MemoryStats struct {
 	Hugetlb         uint64 // Hugetlb: Total memory consumed by huge pages of all sizes
 }
 
+// MemoryDeltaData contains all delta calculations for memory statistics
+// This replaces individual pointer fields with a single nested structure
+type MemoryDeltaData struct {
+	DeltaMetadata
+
+	// Delta values for swap activity (change since last collection)
+	SwapIn  uint64
+	SwapOut uint64
+
+	// Rate values for swap activity (deltas per second)
+	SwapInPerSec  uint64
+	SwapOutPerSec uint64
+}
+
 // CPUStats represents per-CPU statistics from /proc/stat
 type CPUStats struct {
 	// CPU index (-1 for aggregate "cpu" line, 0+ for "cpu0", "cpu1", etc.)
@@ -171,6 +251,38 @@ type CPUStats struct {
 	Steal     uint64 // Time stolen by other operating systems in virtualized environment
 	Guest     uint64 // Time spent running a virtual CPU for guest OS
 	GuestNice uint64 // Time spent running a niced guest
+
+	// Delta data
+	Delta *CPUDeltaData
+}
+
+// CPUDeltaData contains delta calculations and rates for CPU time monitoring
+type CPUDeltaData struct {
+	DeltaMetadata
+
+	// Delta values (change since last collection)
+	User      uint64
+	Nice      uint64
+	System    uint64
+	Idle      uint64
+	IOWait    uint64
+	IRQ       uint64
+	SoftIRQ   uint64
+	Steal     uint64
+	Guest     uint64
+	GuestNice uint64
+
+	// Calculated utilization percentages
+	UserPercent      float64
+	NicePercent      float64
+	SystemPercent    float64
+	IdlePercent      float64
+	IOWaitPercent    float64
+	IRQPercent       float64
+	SoftIRQPercent   float64
+	StealPercent     float64
+	GuestPercent     float64
+	GuestNicePercent float64
 }
 
 // ProcessStats represents per-process statistics
@@ -228,14 +340,40 @@ type DiskStats struct {
 	IOsInProgress  uint64 // I/Os currently in progress
 	IOTime         uint64 // Time spent doing I/Os (milliseconds)
 	WeightedIOTime uint64 // Weighted time spent doing I/Os (milliseconds)
-	// Calculated fields
-	IOPS             float64
-	ReadBytesPerSec  float64
-	WriteBytesPerSec float64
-	Utilization      float64 // Percentage 0-100
-	AvgQueueSize     float64
-	AvgReadLatency   float64 // milliseconds
-	AvgWriteLatency  float64 // milliseconds
+
+	Delta *DiskDeltaData // Delta data structure containing all calculated deltas and rates
+}
+
+// DiskDeltaData contains all delta calculations for disk statistics
+type DiskDeltaData struct {
+	DeltaMetadata
+
+	// Delta values (change since last collection)
+	ReadsCompleted  uint64
+	WritesCompleted uint64
+	ReadsMerged     uint64
+	WritesMerged    uint64
+	SectorsRead     uint64
+	SectorsWritten  uint64
+	ReadTime        uint64
+	WriteTime       uint64
+	IOTime          uint64
+	WeightedIOTime  uint64
+
+	// Rate values (deltas per second)
+	ReadsPerSec          uint64
+	WritesPerSec         uint64
+	SectorsReadPerSec    uint64
+	SectorsWrittenPerSec uint64
+
+	// Calculated performance metrics (emulating iostat output)
+	IOPS             uint64  // iostat: r/s + w/s - Total I/O operations per second
+	ReadBytesPerSec  uint64  // iostat: rKB/s * 1024 - Read throughput in bytes/sec
+	WriteBytesPerSec uint64  // iostat: wKB/s * 1024 - Write throughput in bytes/sec
+	Utilization      float64 // iostat: %util - Disk utilization percentage (0-100)
+	AvgQueueSize     float64 // iostat: avgqu-sz - Average queue depth
+	AvgReadLatency   uint64  // iostat: r_await - Average read latency in milliseconds
+	AvgWriteLatency  uint64  // iostat: w_await - Average write latency in milliseconds
 }
 
 // NetworkStats represents network interface statistics
@@ -265,6 +403,33 @@ type NetworkStats struct {
 	Duplex       string // Duplex mode from /sys/class/net/[interface]/duplex
 	OperState    string // Operational state from /sys/class/net/[interface]/operstate
 	LinkDetected bool   // Link detection from /sys/class/net/[interface]/carrier
+
+	Delta *NetworkDeltaData // Delta data structure containing all calculated deltas and rates
+}
+
+// NetworkDeltaData contains all delta calculations for network statistics
+type NetworkDeltaData struct {
+	DeltaMetadata
+
+	// Delta values (change since last collection)
+	RxBytes   uint64
+	TxBytes   uint64
+	RxPackets uint64
+	TxPackets uint64
+	RxErrors  uint64
+	TxErrors  uint64
+	RxDropped uint64
+	TxDropped uint64
+
+	// Rate values (deltas per second)
+	RxBytesPerSec   uint64
+	TxBytesPerSec   uint64
+	RxPacketsPerSec uint64
+	TxPacketsPerSec uint64
+	RxErrorsPerSec  uint64
+	TxErrorsPerSec  uint64
+	RxDroppedPerSec uint64
+	TxDroppedPerSec uint64
 }
 
 // TCPStats represents TCP connection statistics
@@ -295,6 +460,55 @@ type TCPStats struct {
 	// States: ESTABLISHED, SYN_SENT, SYN_RECV, FIN_WAIT1, FIN_WAIT2,
 	// TIME_WAIT, CLOSE, CLOSE_WAIT, LAST_ACK, LISTEN, CLOSING
 	ConnectionsByState map[string]uint64 // Current count per state (instantaneous)
+
+	Delta *TCPDeltaData // Delta data structure containing all calculated deltas and rates
+}
+
+// TCPDeltaData contains all delta calculations for TCP statistics
+type TCPDeltaData struct {
+	DeltaMetadata
+
+	// Delta values (change since last collection)
+	ActiveOpens         uint64
+	PassiveOpens        uint64
+	AttemptFails        uint64
+	EstabResets         uint64
+	InSegs              uint64
+	OutSegs             uint64
+	RetransSegs         uint64
+	InErrs              uint64
+	OutRsts             uint64
+	InCsumErrors        uint64
+	SyncookiesSent      uint64
+	SyncookiesRecv      uint64
+	SyncookiesFailed    uint64
+	ListenOverflows     uint64
+	ListenDrops         uint64
+	TCPLostRetransmit   uint64
+	TCPFastRetrans      uint64
+	TCPSlowStartRetrans uint64
+	TCPTimeouts         uint64
+
+	// Rate values (deltas per second)
+	ActiveOpensPerSec         uint64
+	PassiveOpensPerSec        uint64
+	AttemptFailsPerSec        uint64
+	EstabResetsPerSec         uint64
+	InSegsPerSec              uint64
+	OutSegsPerSec             uint64
+	RetransSegsPerSec         uint64
+	InErrsPerSec              uint64
+	OutRstsPerSec             uint64
+	InCsumErrorsPerSec        uint64
+	SyncookiesSentPerSec      uint64
+	SyncookiesRecvPerSec      uint64
+	SyncookiesFailedPerSec    uint64
+	ListenOverflowsPerSec     uint64
+	ListenDropsPerSec         uint64
+	TCPLostRetransmitPerSec   uint64
+	TCPFastRetransPerSec      uint64
+	TCPSlowStartRetransPerSec uint64
+	TCPTimeoutsPerSec         uint64
 }
 
 // SystemStats represents system-wide activity statistics from /proc/stat
@@ -304,6 +518,22 @@ type SystemStats struct {
 	Interrupts uint64 // Total interrupt count (cumulative counter)
 	// Context switches since boot from /proc/stat (ctxt line)
 	ContextSwitches uint64 // Total context switches (cumulative counter)
+
+	Delta *SystemDeltaData // Delta data structure containing all calculated deltas and rates
+}
+
+// SystemDeltaData contains all delta calculations for system statistics
+// This replaces individual pointer fields with a single nested structure
+type SystemDeltaData struct {
+	DeltaMetadata
+
+	// Delta values (change since last collection)
+	Interrupts      uint64
+	ContextSwitches uint64
+
+	// Rate values (deltas per second)
+	InterruptsPerSec      uint64
+	ContextSwitchesPerSec uint64
 }
 
 // KernelMessage represents a kernel log message from /dev/kmsg
@@ -342,6 +572,9 @@ type CollectionConfig struct {
 	HostSysPath       string // Path to /sys (useful for containers)
 	HostDevPath       string // Path to /dev (useful for containers)
 	TopProcessCount   int    // Number of top processes to collect (by CPU usage)
+
+	// Delta configuration for monotonic counter collectors
+	Delta DeltaConfig
 }
 
 // DefaultCollectionConfig returns a default configuration
@@ -372,6 +605,7 @@ func DefaultCollectionConfig() CollectionConfig {
 		HostProcPath: "/proc",
 		HostSysPath:  "/sys",
 		HostDevPath:  "/dev",
+		Delta:        DefaultDeltaConfig(),
 	}
 }
 
@@ -393,6 +627,17 @@ func (c *CollectionConfig) ApplyDefaults() {
 	}
 	if c.HostDevPath == "" {
 		c.HostDevPath = defaults.HostDevPath
+	}
+
+	// Apply delta defaults
+	if c.Delta.Mode == "" {
+		c.Delta.Mode = defaults.Delta.Mode
+	}
+	if c.Delta.MinInterval == 0 {
+		c.Delta.MinInterval = defaults.Delta.MinInterval
+	}
+	if c.Delta.MaxInterval == 0 {
+		c.Delta.MaxInterval = defaults.Delta.MaxInterval
 	}
 }
 
@@ -572,6 +817,29 @@ type NUMANodeStatistics struct {
 	InterleaveHit uint64 // Interleaved memory successfully allocated here
 	LocalNode     uint64 // Memory allocated here while process was running here
 	OtherNode     uint64 // Memory allocated here while process was on other node
+
+	Delta *NUMADeltaData // Delta data structure containing all calculated deltas and rates
+}
+
+// NUMADeltaData contains all delta calculations for NUMA node statistics
+type NUMADeltaData struct {
+	DeltaMetadata
+
+	// Delta values for NUMA allocation counters (change since last collection)
+	NumaHit       uint64
+	NumaMiss      uint64
+	NumaForeign   uint64
+	InterleaveHit uint64
+	LocalNode     uint64
+	OtherNode     uint64
+
+	// Rate values for NUMA allocations (deltas per second)
+	NumaHitPerSec       uint64
+	NumaMissPerSec      uint64
+	NumaForeignPerSec   uint64
+	InterleaveHitPerSec uint64
+	LocalNodePerSec     uint64
+	OtherNodePerSec     uint64
 }
 
 // CgroupCPUStats represents CPU resource usage and throttling for a container

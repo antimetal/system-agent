@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/go-logr/logr"
@@ -51,7 +52,7 @@ var _ performance.PointCollector = (*NUMAStatsCollector)(nil)
 //
 // Reference: https://www.kernel.org/doc/html/latest/admin-guide/mm/numa.html
 type NUMAStatsCollector struct {
-	performance.BaseCollector
+	performance.BaseDeltaCollector
 	sysNodesPath string
 	procPath     string
 }
@@ -73,7 +74,7 @@ func NewNUMAStatsCollector(logger logr.Logger, config performance.CollectionConf
 	}
 
 	return &NUMAStatsCollector{
-		BaseCollector: performance.NewBaseCollector(
+		BaseDeltaCollector: performance.NewBaseDeltaCollector(
 			performance.MetricTypeNUMAStats,
 			"NUMA Runtime Stats Collector",
 			logger,
@@ -118,6 +119,19 @@ func (c *NUMAStatsCollector) Collect(ctx context.Context) (any, error) {
 		}
 		stats.Nodes = append(stats.Nodes, node)
 	}
+
+	currentTime := time.Now()
+
+	// Calculate deltas if we have previous state
+	if c.HasDeltaState() {
+		if should, reason := c.ShouldCalculateDeltas(currentTime); should {
+			previous := c.LastSnapshot.(*performance.NUMAStatistics)
+			c.calculateNUMADeltas(stats, previous, currentTime, c.Config)
+		} else {
+			c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
+		}
+	}
+	c.UpdateDeltaState(stats, currentTime)
 
 	return stats, nil
 }
@@ -349,4 +363,74 @@ func (c *NUMAStatsCollector) readNodeNumaStat(path string) (*runtimeNodeNumaStat
 	}
 
 	return stats, nil
+}
+
+func (c *NUMAStatsCollector) calculateNUMADeltas(
+	current, previous *performance.NUMAStatistics,
+	currentTime time.Time,
+	config performance.DeltaConfig,
+) {
+	interval := currentTime.Sub(c.LastTime)
+
+	// Create a map of previous nodes by ID for efficient lookup
+	prevNodesMap := make(map[int]*performance.NUMANodeStatistics)
+	for i, prevNode := range previous.Nodes {
+		prevNodesMap[prevNode.ID] = &previous.Nodes[i]
+	}
+
+	// Calculate deltas for each current node
+	for i := range current.Nodes {
+		currentNode := &current.Nodes[i]
+		prevNode, exists := prevNodesMap[currentNode.ID]
+		if !exists {
+			// New node - skip delta calculation
+			c.Logger().V(2).Info("New NUMA node detected, skipping delta calculation", "nodeID", currentNode.ID)
+			continue
+		}
+
+		c.calculateNUMANodeDeltas(currentNode, prevNode, interval, config)
+	}
+}
+
+func (c *NUMAStatsCollector) calculateNUMANodeDeltas(
+	current, previous *performance.NUMANodeStatistics,
+	interval time.Duration,
+	config performance.DeltaConfig,
+) {
+	var resetDetected bool
+
+	delta := &performance.NUMADeltaData{}
+
+	calculateField := func(currentVal, previousVal uint64) uint64 {
+		deltaVal, reset := c.CalculateUint64Delta(currentVal, previousVal, interval)
+		resetDetected = resetDetected || reset
+		return deltaVal
+	}
+
+	delta.NumaHit = calculateField(current.NumaHit, previous.NumaHit)
+	delta.NumaMiss = calculateField(current.NumaMiss, previous.NumaMiss)
+	delta.NumaForeign = calculateField(current.NumaForeign, previous.NumaForeign)
+	delta.InterleaveHit = calculateField(current.InterleaveHit, previous.InterleaveHit)
+	delta.LocalNode = calculateField(current.LocalNode, previous.LocalNode)
+	delta.OtherNode = calculateField(current.OtherNode, previous.OtherNode)
+
+	if !resetDetected {
+		intervalSecs := interval.Seconds()
+		if intervalSecs > 0 {
+			delta.NumaHitPerSec = uint64(float64(delta.NumaHit) / intervalSecs)
+			delta.NumaMissPerSec = uint64(float64(delta.NumaMiss) / intervalSecs)
+			delta.NumaForeignPerSec = uint64(float64(delta.NumaForeign) / intervalSecs)
+			delta.InterleaveHitPerSec = uint64(float64(delta.InterleaveHit) / intervalSecs)
+			delta.LocalNodePerSec = uint64(float64(delta.LocalNode) / intervalSecs)
+			delta.OtherNodePerSec = uint64(float64(delta.OtherNode) / intervalSecs)
+		}
+	}
+
+	// Use composition helper to set metadata
+	c.PopulateMetadata(delta, time.Now(), resetDetected)
+	current.Delta = delta
+
+	if resetDetected {
+		c.Logger().V(1).Info("Counter reset detected in NUMA statistics", "nodeID", current.ID)
+	}
 }
