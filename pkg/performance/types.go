@@ -79,7 +79,6 @@ func (d DeltaConfig) IsEnabled(metricType MetricType) bool {
 	return d.isSupported(metricType)
 }
 
-
 // isSupported returns whether a metric type supports delta calculations
 func (d DeltaConfig) isSupported(metricType MetricType) bool {
 	switch metricType {
@@ -293,6 +292,7 @@ type ProcessStats struct {
 	PGID    int32  // Process group ID (field 5 in stat)
 	SID     int32  // Session ID (field 6 in stat)
 	Command string // Command name from /proc/[pid]/comm or stat field 2
+	Cmdline string // Command line with arguments from /proc/[pid]/cmdline
 	State   string // Process state (field 3 in stat: R, S, D, Z, T, etc.)
 	// CPU stats from /proc/[pid]/stat
 	CPUTime    uint64  // Total CPU time: utime + stime (fields 14+15)
@@ -318,6 +318,12 @@ type ProcessStats struct {
 	// Context switches from /proc/[pid]/status
 	VoluntaryCtxt   uint64 // voluntary_ctxt_switches
 	InvoluntaryCtxt uint64 // nonvoluntary_ctxt_switches
+}
+
+// ProcessSnapshot contains a collection of process statistics at a specific point in time
+type ProcessSnapshot struct {
+	Timestamp time.Time      // When the snapshot was taken
+	Processes []ProcessStats // All processes in the snapshot
 }
 
 // DiskStats represents disk I/O statistics from /proc/diskstats

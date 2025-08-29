@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	runtimev1 "github.com/antimetal/agent/pkg/api/antimetal/runtime/v1"
 	"github.com/antimetal/agent/pkg/containers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -123,13 +124,13 @@ func TestDiscovery_DiscoverContainers(t *testing.T) {
 			switch container.ID {
 			case "abc123def456789":
 				foundDocker = true
-				assert.Equal(t, "docker", container.Runtime)
+				assert.Equal(t, runtimev1.ContainerRuntime_CONTAINER_RUNTIME_DOCKER, container.Runtime)
 			case "fedcba987654321":
 				foundSystemd = true
-				assert.Equal(t, "docker", container.Runtime)
+				assert.Equal(t, runtimev1.ContainerRuntime_CONTAINER_RUNTIME_DOCKER, container.Runtime)
 			case "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef":
 				foundContainerd = true
-				assert.Equal(t, "containerd", container.Runtime)
+				assert.Equal(t, runtimev1.ContainerRuntime_CONTAINER_RUNTIME_CONTAINERD, container.Runtime)
 			}
 		}
 
@@ -138,7 +139,7 @@ func TestDiscovery_DiscoverContainers(t *testing.T) {
 		assert.True(t, foundContainerd, "Should find containerd container")
 	})
 
-	t.Run("cgroup v2", func(t *testing.T) {
+	t.Run("cgroup v2 unified hierarchy", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		cgroupPath := filepath.Join(tmpDir, "cgroup")
 
@@ -170,17 +171,78 @@ func TestDiscovery_DiscoverContainers(t *testing.T) {
 			switch container.ID {
 			case "abc123def456789":
 				foundDocker = true
-				assert.Equal(t, "docker", container.Runtime)
+				assert.Equal(t, runtimev1.ContainerRuntime_CONTAINER_RUNTIME_DOCKER, container.Runtime)
 			case "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef":
 				foundKube = true
 				// Kubernetes pods under kubepods.slice might not have runtime info in path
-				assert.Contains(t, []string{"containerd", "unknown"}, container.Runtime)
+				assert.Contains(t, []runtimev1.ContainerRuntime{runtimev1.ContainerRuntime_CONTAINER_RUNTIME_CONTAINERD, runtimev1.ContainerRuntime_CONTAINER_RUNTIME_UNKNOWN}, container.Runtime)
 			}
 		}
 
 		assert.True(t, foundDocker, "Should find docker container")
 		assert.True(t, foundKube, "Should find kubernetes container")
 	})
+}
+
+func TestParseContainerRuntime(t *testing.T) {
+	tests := []struct {
+		name     string
+		runtime  string
+		expected runtimev1.ContainerRuntime
+	}{
+		{
+			name:     "docker",
+			runtime:  "docker",
+			expected: runtimev1.ContainerRuntime_CONTAINER_RUNTIME_DOCKER,
+		},
+		{
+			name:     "containerd",
+			runtime:  "containerd",
+			expected: runtimev1.ContainerRuntime_CONTAINER_RUNTIME_CONTAINERD,
+		},
+		{
+			name:     "cri-containerd",
+			runtime:  "cri-containerd",
+			expected: runtimev1.ContainerRuntime_CONTAINER_RUNTIME_CRI_CONTAINERD,
+		},
+		{
+			name:     "cri-o",
+			runtime:  "cri-o",
+			expected: runtimev1.ContainerRuntime_CONTAINER_RUNTIME_CRI_O,
+		},
+		{
+			name:     "crio",
+			runtime:  "crio",
+			expected: runtimev1.ContainerRuntime_CONTAINER_RUNTIME_CRI_O,
+		},
+		{
+			name:     "podman",
+			runtime:  "podman",
+			expected: runtimev1.ContainerRuntime_CONTAINER_RUNTIME_PODMAN,
+		},
+		{
+			name:     "unknown runtime",
+			runtime:  "rkt",
+			expected: runtimev1.ContainerRuntime_CONTAINER_RUNTIME_UNKNOWN,
+		},
+		{
+			name:     "case insensitive",
+			runtime:  "DOCKER",
+			expected: runtimev1.ContainerRuntime_CONTAINER_RUNTIME_DOCKER,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := containers.ParseContainerRuntime(tt.runtime)
+			assert.Equal(t, tt.expected, result)
+
+			// Also verify string conversion works
+			if tt.expected != runtimev1.ContainerRuntime_CONTAINER_RUNTIME_UNKNOWN {
+				assert.NotEmpty(t, result.String())
+			}
+		})
+	}
 }
 
 func TestExtractContainerID(t *testing.T) {
