@@ -68,7 +68,10 @@ func (m *Manager) Start(ctx context.Context) error {
 
 	m.logger.Info("config manager stopping due to context cancellation")
 
-	return m.loader.Close()
+	if closer, ok := m.loader.(LoaderCloser); ok {
+		return closer.Close()
+	}
+	return nil
 }
 
 // ListConfigs retrieves available configs with optional filters.
