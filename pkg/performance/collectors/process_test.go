@@ -103,9 +103,10 @@ func TestProcessCollector(t *testing.T) {
 	// Test that we respect the top N limit
 	assert.LessOrEqual(t, len(secondCollection), 20)
 
-	// Test Stop
-	err = collector.Stop()
-	require.NoError(t, err)
+	// Test cleanup via context cancellation
+	cancel()
+	// Give the collector time to clean up
+	time.Sleep(50 * time.Millisecond)
 	assert.Equal(t, performance.CollectorStatusDisabled, collector.Status())
 }
 

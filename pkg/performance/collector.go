@@ -37,10 +37,8 @@ type ContinuousCollector interface {
 	Collector
 
 	// Start begins continuous collection and returns a channel for streaming results
+	// The collector must clean up when the context is cancelled
 	Start(ctx context.Context) (<-chan any, error)
-
-	// Stop halts continuous collection and cleans up resources
-	Stop() error
 
 	Status() CollectorStatus
 	LastError() error
@@ -164,7 +162,6 @@ type ContinuousPointCollector struct {
 	BaseContinuousCollector
 	pointCollector PointCollector
 	ch             chan any
-	stopped        chan struct{}
 }
 
 // NewContinuousPointCollector creates a new ContinuousPointCollector
@@ -187,7 +184,6 @@ func NewContinuousPointCollector(
 			caps,
 		),
 		pointCollector: pointCollector,
-		stopped:        make(chan struct{}),
 	}
 }
 
@@ -217,7 +213,17 @@ func (c *ContinuousPointCollector) Start(ctx context.Context) (<-chan any, error
 }
 
 func (c *ContinuousPointCollector) start(ctx context.Context) {
+	defer func() {
+		if c.ch != nil {
+			close(c.ch)
+			c.ch = nil
+		}
+		c.SetStatus(CollectorStatusDisabled)
+	}()
+
 	ticker := time.NewTicker(c.config.Interval)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ticker.C:
@@ -229,32 +235,9 @@ func (c *ContinuousPointCollector) start(ctx context.Context) {
 			}
 			c.ch <- data
 		case <-ctx.Done():
-			if err := c.Stop(); err != nil {
-				c.SetError(err)
-			}
-		case <-c.stopped:
-			ticker.Stop()
 			return
 		}
 	}
-}
-
-// Stop halts the continuous point collection
-func (c *ContinuousPointCollector) Stop() error {
-	if c.Status() == CollectorStatusDisabled {
-		return nil
-	}
-
-	if c.stopped != nil {
-		close(c.stopped)
-		c.stopped = nil
-	}
-	if c.ch != nil {
-		close(c.ch)
-		c.ch = nil
-	}
-	c.SetStatus(CollectorStatusDisabled)
-	return nil
 }
 
 // OnceContinuousCollector is a ContinuousCollector that wraps a PointCollector and
@@ -336,13 +319,8 @@ func (c *OnceContinuousCollector) Start(ctx context.Context) (<-chan any, error)
 		ch <- c.result
 	}
 	close(ch)
+	c.SetStatus(CollectorStatusDisabled) // Reset status after completion
 	return ch, c.LastError()
-}
-
-// Stop sets the colllector status back to disabled but DOES NOT clear the result
-func (c *OnceContinuousCollector) Stop() error {
-	c.SetStatus(CollectorStatusDisabled)
-	return nil
 }
 
 // MetricsStore provides thread-safe storage for collected metrics
