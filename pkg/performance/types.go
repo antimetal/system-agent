@@ -37,6 +37,8 @@ const (
 	MetricTypeMemoryInfo  MetricType = "memory_info"
 	MetricTypeDiskInfo    MetricType = "disk_info"
 	MetricTypeNetworkInfo MetricType = "network_info"
+	// eBPF-based collectors
+	MetricTypeProfile MetricType = "profile"
 )
 
 // DeltaCalculationMode represents how delta/rate calculations are performed
@@ -908,4 +910,41 @@ type ContainerInfo struct {
 	State     string // running, paused, stopped
 	StartedAt time.Time
 	Labels    map[string]string
+}
+
+// ProfileStats represents profiling statistics from eBPF profiler
+type ProfileStats struct {
+	CollectionTime time.Time                // When this profile was collected
+	Duration       time.Duration            // Collection duration
+	EventName      string                   // Perf event name (e.g., "cpu-cycles")
+	EventType      uint32                   // Perf event type
+	EventConfig    uint64                   // Perf event config
+	SamplePeriod   uint64                   // Sample period
+	SampleCount    uint64                   // Total samples collected
+	DroppedSamples uint64                   // Samples dropped due to buffer full
+	LostSamples    uint64                   // Samples lost in ring buffer
+	Stacks         []ProfileStack           // Stack traces with counts
+	Processes      map[int32]ProfileProcess // Process-level aggregation
+}
+
+// ProfileStack represents a stack trace with sample count
+type ProfileStack struct {
+	ID          uint32   // Stack ID
+	UserStack   []uint64 // User space stack addresses
+	KernelStack []uint64 // Kernel space stack addresses
+	PID         int32    // Process ID
+	TID         int32    // Thread ID
+	CPU         int32    // CPU where collected
+	SampleCount uint64   // Number of times this stack was sampled
+	Percentage  float64  // Percentage of total samples
+}
+
+// ProfileProcess represents process-level profiling data
+type ProfileProcess struct {
+	PID         int32    // Process ID
+	Command     string   // Process command name
+	SampleCount uint64   // Total samples for this process
+	Percentage  float64  // Percentage of total samples
+	ThreadCount int      // Number of threads sampled
+	TopStacks   []uint32 // IDs of top stacks for this process
 }
