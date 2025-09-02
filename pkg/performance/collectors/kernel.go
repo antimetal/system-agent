@@ -19,8 +19,8 @@ import (
 
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/antimetal/agent/pkg/performance/capabilities"
-	"github.com/antimetal/agent/pkg/performance/procutils"
 	"github.com/antimetal/agent/pkg/performance/ringbuffer"
+	"github.com/antimetal/agent/pkg/proc"
 	"github.com/go-logr/logr"
 )
 
@@ -60,7 +60,7 @@ type KernelCollector struct {
 	logger       logr.Logger
 	kmsgPath     string
 	messageLimit int
-	procUtils    *procutils.ProcUtils
+	procPath     string
 
 	// Continuous collection state
 	continuousMu   sync.Mutex
@@ -106,7 +106,7 @@ func NewKernelCollector(logger logr.Logger, config performance.CollectionConfig,
 		logger:       logger.WithName("kernel"),
 		kmsgPath:     filepath.Join(config.HostDevPath, "kmsg"),
 		messageLimit: defaultMessageLimit,
-		procUtils:    procutils.New(config.HostProcPath),
+		procPath:     config.HostProcPath,
 	}
 
 	for _, opt := range opts {
@@ -129,7 +129,7 @@ func (c *KernelCollector) Collect(ctx context.Context) (any, error) {
 }
 
 func (c *KernelCollector) collectKernelMessages(ctx context.Context) ([]*performance.KernelMessage, error) {
-	bootTime, err := c.procUtils.GetBootTime()
+	bootTime, err := proc.BootTime(c.procPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get boot time: %w", err)
 	}
@@ -342,7 +342,7 @@ func (c *KernelCollector) Start(ctx context.Context) (<-chan any, error) {
 		return nil, fmt.Errorf("collector is already running")
 	}
 
-	bootTime, err := c.procUtils.GetBootTime()
+	bootTime, err := proc.BootTime(c.procPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get boot time: %w", err)
 	}

@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/antimetal/agent/pkg/performance"
-	"github.com/antimetal/agent/pkg/performance/procutils"
+	"github.com/antimetal/agent/pkg/proc"
 	"github.com/go-logr/logr"
 )
 
@@ -63,7 +63,7 @@ type ProcessCollector struct {
 	ProcPath     string // Made public for testing
 	TopProcesses int    // Made public for testing
 	interval     time.Duration
-	procUtils    *procutils.ProcUtils
+	procPath     string
 
 	// State tracking for CPU percentage calculations
 	mu             sync.RWMutex
@@ -119,7 +119,7 @@ func NewProcessCollector(logger logr.Logger, config performance.CollectionConfig
 		TopProcesses: topProcesses,
 		interval:     interval,
 		lastCPUTimes: make(map[int32]*ProcessCPUTime),
-		procUtils:    procutils.New(config.HostProcPath),
+		procPath:     config.HostProcPath,
 	}, nil
 }
 
@@ -352,7 +352,7 @@ func (c *ProcessCollector) ReadMinimalStats(pid int32, timeDelta float64, lastCP
 	// Calculate CPU percentage
 	if lastCPU, exists := lastCPUTimes[pid]; exists && timeDelta > 0 {
 		cpuDelta := float64(minimal.CPUTime - lastCPU.TotalTime)
-		userHZ, err := c.procUtils.GetUserHZ()
+		userHZ, err := proc.UserHZ(c.procPath)
 		if err != nil {
 			userHZ = 100
 		}
@@ -503,7 +503,7 @@ func (c *ProcessCollector) ParseStatFull(stats *performance.ProcessStats, statDa
 
 	// Field 21: rss (resident set size in pages)
 	if rss, err := strconv.ParseUint(fields[statFieldRSS], 10, 64); err == nil {
-		pageSize, err := c.procUtils.GetPageSize()
+		pageSize, err := proc.PageSize(c.procPath)
 		if err != nil {
 			pageSize = 4096 // Safe assumption if we can't determine it
 		}
@@ -513,9 +513,9 @@ func (c *ProcessCollector) ParseStatFull(stats *performance.ProcessStats, statDa
 	// Field 19: starttime (in clock ticks since boot)
 	if len(fields) > statFieldStartTime {
 		if starttime, err := strconv.ParseUint(fields[statFieldStartTime], 10, 64); err == nil {
-			bootTime, err := c.procUtils.GetBootTime()
+			bootTime, err := proc.BootTime(c.procPath)
 			if err == nil {
-				userHZ, err := c.procUtils.GetUserHZ()
+				userHZ, err := proc.UserHZ(c.procPath)
 				if err != nil {
 					userHZ = 100 // Safe assumption if we can't determine it
 				}
