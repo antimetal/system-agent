@@ -115,7 +115,6 @@ func (b *BaseDeltaCollector) CalculateUint64Delta(
 	return delta, false
 }
 
-
 // PopulateMetadata is a composition helper that sets DeltaMetadata for any delta struct
 func (b *BaseDeltaCollector) PopulateMetadata(delta interface{}, currentTime time.Time, resetDetected bool) {
 	metadata := b.CreateDeltaMetadata(currentTime, resetDetected)

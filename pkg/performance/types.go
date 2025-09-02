@@ -79,7 +79,6 @@ func (d DeltaConfig) IsEnabled(metricType MetricType) bool {
 	return d.isSupported(metricType)
 }
 
-
 // isSupported returns whether a metric type supports delta calculations
 func (d DeltaConfig) isSupported(metricType MetricType) bool {
 	switch metricType {
