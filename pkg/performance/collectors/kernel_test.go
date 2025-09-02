@@ -15,10 +15,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/antimetal/agent/pkg/performance"
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/antimetal/agent/pkg/performance"
+	"github.com/antimetal/agent/pkg/proc"
 )
 
 func TestKernelCollector_Constructor(t *testing.T) {
@@ -99,7 +101,7 @@ func TestKernelCollector_parseKmsgLine(t *testing.T) {
 	err = os.WriteFile(filepath.Join(config.HostProcPath, "stat"), []byte(statContent), 0644)
 	require.NoError(t, err)
 
-	bootTime, err := collector.procUtils.GetBootTime()
+	bootTime, err := proc.BootTime(config.HostProcPath)
 	require.NoError(t, err)
 
 	tests := []struct {
