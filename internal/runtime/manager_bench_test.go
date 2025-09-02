@@ -81,7 +81,7 @@ func BenchmarkRuntimeDiscovery(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				// Benchmark the complete discovery cycle
-				if err := manager.updateRuntimeGraph(ctx); err != nil {
+				if err := manager.ForceUpdate(ctx); err != nil {
 					b.Fatal(err)
 				}
 			}

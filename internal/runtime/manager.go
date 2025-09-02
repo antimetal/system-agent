@@ -1,3 +1,5 @@
+//go:build linux
+
 // Copyright Antimetal, Inc. All rights reserved.
 //
 // Use of this source code is governed by a source available license that can be found in the
@@ -15,6 +17,7 @@ import (
 	"time"
 
 	"github.com/antimetal/agent/internal/runtime/graph"
+	"github.com/antimetal/agent/internal/runtime/tracker"
 	"github.com/antimetal/agent/pkg/containers"
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/antimetal/agent/pkg/resource"
@@ -28,12 +31,25 @@ type Manager struct {
 	perfManager *performance.Manager
 	builder     *graph.Builder
 	discovery   *containers.Discovery
+	tracker     tracker.RuntimeTracker
 
 	interval   time.Duration
 	lastUpdate time.Time
 	mu         sync.RWMutex
 
 	// Metrics for monitoring discovery performance
+	metrics *DiscoveryMetrics
+
+	// Event processing
+	eventProcessor *EventProcessor
+	cancel         context.CancelFunc
+	wg             sync.WaitGroup
+}
+
+// EventProcessor handles events from the tracker
+type EventProcessor struct {
+	logger  logr.Logger
+	builder *graph.Builder
 	metrics *DiscoveryMetrics
 }
 
@@ -54,6 +70,8 @@ type ManagerConfig struct {
 	Store              resource.Store
 	PerformanceManager *performance.Manager
 	CgroupPath         string
+	EventBufferSize    int
+	DebounceInterval   time.Duration
 }
 
 func NewManager(logger logr.Logger, config ManagerConfig) (*Manager, error) {
@@ -80,49 +98,280 @@ func NewManager(logger logr.Logger, config ManagerConfig) (*Manager, error) {
 		}
 	}
 
+	// Configure eBPF tracker
+	trackerConfig := tracker.TrackerConfig{
+		ReconciliationInterval: interval,
+		EventBufferSize:        config.EventBufferSize,
+		DebounceInterval:       config.DebounceInterval,
+		CgroupPath:             cgroupPath,
+	}
+
+	// Set defaults
+	if trackerConfig.EventBufferSize == 0 {
+		trackerConfig.EventBufferSize = 10000
+	}
+	if trackerConfig.DebounceInterval == 0 {
+		trackerConfig.DebounceInterval = 100 * time.Millisecond
+	}
+	if trackerConfig.ReconciliationInterval == 0 {
+		trackerConfig.ReconciliationInterval = 5 * time.Minute
+	}
+
+	// Create eBPF tracker
+	runtimeTracker, err := tracker.NewTracker(logger, trackerConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create eBPF tracker: %w", err)
+	}
+
+	builder := graph.NewBuilder(logger, config.Store)
+
 	return &Manager{
 		logger:      logger.WithName("runtime-manager"),
 		store:       config.Store,
 		perfManager: config.PerformanceManager,
-		builder:     graph.NewBuilder(logger, config.Store),
+		builder:     builder,
 		discovery:   containers.NewDiscovery(cgroupPath),
+		tracker:     runtimeTracker,
 		interval:    interval,
 		metrics:     &DiscoveryMetrics{},
+		eventProcessor: &EventProcessor{
+			logger:  logger.WithName("event-processor"),
+			builder: builder,
+			metrics: &DiscoveryMetrics{},
+		},
 	}, nil
 }
 
 // Start begins runtime discovery and graph building
 // Implements controller-runtime's Runnable interface
 func (m *Manager) Start(ctx context.Context) error {
-	m.logger.Info("Starting runtime manager", "interval", m.interval)
+	m.logger.Info("Starting runtime manager with eBPF tracker")
 
-	// Do an initial runtime discovery
-	if err := m.updateRuntimeGraph(ctx); err != nil {
-		m.logger.Error(err, "Failed initial runtime discovery")
-		// Don't fail startup on initial discovery error
+	// Start the tracker
+	events, err := m.tracker.Run(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to start eBPF tracker: %w", err)
 	}
 
-	// Run periodic updates until context is cancelled
-	m.runPeriodicUpdates(ctx)
+	// Create cancellable context
+	ctx, m.cancel = context.WithCancel(ctx)
+
+	// Do initial population from snapshot
+	if err := m.initialPopulation(ctx); err != nil {
+		m.logger.Error(err, "Failed initial population, continuing anyway")
+	}
+
+	// Start event processing
+	m.wg.Add(1)
+	go m.processEvents(ctx, events)
 
 	return nil
 }
 
-func (m *Manager) runPeriodicUpdates(ctx context.Context) {
-	ticker := time.NewTicker(m.interval)
-	defer ticker.Stop()
+// Stop gracefully stops the manager
+func (m *Manager) Stop() error {
+	m.logger.Info("Stopping runtime manager")
 
+	// Cancel context to stop event processing
+	if m.cancel != nil {
+		m.cancel()
+	}
+
+	// Wait for event processing to finish
+	m.wg.Wait()
+
+	return nil
+}
+
+// initialPopulation performs the initial graph population from a full snapshot
+func (m *Manager) initialPopulation(ctx context.Context) error {
+	startTime := time.Now()
+	m.logger.Info("Performing initial runtime population")
+
+	// Get full snapshot from tracker
+	trackerSnapshot, err := m.tracker.Snapshot(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get initial snapshot: %w", err)
+	}
+
+	// Convert tracker snapshot to runtime snapshot for builder
+	runtimeSnapshot := m.convertSnapshot(trackerSnapshot)
+
+	// Build initial graph
+	buildCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	if err := m.builder.BuildFromSnapshot(buildCtx, runtimeSnapshot); err != nil {
+		return fmt.Errorf("failed to build initial graph: %w", err)
+	}
+
+	// Update metrics
+	m.updateMetrics(startTime, runtimeSnapshot, 0)
+	
+	m.mu.Lock()
+	m.lastUpdate = time.Now()
+	m.mu.Unlock()
+
+	m.logger.Info("Initial population completed",
+		"duration", time.Since(startTime),
+		"containers", len(trackerSnapshot.Containers),
+		"processes", len(trackerSnapshot.Processes))
+
+	return nil
+}
+
+// processEvents handles events from the tracker
+func (m *Manager) processEvents(ctx context.Context, events <-chan tracker.RuntimeEvent) {
+	defer m.wg.Done()
+	
 	for {
 		select {
 		case <-ctx.Done():
-			m.logger.Info("Stopping runtime manager")
 			return
-		case <-ticker.C:
-			if err := m.updateRuntimeGraph(ctx); err != nil {
-				m.logger.Error(err, "Failed to update runtime graph")
+		
+		case event, ok := <-events:
+			if !ok {
+				m.logger.Info("Event channel closed")
+				return
 			}
+
+			// Process event
+			if err := m.eventProcessor.ProcessEvent(ctx, event); err != nil {
+				m.logger.Error(err, "Failed to process event",
+					"event_type", event.Type,
+					"pid", event.ProcessPID,
+					"container_id", event.ContainerID)
+			}
+
+			// Update last update time
+			m.mu.Lock()
+			m.lastUpdate = time.Now()
+			m.mu.Unlock()
 		}
 	}
+}
+
+// convertSnapshot converts a tracker snapshot to a runtime snapshot
+func (m *Manager) convertSnapshot(trackerSnapshot *tracker.RuntimeSnapshot) *RuntimeSnapshot {
+	// Convert processes to performance.ProcessStats format
+	processes := make([]performance.ProcessStats, len(trackerSnapshot.Processes))
+	for i, p := range trackerSnapshot.Processes {
+		processes[i] = performance.ProcessStats{
+			PID:     p.Pid,
+			PPID:    p.Ppid,
+			Command: p.Command,
+			Cmdline: p.Cmdline,
+			State:   p.State,
+		}
+	}
+
+	// Convert containers to containers.Container format
+	containers := make([]containers.Container, len(trackerSnapshot.Containers))
+	for i, c := range trackerSnapshot.Containers {
+		containers[i] = containers.Container{
+			ID:         c.Id,
+			Runtime:    c.Runtime,
+			CgroupPath: c.CgroupPath,
+		}
+	}
+
+	return &RuntimeSnapshot{
+		Timestamp:  trackerSnapshot.Timestamp,
+		Containers: containers,
+		ProcessStats: &performance.ProcessSnapshot{
+			Timestamp: trackerSnapshot.Timestamp,
+			Processes: processes,
+		},
+	}
+}
+
+// ProcessEvent handles a single runtime event
+func (ep *EventProcessor) ProcessEvent(ctx context.Context, event tracker.RuntimeEvent) error {
+	ep.logger.V(2).Info("Processing runtime event",
+		"type", event.Type,
+		"timestamp", event.Timestamp)
+
+	switch event.Type {
+	case tracker.EventTypeProcessCreate:
+		return ep.handleProcessCreate(ctx, event)
+	
+	case tracker.EventTypeProcessExit:
+		return ep.handleProcessExit(ctx, event)
+	
+	case tracker.EventTypeContainerCreate:
+		return ep.handleContainerCreate(ctx, event)
+	
+	case tracker.EventTypeContainerDestroy:
+		return ep.handleContainerDestroy(ctx, event)
+	
+	default:
+		return fmt.Errorf("unknown event type: %v", event.Type)
+	}
+}
+
+// handleProcessCreate processes a process creation event
+func (ep *EventProcessor) handleProcessCreate(ctx context.Context, event tracker.RuntimeEvent) error {
+	// TODO: Implement delta update to graph for process creation
+	// This will be implemented when graph delta methods are added
+	ep.logger.V(2).Info("Process created",
+		"pid", event.ProcessPID,
+		"ppid", event.ProcessPPID,
+		"comm", event.ProcessComm)
+	
+	// Update metrics
+	ep.metrics.mu.Lock()
+	ep.metrics.LastProcessCount++
+	ep.metrics.mu.Unlock()
+
+	return nil
+}
+
+// handleProcessExit processes a process exit event
+func (ep *EventProcessor) handleProcessExit(ctx context.Context, event tracker.RuntimeEvent) error {
+	// TODO: Implement delta update to graph for process removal
+	ep.logger.V(2).Info("Process exited",
+		"pid", event.ProcessPID)
+	
+	// Update metrics
+	ep.metrics.mu.Lock()
+	if ep.metrics.LastProcessCount > 0 {
+		ep.metrics.LastProcessCount--
+	}
+	ep.metrics.mu.Unlock()
+
+	return nil
+}
+
+// handleContainerCreate processes a container creation event
+func (ep *EventProcessor) handleContainerCreate(ctx context.Context, event tracker.RuntimeEvent) error {
+	// TODO: Implement delta update to graph for container creation
+	ep.logger.V(2).Info("Container created",
+		"container_id", event.ContainerID,
+		"runtime", event.ContainerRuntime,
+		"cgroup_path", event.CgroupPath)
+	
+	// Update metrics
+	ep.metrics.mu.Lock()
+	ep.metrics.LastContainerCount++
+	ep.metrics.mu.Unlock()
+
+	return nil
+}
+
+// handleContainerDestroy processes a container destruction event
+func (ep *EventProcessor) handleContainerDestroy(ctx context.Context, event tracker.RuntimeEvent) error {
+	// TODO: Implement delta update to graph for container removal
+	ep.logger.V(2).Info("Container destroyed",
+		"container_id", event.ContainerID)
+	
+	// Update metrics
+	ep.metrics.mu.Lock()
+	if ep.metrics.LastContainerCount > 0 {
+		ep.metrics.LastContainerCount--
+	}
+	ep.metrics.mu.Unlock()
+
+	return nil
 }
 
 func (m *Manager) updateRuntimeGraph(ctx context.Context) error {
@@ -302,7 +551,7 @@ func (m *Manager) GetLastUpdateTime() time.Time {
 }
 
 func (m *Manager) ForceUpdate(ctx context.Context) error {
-	return m.updateRuntimeGraph(ctx)
+	return m.initialPopulation(ctx)
 }
 
 // updateMetrics updates discovery performance metrics
@@ -334,11 +583,16 @@ func (m *Manager) GetMetrics() DiscoveryMetrics {
 	m.metrics.mu.RLock()
 	defer m.metrics.mu.RUnlock()
 
+	// Merge metrics from event processor
+	epMetrics := m.eventProcessor.metrics
+	epMetrics.mu.RLock()
+	defer epMetrics.mu.RUnlock()
+
 	// Return a copy to avoid race conditions
 	return DiscoveryMetrics{
 		LastDiscoveryDuration:  m.metrics.LastDiscoveryDuration,
-		LastContainerCount:     m.metrics.LastContainerCount,
-		LastProcessCount:       m.metrics.LastProcessCount,
+		LastContainerCount:     epMetrics.LastContainerCount,
+		LastProcessCount:       epMetrics.LastProcessCount,
 		LastDiscoveryErrors:    m.metrics.LastDiscoveryErrors,
 		TotalDiscoveries:       m.metrics.TotalDiscoveries,
 		TotalDiscoveryErrors:   m.metrics.TotalDiscoveryErrors,
