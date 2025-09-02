@@ -19,7 +19,6 @@ import (
 	"github.com/antimetal/agent/pkg/performance"
 	_ "github.com/antimetal/agent/pkg/performance/collectors" // Import to register collectors
 	"github.com/go-logr/logr"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
