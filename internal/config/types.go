@@ -80,9 +80,16 @@ type Loader interface {
 	// The channel SHOULD NOT send an Instance with a Version lower than a
 	// previously received Instance with the same TypeUrl and Name.
 	//
-	// The channel will be closed once Close() is called. If Loader is closed, then
-	// this SHOULD return a nil channel.
+	// If the Loader instance is also a LoaderCloser, the channel SHOULD be
+	// closed once Close() is called. If the loader is closed, then this
+	// SHOULD return a nil channel.
 	Watch(opts Options) <-chan Instance
+}
+
+// LoaderCloser groups the Loader methods with Close.
+type LoaderCloser interface {
+	Loader
+
 	// Close stops the loader and cleans up resources.
 	// This method SHOULD BE IDEMPOTENT - Calling Close multiple times SHOULD
 	// return the error of the first close call.
