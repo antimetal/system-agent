@@ -205,9 +205,8 @@ func TestCollectorCompatibility(t *testing.T) {
 				t.Errorf("%s: Timeout waiting for data", tc.name)
 			}
 
-			// Stop the collector
-			err = collector.Stop()
-			assert.NoError(t, err, "Failed to stop %s", tc.name)
+			// Context cancellation will trigger cleanup
+			cancel()
 		})
 	}
 }

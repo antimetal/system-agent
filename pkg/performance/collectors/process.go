@@ -71,8 +71,7 @@ type ProcessCollector struct {
 	lastUpdateTime time.Time
 
 	// Channel management
-	ch      chan any
-	stopped chan struct{}
+	ch chan any
 }
 
 // ProcessCPUTime tracks CPU usage for a process over time
@@ -143,42 +142,25 @@ func (c *ProcessCollector) Start(ctx context.Context) (<-chan any, error) {
 	c.mu.Unlock()
 
 	c.ch = make(chan any)
-	c.stopped = make(chan struct{})
 	go c.runCollection(ctx)
 	return c.ch, nil
 }
 
-func (c *ProcessCollector) Stop() error {
-	if c.Status() == performance.CollectorStatusDisabled {
-		return nil
-	}
-
-	if c.stopped != nil {
-		close(c.stopped)
-		c.stopped = nil
-	}
-
-	// Give the goroutine a moment to exit cleanly
-	time.Sleep(10 * time.Millisecond)
-
-	if c.ch != nil {
-		close(c.ch)
-		c.ch = nil
-	}
-
-	c.SetStatus(performance.CollectorStatusDisabled)
-	return nil
-}
-
 func (c *ProcessCollector) runCollection(ctx context.Context) {
+	defer func() {
+		if c.ch != nil {
+			close(c.ch)
+			c.ch = nil
+		}
+		c.SetStatus(performance.CollectorStatusDisabled)
+	}()
+
 	ticker := time.NewTicker(c.interval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			return
-		case <-c.stopped:
 			return
 		case <-ticker.C:
 			processes, err := c.collectWithDeltas(ctx)
@@ -191,8 +173,6 @@ func (c *ProcessCollector) runCollection(ctx context.Context) {
 			select {
 			case c.ch <- processes:
 			case <-ctx.Done():
-				return
-			case <-c.stopped:
 				return
 			}
 		}

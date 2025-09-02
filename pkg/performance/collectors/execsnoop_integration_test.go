@@ -50,7 +50,7 @@ func TestExecSnoopCollector_Integration(t *testing.T) {
 		// Start the collector
 		eventChan, err := collector.Start(ctx)
 		require.NoError(t, err, "Failed to start execsnoop collector")
-		defer collector.Stop()
+		// Context cancellation will trigger cleanup
 
 		// Collect events
 		events := make([]*collectors.ExecEvent, 0)
@@ -125,7 +125,8 @@ func TestExecSnoopCollector_Integration(t *testing.T) {
 		collector, err := collectors.NewExecSnoopCollector(logger, config, "")
 		require.NoError(t, err)
 
-		ctx := context.Background()
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
 		// Start should succeed
 		eventChan, err := collector.Start(ctx)
@@ -135,11 +136,12 @@ func TestExecSnoopCollector_Integration(t *testing.T) {
 		// Verify collector is active
 		assert.Equal(t, performance.CollectorStatusActive, collector.Status())
 
-		// Stop should succeed
-		err = collector.Stop()
-		require.NoError(t, err)
+		// Context cancellation should trigger cleanup
+		cancel()
+		// Give time for cleanup
+		time.Sleep(100 * time.Millisecond)
 
-		// Verify collector is disabled after stop
+		// Verify collector is disabled after context cancellation
 		assert.Equal(t, performance.CollectorStatusDisabled, collector.Status())
 	})
 }

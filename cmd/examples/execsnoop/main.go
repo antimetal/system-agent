@@ -59,10 +59,12 @@ func main() {
 	for {
 		select {
 		case <-ctx.Done():
-			goto cleanup
+			fmt.Printf("\nProcessed %d events\n", eventCount)
+			return
 		case event, ok := <-eventChan:
 			if !ok {
-				goto cleanup
+				fmt.Printf("\nProcessed %d events\n", eventCount)
+				return
 			}
 			if execEvent, ok := event.(*collectors.ExecEvent); ok {
 				eventCount++
@@ -76,12 +78,4 @@ func main() {
 			}
 		}
 	}
-
-cleanup:
-	err = collector.Stop()
-	if err != nil {
-		log.Printf("Error stopping collector: %v", err)
-	}
-
-	fmt.Printf("\nProcessed %d events\n", eventCount)
 }

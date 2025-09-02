@@ -238,16 +238,13 @@ func TestKernelCollector_ContinuousCollection(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "already running")
 
-	// Test Stop
-	err = collector.Stop()
-	require.NoError(t, err)
+	// Test cleanup via context cancellation
+	cancel()
+	// Give the collector time to clean up
+	time.Sleep(50 * time.Millisecond)
 
-	// Test Status after stopping
+	// Test Status after context cancellation
 	assert.Equal(t, performance.CollectorStatusDisabled, collector.Status())
-
-	// Test double stop should be ok
-	err = collector.Stop()
-	assert.NoError(t, err)
 }
 
 func TestKernelCollector_ParseMessageContent(t *testing.T) {
