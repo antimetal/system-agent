@@ -33,6 +33,7 @@ import (
 	k8sagent "github.com/antimetal/agent/internal/kubernetes/agent"
 	"github.com/antimetal/agent/internal/kubernetes/cluster"
 	"github.com/antimetal/agent/internal/kubernetes/scheme"
+	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/antimetal/agent/pkg/resource/store"
 )
@@ -221,19 +222,39 @@ func main() {
 		}
 	}()
 
-	// Setup Intake Worker
-	intakeWorker, err := intake.NewWorker(rsrcStore,
-		intake.WithLogger(mgr.GetLogger().WithName("intake-worker")),
+	// Setup K8S Intake Worker (leader-only for Kubernetes provider resources)
+	k8sIntakeWorker, err := intake.NewWorker(rsrcStore,
+		intake.WithLogger(mgr.GetLogger().WithName("k8s-intake-worker")),
 		intake.WithGRPCConn(intakeConn),
 		intake.WithAPIKey(intakeAPIKey),
 		intake.WithMaxStreamAge(maxStreamAge),
+		intake.WithProviderFilter(resourcev1.Provider_PROVIDER_KUBERNETES),
+		intake.WithLeaderElection(true), // Only runs on leader
 	)
 	if err != nil {
-		setupLog.Error(err, "unable to create intake worker")
+		setupLog.Error(err, "unable to create K8S intake worker")
 		os.Exit(1)
 	}
-	if err := mgr.Add(intakeWorker); err != nil {
-		setupLog.Error(err, "unable to register intake worker")
+	if err := mgr.Add(k8sIntakeWorker); err != nil {
+		setupLog.Error(err, "unable to register K8S intake worker")
+		os.Exit(1)
+	}
+
+	// Setup Instance Intake Worker (runs on all instances for Antimetal provider resources)
+	instanceIntakeWorker, err := intake.NewWorker(rsrcStore,
+		intake.WithLogger(mgr.GetLogger().WithName("instance-intake-worker")),
+		intake.WithGRPCConn(intakeConn),
+		intake.WithAPIKey(intakeAPIKey),
+		intake.WithMaxStreamAge(maxStreamAge),
+		intake.WithProviderFilter(resourcev1.Provider_PROVIDER_ANTIMETAL),
+		intake.WithLeaderElection(false), // Runs on all instances
+	)
+	if err != nil {
+		setupLog.Error(err, "unable to create instance intake worker")
+		os.Exit(1)
+	}
+	if err := mgr.Add(instanceIntakeWorker); err != nil {
+		setupLog.Error(err, "unable to register instance intake worker")
 		os.Exit(1)
 	}
 
