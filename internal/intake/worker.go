@@ -84,7 +84,7 @@ type worker struct {
 	maxBatchSize        int
 	flushPeriod         time.Duration
 	resourceFilter      *resourcev1.TypeDescriptor
-	providerFilter      []resourcev1.Provider // For provider-based filtering
+	providerFilter      map[resourcev1.Provider]bool // For provider-based filtering
 	needsLeaderElection bool
 
 	// runtime fields
@@ -145,7 +145,10 @@ func WithLeaderElection(needed bool) WorkerOpts {
 
 func WithProviderFilter(providers ...resourcev1.Provider) WorkerOpts {
 	return func(w *worker) {
-		w.providerFilter = providers
+		w.providerFilter = make(map[resourcev1.Provider]bool, len(providers))
+		for _, p := range providers {
+			w.providerFilter[p] = true
+		}
 	}
 }
 
@@ -232,12 +235,9 @@ func (w *worker) Start(ctx context.Context) error {
 					}
 				}
 
-				// Check if this provider is in our filter list
-				for _, allowedProvider := range w.providerFilter {
-					if objProvider == allowedProvider {
-						matches = true
-						break
-					}
+				if w.providerFilter[objProvider] {
+					matches = true
+					break
 				}
 			}
 			if !matches {
