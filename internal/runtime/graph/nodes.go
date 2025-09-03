@@ -8,12 +8,10 @@ package graph
 
 import (
 	"fmt"
-	"time"
 
 	runtimev1 "github.com/antimetal/agent/pkg/api/antimetal/runtime/v1"
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"google.golang.org/protobuf/types/known/anypb"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // Constants for resource metadata
@@ -30,54 +28,31 @@ const (
 
 // createContainerNode creates a container node and its resource reference
 func (b *Builder) createContainerNode(container *ContainerInfo) (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
-	// Runtime is already an enum, no conversion needed
-	runtime := container.Runtime
-
 	// Convert cgroup version
 	cgroupVersion := parseCgroupVersion(container.CgroupVersion)
 
-	// Create container data as a struct for JSON marshaling
-	containerData := map[string]interface{}{
-		"container_id":   container.ID,
-		"runtime":        runtime.String(),
-		"cgroup_version": cgroupVersion.String(),
-		"cgroup_path":    container.CgroupPath,
-		"image_name":     container.ImageName,
-		"image_tag":      container.ImageTag,
+	// Create concrete proto type
+	containerNode := &runtimev1.ContainerNode{
+		ContainerId:   container.ID,
+		Runtime:       container.Runtime,
+		CgroupVersion: cgroupVersion,
+		CgroupPath:    container.CgroupPath,
+		ImageName:     container.ImageName,
+		ImageTag:      container.ImageTag,
+		Labels:        container.Labels,
+		// Timestamps would be set if we had them
+		// CreatedAt: container.CreatedAt,
+		// StartedAt: container.StartedAt,
+		CpuShares:        container.CPUShares,
+		CpuQuotaUs:       container.CPUQuotaUs,
+		CpuPeriodUs:      container.CPUPeriodUs,
+		MemoryLimitBytes: container.MemoryLimitBytes,
+		CpusetCpus:       container.CpusetCpus,
+		CpusetMems:       container.CpusetMems,
 	}
 
-	// Handle labels safely - only add if not empty
-	if len(container.Labels) > 0 {
-		containerData["labels"] = container.Labels
-	}
-
-	// Add resource limits if available
-	if container.CPUShares != nil {
-		containerData["cpu_shares"] = *container.CPUShares
-	}
-	if container.CPUQuotaUs != nil {
-		containerData["cpu_quota_us"] = *container.CPUQuotaUs
-	}
-	if container.CPUPeriodUs != nil {
-		containerData["cpu_period_us"] = *container.CPUPeriodUs
-	}
-	if container.MemoryLimitBytes != nil {
-		containerData["memory_limit_bytes"] = *container.MemoryLimitBytes
-	}
-	if container.CpusetCpus != "" {
-		containerData["cpuset_cpus"] = container.CpusetCpus
-	}
-	if container.CpusetMems != "" {
-		containerData["cpuset_mems"] = container.CpusetMems
-	}
-
-	// Convert to protobuf Struct
-	spec, err := structpb.NewStruct(containerData)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to marshal container data: %w", err)
-	}
-
-	specAny, err := anypb.New(spec)
+	// Wrap in Any for the Resource spec
+	specAny, err := anypb.New(containerNode)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to wrap container spec: %w", err)
 	}
@@ -111,30 +86,21 @@ func (b *Builder) createProcessNode(process *ProcessInfo) (*resourcev1.Resource,
 	// Parse process state
 	processState := parseProcessState(process.State)
 
-	// Create process data as a struct for JSON marshaling
-	processData := map[string]interface{}{
-		"pid":     process.PID,
-		"ppid":    process.PPID,
-		"pgid":    process.PGID,
-		"sid":     process.SID,
-		"command": process.Command,
-		"state":   processState.String(),
+	// Create concrete proto type
+	processNode := &runtimev1.ProcessNode{
+		Pid:     process.PID,
+		Ppid:    process.PPID,
+		Pgid:    process.PGID,
+		Sid:     process.SID,
+		Command: process.Command,
+		Cmdline: process.Cmdline,
+		State:   processState,
+		// StartTime would be set if we had it
+		// StartTime: timestamppb.New(process.StartTime),
 	}
 
-	if process.Cmdline != "" {
-		processData["cmdline"] = process.Cmdline
-	}
-
-	// Add current timestamp as start time (TODO: get actual start time)
-	processData["start_time"] = time.Now().Format(time.RFC3339)
-
-	// Convert to protobuf Struct
-	spec, err := structpb.NewStruct(processData)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to marshal process data: %w", err)
-	}
-
-	specAny, err := anypb.New(spec)
+	// Wrap in Any for the Resource spec
+	specAny, err := anypb.New(processNode)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to wrap process spec: %w", err)
 	}
