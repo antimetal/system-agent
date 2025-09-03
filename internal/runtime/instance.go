@@ -19,7 +19,16 @@ import (
 	"github.com/google/uuid"
 )
 
-var instance *agentv1.Instance
+var (
+	instance           *agentv1.Instance
+	excludedCollectors = map[performance.MetricType]bool{
+		performance.MetricTypeCPUInfo:     true,
+		performance.MetricTypeMemoryInfo:  true,
+		performance.MetricTypeDiskInfo:    true,
+		performance.MetricTypeNetworkInfo: true,
+		performance.MetricTypeProcess:     true,
+	}
+)
 
 func init() {
 	createInstance()
@@ -133,9 +142,12 @@ func getCgroupInfo() (*runtimev1.CgroupInfo, error) {
 
 func getSupportedCollectors() []string {
 	availableTypes := performance.GetAvailableCollectors()
-	collectors := make([]string, 0, len(availableTypes))
+	collectors := make([]string, 0)
 
 	for _, metricType := range availableTypes {
+		if excludedCollectors[metricType] {
+			continue
+		}
 		collectors = append(collectors, string(metricType))
 	}
 
