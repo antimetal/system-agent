@@ -130,23 +130,21 @@ func (b *Builder) createProcessNode(process *ProcessInfo) (*resourcev1.Resource,
 }
 
 // createProcessRef creates just the resource reference for an existing process
-func (b *Builder) createProcessRef(pid int32) (*resourcev1.ResourceRef, error) {
+func (b *Builder) createProcessRef(pid int32) *resourcev1.ResourceRef {
 	processName := fmt.Sprintf("process-%d", pid)
-	ref := &resourcev1.ResourceRef{
+	return &resourcev1.ResourceRef{
 		TypeUrl: "antimetal.runtime.v1.ProcessNode",
 		Name:    processName,
 	}
-	return ref, nil
 }
 
 // createContainerRef creates just the resource reference for an existing container
-func (b *Builder) createContainerRef(containerID string) (*resourcev1.ResourceRef, error) {
+func (b *Builder) createContainerRef(containerID string) *resourcev1.ResourceRef {
 	containerName := fmt.Sprintf("container-%s", containerID)
-	ref := &resourcev1.ResourceRef{
+	return &resourcev1.ResourceRef{
 		TypeUrl: "antimetal.runtime.v1.ContainerNode",
 		Name:    containerName,
 	}
-	return ref, nil
 }
 
 // TODO: parseContainerRuntime will be used when container metadata extraction is implemented

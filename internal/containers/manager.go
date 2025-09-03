@@ -4,15 +4,10 @@
 // LICENSE file or at:
 // https://polyformproject.org/wp-content/uploads/2020/06/PolyForm-Shield-1.0.0.txt
 
-// Package runtime provides runtime management for container and process discovery.
-// TODO: This package currently mixes two concerns:
-//  1. System agent runtime information (build version, agent metadata) - in runtime.go
-//  2. Container/process graph management (topology discovery) - in manager.go
-//
-// These should be separated into distinct packages in a future refactoring:
-//   - internal/runtime for agent runtime information
-//   - internal/topology or internal/discovery for container/process graph management
-package runtime
+// Package containers provides container and process discovery and graph building.
+// This package is responsible for discovering runtime resources (containers, processes)
+// and building their relationships in the resource graph.
+package containers
 
 import (
 	"context"
@@ -22,8 +17,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/antimetal/agent/internal/runtime/graph"
-	"github.com/antimetal/agent/pkg/containers"
+	"github.com/antimetal/agent/internal/containers/graph"
+	pkgcontainers "github.com/antimetal/agent/pkg/containers"
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/antimetal/agent/pkg/resource"
 	"github.com/go-logr/logr"
@@ -35,7 +30,7 @@ type Manager struct {
 	store       resource.Store
 	perfManager *performance.Manager
 	builder     *graph.Builder
-	discovery   *containers.Discovery
+	discovery   *pkgcontainers.Discovery
 
 	interval   time.Duration
 	lastUpdate time.Time
@@ -89,11 +84,11 @@ func NewManager(logger logr.Logger, config ManagerConfig) (*Manager, error) {
 	}
 
 	return &Manager{
-		logger:      logger.WithName("runtime-manager"),
+		logger:      logger.WithName("containers-manager"),
 		store:       config.Store,
 		perfManager: config.PerformanceManager,
 		builder:     graph.NewBuilder(logger, config.Store),
-		discovery:   containers.NewDiscovery(cgroupPath),
+		discovery:   pkgcontainers.NewDiscovery(cgroupPath),
 		interval:    interval,
 		metrics:     &DiscoveryMetrics{},
 	}, nil
@@ -102,7 +97,7 @@ func NewManager(logger logr.Logger, config ManagerConfig) (*Manager, error) {
 // Start begins runtime discovery and graph building
 // Implements controller-runtime's Runnable interface
 func (m *Manager) Start(ctx context.Context) error {
-	m.logger.Info("Starting runtime manager", "interval", m.interval)
+	m.logger.Info("Starting containers manager", "interval", m.interval)
 
 	// Do an initial runtime discovery
 	if err := m.updateRuntimeGraph(ctx); err != nil {
@@ -123,7 +118,7 @@ func (m *Manager) runPeriodicUpdates(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			m.logger.Info("Stopping runtime manager")
+			m.logger.Info("Stopping containers manager")
 			return
 		case <-ticker.C:
 			if err := m.updateRuntimeGraph(ctx); err != nil {
@@ -178,7 +173,7 @@ func (m *Manager) updateRuntimeGraph(ctx context.Context) error {
 // RuntimeSnapshot contains all runtime information collected at a point in time
 type RuntimeSnapshot struct {
 	Timestamp    time.Time
-	Containers   []containers.Container
+	Containers   []pkgcontainers.Container
 	ProcessStats *performance.ProcessSnapshot
 }
 
@@ -243,7 +238,7 @@ func (m *Manager) collectRuntimeSnapshot(ctx context.Context) (*RuntimeSnapshot,
 	if err != nil {
 		m.logger.Error(err, "Failed to discover containers")
 		// Continue with empty containers list rather than failing completely
-		allContainers = []containers.Container{}
+		allContainers = []pkgcontainers.Container{}
 	}
 
 	m.logger.V(1).Info("Discovered containers", "count", len(allContainers))

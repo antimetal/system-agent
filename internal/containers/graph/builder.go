@@ -153,25 +153,21 @@ func (b *Builder) buildProcessTopology(ctx context.Context, processes []ProcessI
 		// Create parent-child relationships
 		if process.PPID != 0 {
 			if parentProcess, exists := processMap[process.PPID]; exists {
-				parentRef, err := b.createProcessRef(parentProcess.PID)
-				if err == nil {
-					// Create ParentOf relationship: parent -> child
-					if err := b.createParentOfRelationship(parentRef, processRef); err != nil {
-						b.logger.Error(err, "Failed to create parent-child relationship",
-							"parent", process.PPID, "child", process.PID)
-					}
+				parentRef := b.createProcessRef(parentProcess.PID)
+				// Create ParentOf relationship: parent -> child
+				if err := b.createParentOfRelationship(parentRef, processRef); err != nil {
+					b.logger.Error(err, "Failed to create parent-child relationship",
+						"parent", process.PPID, "child", process.PID)
 				}
 			}
 		}
 
 		// Create container-process relationships by analyzing cgroup membership
 		if containerID := b.findProcessContainer(process.PID, containers); containerID != "" {
-			containerRef, err := b.createContainerRef(containerID)
-			if err == nil {
-				if err := b.createContainerProcessRelationship(containerRef, processRef); err != nil {
-					b.logger.Error(err, "Failed to create container-process relationship",
-						"container", containerID, "pid", process.PID)
-				}
+			containerRef := b.createContainerRef(containerID)
+			if err := b.createContainerProcessRelationship(containerRef, processRef); err != nil {
+				b.logger.Error(err, "Failed to create container-process relationship",
+					"container", containerID, "pid", process.PID)
 			}
 		}
 	}

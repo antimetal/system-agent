@@ -4,7 +4,7 @@
 // LICENSE file or at:
 // https://polyformproject.org/wp-content/uploads/2020/06/PolyForm-Shield-1.0.0.txt
 
-package runtime
+package containers
 
 import (
 	"context"
@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/antimetal/agent/internal/runtime/graph"
-	"github.com/antimetal/agent/pkg/containers"
+	"github.com/antimetal/agent/internal/containers/graph"
+	pkgcontainers "github.com/antimetal/agent/pkg/containers"
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/antimetal/agent/pkg/resource/store"
 	"github.com/go-logr/zapr"
@@ -112,7 +112,7 @@ func BenchmarkContainerDiscovery(b *testing.B) {
 	for _, bm := range benchmarks {
 		b.Run(bm.name, func(b *testing.B) {
 			setupMockCgroups(b, cgroupPath, bm.count)
-			discovery := containers.NewDiscovery(cgroupPath)
+			discovery := pkgcontainers.NewDiscovery(cgroupPath)
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
