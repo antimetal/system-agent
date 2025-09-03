@@ -11,7 +11,7 @@ package ringbuffer_test
 import (
 	"testing"
 
-	"github.com/antimetal/agent/pkg/performance/ringbuffer"
+	"github.com/antimetal/agent/pkg/ringbuffer"
 	"github.com/stretchr/testify/assert"
 )
 
