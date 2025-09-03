@@ -253,14 +253,8 @@ func (m *Manager) collectRuntimeSnapshot(ctx context.Context) (*RuntimeSnapshot,
 			defer cancel()
 
 			if dataChannel, err := processCollector.Start(ctx); err == nil {
-				// Ensure collector is always stopped to prevent resource leaks
-				defer func() {
-					if err := processCollector.Stop(); err != nil {
-						m.logger.V(1).Info("Failed to stop process collector", "error", err)
-					}
-				}()
-
 				// Read the first data point
+				// The collector will stop when ctx is cancelled
 				select {
 				case data := <-dataChannel:
 					if snapshot, ok := data.(*performance.ProcessSnapshot); ok {
@@ -268,7 +262,7 @@ func (m *Manager) collectRuntimeSnapshot(ctx context.Context) (*RuntimeSnapshot,
 					}
 				case <-ctx.Done():
 					m.logger.V(1).Info("Process collection timed out")
-					// Stop() will be called by the defer above
+					// The collector will stop due to context cancellation
 				}
 			}
 		}
