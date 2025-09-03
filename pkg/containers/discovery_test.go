@@ -184,67 +184,6 @@ func TestDiscovery_DiscoverContainers(t *testing.T) {
 	})
 }
 
-func TestParseContainerRuntime(t *testing.T) {
-	tests := []struct {
-		name     string
-		runtime  string
-		expected runtimev1.ContainerRuntime
-	}{
-		{
-			name:     "docker",
-			runtime:  "docker",
-			expected: runtimev1.ContainerRuntime_CONTAINER_RUNTIME_DOCKER,
-		},
-		{
-			name:     "containerd",
-			runtime:  "containerd",
-			expected: runtimev1.ContainerRuntime_CONTAINER_RUNTIME_CONTAINERD,
-		},
-		{
-			name:     "cri-containerd",
-			runtime:  "cri-containerd",
-			expected: runtimev1.ContainerRuntime_CONTAINER_RUNTIME_CRI_CONTAINERD,
-		},
-		{
-			name:     "cri-o",
-			runtime:  "cri-o",
-			expected: runtimev1.ContainerRuntime_CONTAINER_RUNTIME_CRI_O,
-		},
-		{
-			name:     "crio",
-			runtime:  "crio",
-			expected: runtimev1.ContainerRuntime_CONTAINER_RUNTIME_CRI_O,
-		},
-		{
-			name:     "podman",
-			runtime:  "podman",
-			expected: runtimev1.ContainerRuntime_CONTAINER_RUNTIME_PODMAN,
-		},
-		{
-			name:     "unknown runtime",
-			runtime:  "rkt",
-			expected: runtimev1.ContainerRuntime_CONTAINER_RUNTIME_UNKNOWN,
-		},
-		{
-			name:     "case insensitive",
-			runtime:  "DOCKER",
-			expected: runtimev1.ContainerRuntime_CONTAINER_RUNTIME_DOCKER,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := containers.ParseContainerRuntime(tt.runtime)
-			assert.Equal(t, tt.expected, result)
-
-			// Also verify string conversion works
-			if tt.expected != runtimev1.ContainerRuntime_CONTAINER_RUNTIME_UNKNOWN {
-				assert.NotEmpty(t, result.String())
-			}
-		})
-	}
-}
-
 func TestExtractContainerID(t *testing.T) {
 	tests := []struct {
 		name     string

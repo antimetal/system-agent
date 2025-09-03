@@ -5,14 +5,17 @@ This directory contains test configurations and Kubernetes workloads used for be
 ## Directory Structure
 
 ```
-config/test/
+config/
 ├── kind-topology-cluster.yaml          # Complete KIND cluster configuration
-├── workloads/                          # Test workload definitions
-│   ├── cgroup-test-workloads.yaml     # Comprehensive cgroup testing suite
-│   ├── cpu-pinned-workload.yaml       # CPU pinning and NUMA affinity testing
-│   └── init-container-workload.yaml   # Init containers and sidecar patterns
-├── scenarios/                          # Test scenario configurations (future)
-└── kustomization.yaml                  # Kustomize configuration (optional)
+├── test/                               # Test artifacts
+│   ├── workloads/                      # Test workload definitions
+│   │   ├── cgroup-test-workloads.yaml  # Comprehensive cgroup testing suite
+│   │   ├── cpu-pinned-workload.yaml    # CPU pinning and NUMA affinity testing
+│   │   └── init-container-workload.yaml # Init containers and sidecar patterns
+│   └── kustomization.yaml              # Kustomize configuration for test workloads
+├── agent/                              # System agent deployment
+├── rbac/                               # RBAC configurations
+└── default/                            # Full deployment (agent + RBAC)
 ```
 
 ## Test Workloads
@@ -27,14 +30,14 @@ Complete KIND cluster configuration for testing container-process-hardware topol
 
 **Quick Start:**
 ```bash
-# Create KIND cluster
-kind create cluster --config config/test/kind-topology-cluster.yaml
+# Create KIND cluster with topology configuration
+make cluster
 
-# Deploy the agent (from config/default)
-kubectl apply -k config/default
+# Deploy the agent and test workloads
+make deploy
 
-# Deploy test workloads
-kubectl apply -f config/test/workloads/
+# Clean up
+make destroy-cluster
 ```
 
 ### Test Workload Files
@@ -66,12 +69,15 @@ Comprehensive cgroup testing workloads:
 
 **Usage:**
 ```bash
-# Deploy all test workloads
-kubectl apply -f config/test/workloads/
+# Deploy all test workloads via make
+make deploy
 
-# Or deploy specific workloads
-kubectl apply -f config/test/workloads/cpu-stress-workload.yaml
-kubectl apply -f config/test/workloads/memory-stress-workload.yaml
+# Or deploy test workloads directly with kubectl
+kubectl apply -k config/test
+
+# Deploy specific workloads
+kubectl apply -f config/test/workloads/cgroup-test-workloads.yaml
+kubectl apply -f config/test/workloads/cpu-pinned-workload.yaml
 ```
 
 ## Test Scenarios
@@ -79,12 +85,14 @@ kubectl apply -f config/test/workloads/memory-stress-workload.yaml
 ### Container Topology Testing
 Tests the agent's ability to discover and map container-process-hardware relationships:
 ```bash
-# Create cluster and deploy agent
-kind create cluster --config config/test/kind-topology-cluster.yaml
-kubectl apply -k config/default
+# Create cluster with topology configuration
+make cluster
 
-# Deploy test workloads
-kubectl apply -f config/test/workloads/
+# Deploy agent and test workloads
+make deploy
+
+# View agent logs
+kubectl logs -n antimetal-system -l app=agent -f
 ```
 
 This creates a KIND cluster with:

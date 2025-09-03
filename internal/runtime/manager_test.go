@@ -108,7 +108,7 @@ func TestNewManager(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				assert.NotNil(t, manager)
-				
+
 				// Verify defaults are set
 				if tt.config.UpdateInterval == 0 {
 					assert.Equal(t, 30*time.Second, manager.interval)
@@ -125,11 +125,11 @@ func TestManager_CollectRuntimeSnapshot(t *testing.T) {
 	logger := zapr.NewLogger(zapLog)
 
 	rsrcStore := createTestStore(t)
-	
+
 	// Create a mock cgroup directory
 	tmpDir := t.TempDir()
 	cgroupPath := filepath.Join(tmpDir, "cgroup")
-	
+
 	// Create mock cgroup structure for a container
 	// Use a valid hex container ID (at least 12 chars)
 	containerPath := filepath.Join(cgroupPath, "docker", "1234567890abcdef")
@@ -163,7 +163,7 @@ func TestManager_UpdateRuntimeGraph(t *testing.T) {
 	logger := zapr.NewLogger(zapLog)
 
 	rsrcStore := createTestStore(t)
-	
+
 	// Create a mock cgroup directory with a container
 	tmpDir := t.TempDir()
 	cgroupPath := filepath.Join(tmpDir, "cgroup")
@@ -188,7 +188,7 @@ func TestManager_UpdateRuntimeGraph(t *testing.T) {
 	err := manager.updateRuntimeGraph(ctx)
 
 	require.NoError(t, err)
-	
+
 	// Check metrics were updated
 	metrics := manager.GetMetrics()
 	assert.GreaterOrEqual(t, metrics.LastContainerCount, 1)
@@ -202,7 +202,7 @@ func TestManager_Start(t *testing.T) {
 	logger := zapr.NewLogger(zapLog)
 
 	rsrcStore := createTestStore(t)
-	
+
 	// Create empty cgroup directory for testing
 	tmpDir := t.TempDir()
 	cgroupPath := filepath.Join(tmpDir, "cgroup")
@@ -235,7 +235,7 @@ func TestManager_Start(t *testing.T) {
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("Manager.Start did not complete in time")
 	}
-	
+
 	// Check metrics show multiple discoveries (initial + periodic)
 	metrics := manager.GetMetrics()
 	assert.GreaterOrEqual(t, metrics.TotalDiscoveries, uint64(2))
@@ -292,19 +292,19 @@ func TestManager_ForceUpdate(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	
+
 	// Force an update
 	err := manager.ForceUpdate(ctx)
 	require.NoError(t, err)
-	
+
 	// Verify metrics show discovery was performed
 	metrics := manager.GetMetrics()
 	assert.Equal(t, uint64(1), metrics.TotalDiscoveries)
-	
+
 	// Force another update
 	err = manager.ForceUpdate(ctx)
 	require.NoError(t, err)
-	
+
 	// Verify metrics show discovery was performed again
 	metrics = manager.GetMetrics()
 	assert.Equal(t, uint64(2), metrics.TotalDiscoveries)
@@ -317,7 +317,7 @@ func TestManager_Metrics(t *testing.T) {
 	rsrcStore := createTestStore(t)
 	tmpDir := t.TempDir()
 	cgroupPath := filepath.Join(tmpDir, "cgroup")
-	
+
 	// Create multiple containers in cgroup structure
 	for i := 0; i < 3; i++ {
 		// Use valid hex container IDs (at least 12 chars)
@@ -350,13 +350,13 @@ func TestManager_Metrics(t *testing.T) {
 		rsrcStore := createTestStore(t)
 		manager.store = rsrcStore
 		manager.builder = graph.NewBuilder(logger, rsrcStore)
-		
+
 		err := manager.updateRuntimeGraph(ctx)
 		require.NoError(t, err)
 	}
 
 	metrics := manager.GetMetrics()
-	
+
 	// Verify metrics are tracked correctly
 	assert.Equal(t, uint64(3), metrics.TotalDiscoveries)
 	assert.Equal(t, uint64(0), metrics.TotalDiscoveryErrors)
@@ -387,7 +387,7 @@ func TestManager_MetricsConcurrency(t *testing.T) {
 
 	// Run multiple goroutines updating and reading metrics concurrently
 	done := make(chan bool, 20)
-	
+
 	// 10 goroutines updating
 	for i := 0; i < 10; i++ {
 		go func() {
@@ -395,7 +395,7 @@ func TestManager_MetricsConcurrency(t *testing.T) {
 			done <- true
 		}()
 	}
-	
+
 	// 10 goroutines reading
 	for i := 0; i < 10; i++ {
 		go func() {

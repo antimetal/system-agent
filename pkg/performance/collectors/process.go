@@ -380,7 +380,7 @@ func (c *ProcessCollector) collectFullProcessData(pid int32, minimal *MinimalPro
 	if cmdlineData, err := os.ReadFile(cmdlinePath); err == nil {
 		c.ParseCmdline(stats, string(cmdlineData))
 	} else {
-		c.Logger().V(2).Info("Failed to read cmdline", "pid", pid, "error", err)
+		c.Logger().Error(err, "Failed to read cmdline", "pid", pid)
 	}
 
 	// Count file descriptors

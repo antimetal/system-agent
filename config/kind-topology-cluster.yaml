@@ -5,7 +5,7 @@
 # https://polyformproject.org/wp-content/uploads/2020/06/PolyForm-Shield-1.0.0.txt
 
 # Complete KIND cluster configuration for container-process-hardware topology testing
-# Usage: kind create cluster --config config/test/kind-topology-cluster.yaml
+# Usage: kind create cluster --config config/kind-topology-cluster.yaml
 #
 # This configuration creates a multi-node cluster with:
 # - Host filesystem access for topology discovery

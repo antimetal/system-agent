@@ -59,7 +59,7 @@ func (m *mockStore) AddRelationships(rels ...*resourcev1.Relationship) error {
 }
 
 // Implement other required Store interface methods as no-ops for testing
-func (m *mockStore) UpdateResource(rsrc *resourcev1.Resource) error { return nil }
+func (m *mockStore) UpdateResource(rsrc *resourcev1.Resource) error   { return nil }
 func (m *mockStore) DeleteResource(ref *resourcev1.ResourceRef) error { return nil }
 func (m *mockStore) GetResource(ref *resourcev1.ResourceRef) (*resourcev1.Resource, error) {
 	return nil, nil
@@ -68,24 +68,24 @@ func (m *mockStore) GetRelationships(subject, object *resourcev1.ResourceRef, pr
 	return nil, nil
 }
 func (m *mockStore) Subscribe(typeDef *resourcev1.TypeDescriptor) <-chan resource.Event { return nil }
-func (m *mockStore) Close() error { return nil }
+func (m *mockStore) Close() error                                                       { return nil }
 
 func TestBuilder_BuildFromSnapshot_Empty(t *testing.T) {
 	zapLog, _ := zap.NewDevelopment()
 	logger := zapr.NewLogger(zapLog)
-	
+
 	mockStore := newMockStore()
 	builder := NewBuilder(logger, mockStore)
-	
+
 	// Empty snapshot
 	snapshot := &mockSnapshot{
 		containers: []ContainerInfo{},
 		processes:  []ProcessInfo{},
 	}
-	
+
 	ctx := context.Background()
 	err := builder.BuildFromSnapshot(ctx, snapshot)
-	
+
 	require.NoError(t, err)
 	assert.Empty(t, mockStore.resources)
 	assert.Empty(t, mockStore.relationships)
@@ -94,10 +94,10 @@ func TestBuilder_BuildFromSnapshot_Empty(t *testing.T) {
 func TestBuilder_BuildFromSnapshot_Containers(t *testing.T) {
 	zapLog, _ := zap.NewDevelopment()
 	logger := zapr.NewLogger(zapLog)
-	
+
 	mockStore := newMockStore()
 	builder := NewBuilder(logger, mockStore)
-	
+
 	// Snapshot with containers
 	snapshot := &mockSnapshot{
 		containers: []ContainerInfo{
@@ -123,13 +123,13 @@ func TestBuilder_BuildFromSnapshot_Containers(t *testing.T) {
 		},
 		processes: []ProcessInfo{},
 	}
-	
+
 	ctx := context.Background()
 	err := builder.BuildFromSnapshot(ctx, snapshot)
-	
+
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(mockStore.resources), "Should create 2 container nodes")
-	
+
 	// Verify container nodes were created correctly
 	for i, rsrc := range mockStore.resources {
 		assert.Equal(t, "ContainerNode", rsrc.Type.Kind)
@@ -142,10 +142,10 @@ func TestBuilder_BuildFromSnapshot_Containers(t *testing.T) {
 func TestBuilder_BuildFromSnapshot_Processes(t *testing.T) {
 	zapLog, _ := zap.NewDevelopment()
 	logger := zapr.NewLogger(zapLog)
-	
+
 	mockStore := newMockStore()
 	builder := NewBuilder(logger, mockStore)
-	
+
 	// Snapshot with processes
 	snapshot := &mockSnapshot{
 		containers: []ContainerInfo{},
@@ -170,19 +170,19 @@ func TestBuilder_BuildFromSnapshot_Processes(t *testing.T) {
 			},
 		},
 	}
-	
+
 	ctx := context.Background()
 	err := builder.BuildFromSnapshot(ctx, snapshot)
-	
+
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(mockStore.resources), "Should create 2 process nodes")
-	
+
 	// Verify process nodes were created
 	for _, rsrc := range mockStore.resources {
 		assert.Equal(t, "ProcessNode", rsrc.Type.Kind)
 		assert.Equal(t, "antimetal.runtime.v1.ProcessNode", rsrc.Type.Type)
 	}
-	
+
 	// Should have created parent-child relationship
 	assert.Equal(t, 1, len(mockStore.relationships), "Should create 1 parent-child relationship")
 	rel := mockStore.relationships[0]
@@ -193,13 +193,13 @@ func TestBuilder_BuildFromSnapshot_Processes(t *testing.T) {
 func TestBuilder_BuildFromSnapshot_CompleteTopology(t *testing.T) {
 	zapLog, _ := zap.NewDevelopment()
 	logger := zapr.NewLogger(zapLog)
-	
+
 	// Use real in-memory store for more complete testing
 	realStore, err := store.New("")
 	require.NoError(t, err)
-	
+
 	builder := NewBuilder(logger, realStore)
-	
+
 	// Complete snapshot with containers and processes
 	snapshot := &mockSnapshot{
 		containers: []ContainerInfo{
@@ -234,10 +234,10 @@ func TestBuilder_BuildFromSnapshot_CompleteTopology(t *testing.T) {
 			},
 		},
 	}
-	
+
 	ctx := context.Background()
 	err = builder.BuildFromSnapshot(ctx, snapshot)
-	
+
 	require.NoError(t, err)
 	// With a real store, we can't easily inspect internal state,
 	// but we've verified no errors occurred during building
@@ -246,10 +246,10 @@ func TestBuilder_BuildFromSnapshot_CompleteTopology(t *testing.T) {
 func TestBuilder_BuildFromSnapshot_CPUAffinity(t *testing.T) {
 	zapLog, _ := zap.NewDevelopment()
 	logger := zapr.NewLogger(zapLog)
-	
+
 	mockStore := newMockStore()
 	builder := NewBuilder(logger, mockStore)
-	
+
 	// Container with CPU affinity
 	snapshot := &mockSnapshot{
 		containers: []ContainerInfo{
@@ -262,15 +262,15 @@ func TestBuilder_BuildFromSnapshot_CPUAffinity(t *testing.T) {
 		},
 		processes: []ProcessInfo{},
 	}
-	
+
 	ctx := context.Background()
 	err := builder.BuildFromSnapshot(ctx, snapshot)
-	
+
 	require.NoError(t, err)
-	
+
 	// Should create container node
 	assert.Equal(t, 1, len(mockStore.resources))
-	
+
 	// The relationships to CPUs and NUMA nodes would be created
 	// but since we're using a mock store and the builder tries to
 	// look up CPU/NUMA nodes that don't exist, relationships won't be created
@@ -280,20 +280,20 @@ func TestBuilder_BuildFromSnapshot_CPUAffinity(t *testing.T) {
 func TestBuilder_BuildFromSnapshot_LargeScale(t *testing.T) {
 	zapLog, _ := zap.NewDevelopment()
 	logger := zapr.NewLogger(zapLog)
-	
+
 	mockStore := newMockStore()
 	builder := NewBuilder(logger, mockStore)
-	
+
 	// Create a large snapshot to test performance
 	containers := make([]ContainerInfo, 100)
 	for i := 0; i < 100; i++ {
 		containers[i] = ContainerInfo{
-			ID:            string(rune('a' + i%26)) + string(rune('0' + i/26)),
+			ID:            string(rune('a'+i%26)) + string(rune('0'+i/26)),
 			Runtime:       runtimev1.ContainerRuntime_CONTAINER_RUNTIME_DOCKER,
 			CgroupVersion: 2,
 		}
 	}
-	
+
 	processes := make([]ProcessInfo, 1000)
 	for i := 0; i < 1000; i++ {
 		processes[i] = ProcessInfo{
@@ -303,15 +303,15 @@ func TestBuilder_BuildFromSnapshot_LargeScale(t *testing.T) {
 			State:   "R",
 		}
 	}
-	
+
 	snapshot := &mockSnapshot{
 		containers: containers,
 		processes:  processes,
 	}
-	
+
 	ctx := context.Background()
 	err := builder.BuildFromSnapshot(ctx, snapshot)
-	
+
 	require.NoError(t, err)
 	assert.Equal(t, 1100, len(mockStore.resources), "Should create 100 containers + 1000 processes")
 }
@@ -343,7 +343,7 @@ func TestBuilder_ParseCgroupVersion(t *testing.T) {
 			expected: runtimev1.CgroupVersion_CGROUP_VERSION_V1,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := parseCgroupVersion(tt.version)
@@ -355,10 +355,10 @@ func TestBuilder_ParseCgroupVersion(t *testing.T) {
 func TestBuilder_BuildFromSnapshot_ProcessHierarchy(t *testing.T) {
 	zapLog, _ := zap.NewDevelopment()
 	logger := zapr.NewLogger(zapLog)
-	
+
 	mockStore := newMockStore()
 	builder := NewBuilder(logger, mockStore)
-	
+
 	// Complex process hierarchy
 	snapshot := &mockSnapshot{
 		containers: []ContainerInfo{},
@@ -373,13 +373,13 @@ func TestBuilder_BuildFromSnapshot_ProcessHierarchy(t *testing.T) {
 			{PID: 502, PPID: 500, Command: "nginx-worker"},
 		},
 	}
-	
+
 	ctx := context.Background()
 	err := builder.BuildFromSnapshot(ctx, snapshot)
-	
+
 	require.NoError(t, err)
 	assert.Equal(t, 8, len(mockStore.resources), "Should create 8 process nodes")
-	
+
 	// Should create relationships for all parent-child pairs (7 relationships)
 	// Note: PID 1 has PPID 0, which doesn't exist, so no relationship for that
 	assert.Equal(t, 7, len(mockStore.relationships), "Should create 7 parent-child relationships")

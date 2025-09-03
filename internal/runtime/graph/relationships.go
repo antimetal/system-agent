@@ -7,27 +7,21 @@
 package graph
 
 import (
+	hardwarev1 "github.com/antimetal/agent/pkg/api/antimetal/hardware/v1"
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"google.golang.org/protobuf/types/known/anypb"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // Runtime relationship creation using hardware protobuf definitions
 
 // createParentOfRelationship creates a parent-child process relationship
 func (b *Builder) createParentOfRelationship(parentRef, childRef *resourcev1.ResourceRef) error {
-	// Create contains relationship data
-	containsData := map[string]interface{}{
-		"containment_type": "process",
-		"relationship":     "parent_of",
+	// Use Contains relationship with logical containment type for process hierarchy
+	contains := &hardwarev1.Contains{
+		Type: hardwarev1.ContainmentType_CONTAINMENT_TYPE_LOGICAL,
 	}
 
-	predicateStruct, err := structpb.NewStruct(containsData)
-	if err != nil {
-		return err
-	}
-
-	predicate, err := anypb.New(predicateStruct)
+	predicate, err := anypb.New(contains)
 	if err != nil {
 		return err
 	}
@@ -51,18 +45,12 @@ func (b *Builder) createParentOfRelationship(parentRef, childRef *resourcev1.Res
 
 // createContainerProcessRelationship creates a container-to-process relationship
 func (b *Builder) createContainerProcessRelationship(containerRef, processRef *resourcev1.ResourceRef) error {
-	// Create contains relationship data
-	containsData := map[string]interface{}{
-		"containment_type": "process",
-		"relationship":     "contains",
+	// Use Contains relationship with logical containment type for container-process
+	contains := &hardwarev1.Contains{
+		Type: hardwarev1.ContainmentType_CONTAINMENT_TYPE_LOGICAL,
 	}
 
-	predicateStruct, err := structpb.NewStruct(containsData)
-	if err != nil {
-		return err
-	}
-
-	predicate, err := anypb.New(predicateStruct)
+	predicate, err := anypb.New(contains)
 	if err != nil {
 		return err
 	}
@@ -86,26 +74,21 @@ func (b *Builder) createContainerProcessRelationship(containerRef, processRef *r
 
 // createContainerHardwareRelationship creates relationships between containers and hardware
 func (b *Builder) createContainerHardwareRelationship(containerRef, hardwareRef *resourcev1.ResourceRef) error {
-	// Generic container-hardware affinity relationship
-	relationshipData := map[string]interface{}{
-		"connection_type": "hardware_affinity",
-		"relationship":    "uses",
+	// Use Contains relationship with partition type for container-hardware affinity
+	// This represents the container being assigned to specific hardware resources
+	contains := &hardwarev1.Contains{
+		Type: hardwarev1.ContainmentType_CONTAINMENT_TYPE_PARTITION,
 	}
 
-	predicateStruct, err := structpb.NewStruct(relationshipData)
-	if err != nil {
-		return err
-	}
-
-	predicateAny, err := anypb.New(predicateStruct)
+	predicateAny, err := anypb.New(contains)
 	if err != nil {
 		return err
 	}
 
 	relationship := &resourcev1.Relationship{
-		Subject:   containerRef,
+		Subject:   hardwareRef, // Hardware contains the container
 		Predicate: predicateAny,
-		Object:    hardwareRef,
+		Object:    containerRef, // Container is contained by hardware
 	}
 
 	if err := b.store.AddRelationships(relationship); err != nil {

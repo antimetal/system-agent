@@ -87,37 +87,20 @@ func (b *Builder) createContainerNode(container *ContainerInfo) (*resourcev1.Res
 	// Create the resource
 	rsrc := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
-			Kind: "ContainerNode",
+			Kind: "antimetal.runtime.v1.ContainerNode",
 			Type: "antimetal.runtime.v1.ContainerNode",
 		},
 		Metadata: &resourcev1.ResourceMeta{
-			Provider: resourcev1.Provider_PROVIDER_KUBERNETES,
-			Service:  RuntimeService,
+			Provider: resourcev1.Provider_PROVIDER_ANTIMETAL,
 			Name:     containerName,
-			Namespace: &resourcev1.Namespace{
-				Namespace: &resourcev1.Namespace_Kube{
-					Kube: &resourcev1.KubernetesNamespace{
-						Cluster:   RuntimePseudoCluster,
-						Namespace: SystemNamespace,
-					},
-				},
-			},
 		},
 		Spec: specAny,
 	}
 
 	// Create resource reference
 	ref := &resourcev1.ResourceRef{
-		TypeUrl: "antimetal.runtime.v1/ContainerNode",
+		TypeUrl: "antimetal.runtime.v1.ContainerNode",
 		Name:    containerName,
-		Namespace: &resourcev1.Namespace{
-			Namespace: &resourcev1.Namespace_Kube{
-				Kube: &resourcev1.KubernetesNamespace{
-					Cluster:   "runtime", // Using "runtime" as a pseudo-cluster
-					Namespace: "antimetal-system",
-				},
-			},
-		},
 	}
 
 	return rsrc, ref, nil
@@ -161,76 +144,43 @@ func (b *Builder) createProcessNode(process *ProcessInfo) (*resourcev1.Resource,
 	// Create the resource
 	rsrc := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
-			Kind: "ProcessNode",
+			Kind: "antimetal.runtime.v1.ProcessNode",
 			Type: "antimetal.runtime.v1.ProcessNode",
 		},
 		Metadata: &resourcev1.ResourceMeta{
-			Provider: resourcev1.Provider_PROVIDER_KUBERNETES,
-			Service:  RuntimeService,
+			Provider: resourcev1.Provider_PROVIDER_ANTIMETAL,
 			Name:     processName,
-			Namespace: &resourcev1.Namespace{
-				Namespace: &resourcev1.Namespace_Kube{
-					Kube: &resourcev1.KubernetesNamespace{
-						Cluster:   RuntimePseudoCluster,
-						Namespace: SystemNamespace,
-					},
-				},
-			},
 		},
 		Spec: specAny,
 	}
 
 	// Create resource reference
 	ref := &resourcev1.ResourceRef{
-		TypeUrl: "antimetal.runtime.v1/ProcessNode",
+		TypeUrl: "antimetal.runtime.v1.ProcessNode",
 		Name:    processName,
-		Namespace: &resourcev1.Namespace{
-			Namespace: &resourcev1.Namespace_Kube{
-				Kube: &resourcev1.KubernetesNamespace{
-					Cluster:   "runtime", // Using "runtime" as a pseudo-cluster
-					Namespace: "antimetal-system",
-				},
-			},
-		},
 	}
 
 	return rsrc, ref, nil
 }
 
 // createProcessRef creates just the resource reference for an existing process
-func (b *Builder) createProcessRef(pid int32) (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
+func (b *Builder) createProcessRef(pid int32) (*resourcev1.ResourceRef, error) {
 	processName := fmt.Sprintf("process-%d", pid)
 	ref := &resourcev1.ResourceRef{
-		TypeUrl: "antimetal.runtime.v1/ProcessNode",
+		TypeUrl: "antimetal.runtime.v1.ProcessNode",
 		Name:    processName,
-		Namespace: &resourcev1.Namespace{
-			Namespace: &resourcev1.Namespace_Kube{
-				Kube: &resourcev1.KubernetesNamespace{
-					Cluster:   "runtime", // Using "runtime" as a pseudo-cluster
-					Namespace: "antimetal-system",
-				},
-			},
-		},
 	}
-	return nil, ref, nil
+	return ref, nil
 }
 
 // createContainerRef creates just the resource reference for an existing container
-func (b *Builder) createContainerRef(containerID string) (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
+func (b *Builder) createContainerRef(containerID string) (*resourcev1.ResourceRef, error) {
 	containerName := fmt.Sprintf("container-%s", containerID)
 	ref := &resourcev1.ResourceRef{
-		TypeUrl: "antimetal.runtime.v1/ContainerNode",
+		TypeUrl: "antimetal.runtime.v1.ContainerNode",
 		Name:    containerName,
-		Namespace: &resourcev1.Namespace{
-			Namespace: &resourcev1.Namespace_Kube{
-				Kube: &resourcev1.KubernetesNamespace{
-					Cluster:   "runtime", // Using "runtime" as a pseudo-cluster
-					Namespace: "antimetal-system",
-				},
-			},
-		},
 	}
-	return nil, ref, nil
+	return ref, nil
 }
 
 // TODO: parseContainerRuntime will be used when container metadata extraction is implemented

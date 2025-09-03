@@ -4,6 +4,14 @@
 // LICENSE file or at:
 // https://polyformproject.org/wp-content/uploads/2020/06/PolyForm-Shield-1.0.0.txt
 
+// Package runtime provides runtime management for container and process discovery.
+// TODO: This package currently mixes two concerns:
+//  1. System agent runtime information (build version, agent metadata) - in runtime.go
+//  2. Container/process graph management (topology discovery) - in manager.go
+//
+// These should be separated into distinct packages in a future refactoring:
+//   - internal/runtime for agent runtime information
+//   - internal/topology or internal/discovery for container/process graph management
 package runtime
 
 import (
@@ -160,7 +168,7 @@ func (m *Manager) updateRuntimeGraph(ctx context.Context) error {
 
 	// Log with metrics
 	duration := time.Since(startTime)
-	m.logger.Info("Runtime graph updated successfully",
+	m.logger.V(1).Info("Runtime graph updated successfully",
 		"duration", duration,
 		"containers", len(snapshot.Containers),
 		"processes", len(snapshot.ProcessStats.Processes))

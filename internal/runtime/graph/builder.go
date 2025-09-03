@@ -73,7 +73,7 @@ func NewBuilder(logger logr.Logger, store resource.Store) *Builder {
 
 // BuildFromSnapshot builds the runtime graph from a runtime snapshot
 func (b *Builder) BuildFromSnapshot(ctx context.Context, snapshot RuntimeSnapshot) error {
-	b.logger.Info("Building runtime graph from snapshot")
+	b.logger.V(1).Info("Building runtime graph from snapshot")
 
 	// Build container topology
 	containers := snapshot.GetContainers()
@@ -91,7 +91,7 @@ func (b *Builder) BuildFromSnapshot(ctx context.Context, snapshot RuntimeSnapsho
 		}
 	}
 
-	b.logger.Info("Successfully built runtime graph",
+	b.logger.V(1).Info("Successfully built runtime graph",
 		"containers", len(containers),
 		"processes", len(processes))
 	return nil
@@ -153,7 +153,7 @@ func (b *Builder) buildProcessTopology(ctx context.Context, processes []ProcessI
 		// Create parent-child relationships
 		if process.PPID != 0 {
 			if parentProcess, exists := processMap[process.PPID]; exists {
-				_, parentRef, err := b.createProcessRef(parentProcess.PID)
+				parentRef, err := b.createProcessRef(parentProcess.PID)
 				if err == nil {
 					// Create ParentOf relationship: parent -> child
 					if err := b.createParentOfRelationship(parentRef, processRef); err != nil {
@@ -166,7 +166,7 @@ func (b *Builder) buildProcessTopology(ctx context.Context, processes []ProcessI
 
 		// Create container-process relationships by analyzing cgroup membership
 		if containerID := b.findProcessContainer(process.PID, containers); containerID != "" {
-			_, containerRef, err := b.createContainerRef(containerID)
+			containerRef, err := b.createContainerRef(containerID)
 			if err == nil {
 				if err := b.createContainerProcessRelationship(containerRef, processRef); err != nil {
 					b.logger.Error(err, "Failed to create container-process relationship",
