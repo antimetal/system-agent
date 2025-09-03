@@ -17,6 +17,7 @@ import (
 
 	"github.com/cenkalti/backoff/v5"
 	"k8s.io/client-go/util/workqueue"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	intakev1 "github.com/antimetal/agent/pkg/api/service/resource/v1"
@@ -27,6 +28,12 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
+)
+
+// Compile-time check that worker implements the required interfaces
+var (
+	_ manager.Runnable               = (*worker)(nil)
+	_ manager.LeaderElectionRunnable = (*worker)(nil)
 )
 
 const (
@@ -74,8 +81,11 @@ type worker struct {
 	mu     sync.Mutex
 
 	// configurable options
-	maxBatchSize int
-	flushPeriod  time.Duration
+	maxBatchSize        int
+	flushPeriod         time.Duration
+	resourceFilter      *resourcev1.TypeDescriptor
+	providerFilter      []resourcev1.Provider // For provider-based filtering
+	needsLeaderElection bool
 
 	// runtime fields
 	stream       intakev1.IntakeService_DeltaClient
@@ -118,6 +128,24 @@ func WithMaxBatchSize(size int) WorkerOpts {
 func WithFlushPeriod(period time.Duration) WorkerOpts {
 	return func(w *worker) {
 		w.flushPeriod = period
+	}
+}
+
+func WithResourceFilter(typeDef *resourcev1.TypeDescriptor) WorkerOpts {
+	return func(w *worker) {
+		w.resourceFilter = typeDef
+	}
+}
+
+func WithLeaderElection(needed bool) WorkerOpts {
+	return func(w *worker) {
+		w.needsLeaderElection = needed
+	}
+}
+
+func WithProviderFilter(providers ...resourcev1.Provider) WorkerOpts {
+	return func(w *worker) {
+		w.providerFilter = providers
 	}
 }
 
@@ -185,7 +213,38 @@ func (w *worker) Start(ctx context.Context) error {
 		w.batchFlusher(ctx)
 	}()
 
-	for event := range w.store.Subscribe(nil) {
+	for event := range w.store.Subscribe(w.resourceFilter) {
+		if len(w.providerFilter) > 0 && len(event.Objs) > 0 {
+			// Check if any object matches the provider filter
+			matches := false
+			for _, obj := range event.Objs {
+				// Try to get the provider from the object
+				// Objects can contain either Resources or Relationships
+				objProvider := resourcev1.Provider_PROVIDER_OTHER
+
+				if obj.GetObject() != nil {
+					// Try to unmarshal as a Resource
+					var rsrc resourcev1.Resource
+					if err := obj.GetObject().UnmarshalTo(&rsrc); err == nil {
+						if rsrc.GetMetadata() != nil {
+							objProvider = rsrc.GetMetadata().GetProvider()
+						}
+					}
+				}
+
+				// Check if this provider is in our filter list
+				for _, allowedProvider := range w.providerFilter {
+					if objProvider == allowedProvider {
+						matches = true
+						break
+					}
+				}
+			}
+			if !matches {
+				continue // Skip this event if no objects match the provider filter
+			}
+		}
+
 		for _, obj := range event.Objs {
 			obj.Ttl = durationpb.New(defaultDeltaTTL)
 			obj.DeltaVersion = deltaVersion
@@ -348,4 +407,10 @@ func eventTypeToOp(e resource.EventType) intakev1.DeltaOperation {
 	default:
 		return intakev1.DeltaOperation_DELTA_OPERATION_CREATE
 	}
+}
+
+// NeedLeaderElection implements sigs.k8s.io/controller-runtime/pkg/manager.LeaderElectionRunnable
+// This determines whether this worker should only run on the elected leader
+func (w *worker) NeedLeaderElection() bool {
+	return w.needsLeaderElection
 }
