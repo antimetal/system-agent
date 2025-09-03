@@ -9,7 +9,7 @@ package otel_test
 import (
 	"testing"
 
-	"github.com/antimetal/agent/pkg/metrics/consumers/otel"
+	"github.com/antimetal/agent/internal/metrics/consumers/otel"
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

@@ -16,7 +16,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
-	"github.com/antimetal/agent/pkg/metrics"
+	"github.com/antimetal/agent/internal/metrics"
 	"github.com/antimetal/agent/pkg/performance"
 )
 
@@ -56,7 +56,22 @@ func NewTransformer(meter metric.Meter, logger logr.Logger) *Transformer {
 // TransformAndRecord converts a metrics event to OpenTelemetry format and records it.
 // It supports 14 different metric types including load, memory, CPU, process, disk, network, TCP,
 // system, kernel, and NUMA statistics. Returns an error if the transformation fails.
-func (t *Transformer) TransformAndRecord(ctx context.Context, event metrics.MetricEvent) error {
+//
+// Context Usage Note:
+// We use context.Background() internally rather than accepting a context parameter because:
+//  1. This is a metrics-only pipeline without distributed tracing - there's no trace context to propagate
+//  2. Metric recording is synchronous and instant - cancellation isn't needed
+//  3. We're not passing baggage or metadata across service boundaries
+//
+// The context in OpenTelemetry's gauge.Record(ctx, value) calls is primarily for:
+//   - Distributed tracing correlation (associating metrics with traces/spans)
+//   - Propagating baggage (key-value pairs across service boundaries)
+//   - Cancellation signals (though metrics recording is typically instant)
+//
+// Since we're doing pure metrics collection, context.Background() provides the required
+// parameter for the OpenTelemetry API while keeping our API honest and simple.
+func (t *Transformer) TransformAndRecord(event metrics.MetricEvent) error {
+	ctx := context.Background()
 	switch event.MetricType {
 	case "load":
 		return t.transformLoadStats(ctx, event.Data, t.buildAttributes(event))

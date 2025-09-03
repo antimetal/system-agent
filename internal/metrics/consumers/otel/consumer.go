@@ -21,12 +21,15 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/antimetal/agent/pkg/metrics"
+	"github.com/antimetal/agent/internal/metrics"
 )
 
 const (
 	consumerName = "opentelemetry"
 )
+
+// Compile-time check that Consumer implements Consumer interface
+var _ metrics.Consumer = (*Consumer)(nil)
 
 type Consumer struct {
 	config Config
@@ -39,8 +42,6 @@ type Consumer struct {
 	transformer *Transformer
 
 	// Runtime state
-	ctx       context.Context
-	cancel    context.CancelFunc
 	wg        sync.WaitGroup
 	healthy   atomic.Bool
 	lastError atomic.Pointer[error]
@@ -62,28 +63,21 @@ func NewConsumer(config Config, logger logr.Logger) (*Consumer, error) {
 		return nil, err
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-
 	consumer := &Consumer{
 		config:    config,
 		logger:    logger.WithName("otel-consumer"),
-		ctx:       ctx,
-		cancel:    cancel,
 		startTime: time.Now(),
 	}
 
-	// Initialize OpenTelemetry components
-	if err := consumer.initOpenTelemetry(); err != nil {
-		cancel()
-		return nil, err
-	}
+	// OpenTelemetry components will be initialized when Start is called
+	// This ensures we have a proper context from the caller
 
 	consumer.healthy.Store(true)
 	return consumer, nil
 }
 
 // initOpenTelemetry initializes the OpenTelemetry components
-func (c *Consumer) initOpenTelemetry() error {
+func (c *Consumer) initOpenTelemetry(ctx context.Context) error {
 	// Create OTLP gRPC exporter
 	opts := []otlpmetricgrpc.Option{
 		otlpmetricgrpc.WithEndpoint(c.config.Endpoint),
@@ -136,7 +130,7 @@ func (c *Consumer) initOpenTelemetry() error {
 	}
 
 	// Create the exporter
-	exporter, err := otlpmetricgrpc.New(c.ctx, opts...)
+	exporter, err := otlpmetricgrpc.New(ctx, opts...)
 	if err != nil {
 		return err
 	}
@@ -180,7 +174,14 @@ func (c *Consumer) Name() string {
 
 // Start begins processing metrics events from the provided channel.
 // It launches a background goroutine to handle events and returns immediately.
+// The consumer stops when the events channel is closed.
 func (c *Consumer) Start(events <-chan metrics.MetricEvent) error {
+	// Initialize OpenTelemetry components
+	ctx := context.Background()
+	if err := c.initOpenTelemetry(ctx); err != nil {
+		return err
+	}
+
 	c.logger.Info("Starting OpenTelemetry consumer",
 		"endpoint", c.config.Endpoint,
 		"service_name", c.config.ServiceName,
@@ -188,32 +189,6 @@ func (c *Consumer) Start(events <-chan metrics.MetricEvent) error {
 
 	c.wg.Add(1)
 	go c.processEvents(events)
-
-	return nil
-}
-
-// Stop gracefully shuts down the OpenTelemetry consumer.
-// It cancels the context, waits for event processing to complete, and shuts down the meter provider.
-func (c *Consumer) Stop() error {
-	c.logger.Info("Stopping OpenTelemetry consumer...")
-	c.cancel()
-	c.wg.Wait()
-
-	// Shutdown the meter provider
-	if c.provider != nil {
-		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer shutdownCancel()
-
-		if err := c.provider.Shutdown(shutdownCtx); err != nil {
-			c.logger.Error(err, "Error shutting down meter provider")
-			return err
-		}
-	}
-
-	c.logger.Info("OpenTelemetry consumer stopped",
-		"events_processed", c.eventsProcessed.Load(),
-		"errors", c.errorsCount.Load(),
-		"uptime", time.Since(c.startTime))
 
 	return nil
 }
@@ -251,37 +226,42 @@ func (c *Consumer) processEvents(events <-chan metrics.MetricEvent) {
 
 	c.logger.Info("OpenTelemetry consumer event processing started")
 
-	for {
-		select {
-		case event, ok := <-events:
-			if !ok {
-				c.logger.Info("Events channel closed, stopping consumer")
-				return
+	for event := range events {
+		if err := c.processEvent(event); err != nil {
+			c.logger.Error(err, "Failed to process metrics event",
+				"metric_type", event.MetricType,
+				"source", event.Source)
+			c.errorsCount.Add(1)
+			c.lastError.Store(&err)
+
+			// Don't mark as unhealthy for individual event failures
+			// Only mark unhealthy if we have too many consecutive errors
+			if c.errorsCount.Load()%ErrorThresholdForHealthCheck == 0 {
+				c.logger.Error(nil, "High error rate detected in OpenTelemetry consumer",
+					"errors", c.errorsCount.Load(),
+					"events", c.eventsProcessed.Load())
 			}
-
-			if err := c.processEvent(event); err != nil {
-				c.logger.Error(err, "Failed to process metrics event",
-					"metric_type", event.MetricType,
-					"source", event.Source)
-				c.errorsCount.Add(1)
-				c.lastError.Store(&err)
-
-				// Don't mark as unhealthy for individual event failures
-				// Only mark unhealthy if we have too many consecutive errors
-				if c.errorsCount.Load()%ErrorThresholdForHealthCheck == 0 {
-					c.logger.Error(nil, "High error rate detected in OpenTelemetry consumer",
-						"errors", c.errorsCount.Load(),
-						"events", c.eventsProcessed.Load())
-				}
-			} else {
-				c.eventsProcessed.Add(1)
-			}
-
-		case <-c.ctx.Done():
-			c.logger.Info("Context cancelled, stopping consumer")
-			return
+		} else {
+			c.eventsProcessed.Add(1)
 		}
 	}
+
+	// Channel closed, perform cleanup
+	c.logger.Info("Events channel closed, stopping consumer")
+
+	// Shutdown the meter provider to ensure all metrics are flushed
+	if c.provider != nil {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := c.provider.Shutdown(shutdownCtx); err != nil {
+			c.logger.Error(err, "Failed to shutdown OpenTelemetry provider gracefully")
+		}
+	}
+
+	c.logger.Info("OpenTelemetry consumer stopped",
+		"events_processed", c.eventsProcessed.Load(),
+		"errors", c.errorsCount.Load(),
+		"uptime", time.Since(c.startTime))
 }
 
 // processEvent processes a single metrics event
@@ -295,7 +275,7 @@ func (c *Consumer) processEvent(event metrics.MetricEvent) error {
 		"cluster", event.ClusterName,
 		"timestamp", event.Timestamp)
 
-	if err := c.transformer.TransformAndRecord(c.ctx, event); err != nil {
+	if err := c.transformer.TransformAndRecord(event); err != nil {
 		return err
 	}
 
@@ -325,6 +305,3 @@ func NewConsumerFromConfig(config Config, logger logr.Logger) (*Consumer, error)
 
 	return consumer, nil
 }
-
-// Compile-time check that Consumer implements ConsumerInterface
-var _ metrics.ConsumerInterface = (*Consumer)(nil)

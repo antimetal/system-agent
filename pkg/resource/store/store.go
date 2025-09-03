@@ -19,6 +19,7 @@ import (
 
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	badger "github.com/dgraph-io/badger/v4"
+	"github.com/go-logr/logr"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -70,14 +71,17 @@ type store struct {
 }
 
 // New creates a new Store.
-func New(dataDir string) (*store, error) {
+func New(dataDir string, log logr.Logger) (*store, error) {
+	// Create a debug-level logger for badger
+	badgerLog := newBadgerLogger(log.V(1).WithName("badger"))
+
 	db, err := badger.Open(
 		badger.DefaultOptions(dataDir).
 			WithInMemory(dataDir == "").
 			WithNumMemtables(3).
 			WithBlockCacheSize(128 << 20).
 			WithIndexCacheSize(64 << 20).
-			WithLogger(nil), // Disable badger logging to reduce test noise
+			WithLogger(badgerLog), // Use debug-level logger for badger
 	)
 	if err != nil {
 		return nil, err

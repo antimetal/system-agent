@@ -189,7 +189,7 @@ func main() {
 	} else {
 		setupLog.V(1).Info("using in-memory storage for resource store")
 	}
-	rsrcStore, err := store.New(rsrcDataDir)
+	rsrcStore, err := store.New(rsrcDataDir, setupLog.WithName("store"))
 	if err != nil {
 		setupLog.Error(err, "unable to create resource inventory")
 		os.Exit(1)
