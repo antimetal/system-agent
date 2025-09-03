@@ -132,9 +132,9 @@ func TestBuilder_BuildFromSnapshot_Containers(t *testing.T) {
 
 	// Verify container nodes were created correctly
 	for i, rsrc := range mockStore.resources {
-		assert.Equal(t, "ContainerNode", rsrc.Type.Kind)
+		assert.Equal(t, "antimetal.runtime.v1.ContainerNode", rsrc.Type.Kind)
 		assert.Equal(t, "antimetal.runtime.v1.ContainerNode", rsrc.Type.Type)
-		assert.Equal(t, RuntimeService, rsrc.Metadata.Service)
+		// Service field was removed as containers are provider-agnostic
 		assert.Contains(t, rsrc.Metadata.Name, snapshot.containers[i].ID)
 	}
 }
@@ -179,7 +179,7 @@ func TestBuilder_BuildFromSnapshot_Processes(t *testing.T) {
 
 	// Verify process nodes were created
 	for _, rsrc := range mockStore.resources {
-		assert.Equal(t, "ProcessNode", rsrc.Type.Kind)
+		assert.Equal(t, "antimetal.runtime.v1.ProcessNode", rsrc.Type.Kind)
 		assert.Equal(t, "antimetal.runtime.v1.ProcessNode", rsrc.Type.Type)
 	}
 
