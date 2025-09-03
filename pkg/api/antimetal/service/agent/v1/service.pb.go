@@ -15,7 +15,6 @@ package agentv1
 
 import (
 	v1 "github.com/antimetal/agent/pkg/api/antimetal/agent/v1"
-	v12 "github.com/antimetal/agent/pkg/api/antimetal/runtime/v1"
 	v11 "github.com/antimetal/agent/pkg/api/antimetal/types/v1"
 	status "google.golang.org/genproto/googleapis/rpc/status"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -105,30 +104,21 @@ type WatchConfigRequest struct {
 	// type specifies the purpose of this request message.
 	// This field is REQUIRED for all request types.
 	Type WatchConfigRequestType `protobuf:"varint,2,opt,name=type,proto3,enum=antimetal.service.agent.v1.WatchConfigRequestType" json:"type,omitempty"`
-	// supported_collectors is a list of collector values indicating which data
-	// collectors this agent supports. This field is REQUIRED for INITIAL requests.
-	SupportedCollectors []v1.Collectors `protobuf:"varint,3,rep,packed,name=supported_collectors,json=supportedCollectors,proto3,enum=antimetal.agent.v1.Collectors" json:"supported_collectors,omitempty"`
 	// initial_configs contains configuration objects the agent currently has.
 	// This field is OPTIONAL and only used with INITIAL requests to enable
 	// incremental configuration updates. The server can compare these with
 	// the desired state and send only necessary changes. Each object wraps
 	// a specific config type.
-	InitialConfigs []*v11.Object `protobuf:"bytes,4,rep,name=initial_configs,json=initialConfigs,proto3" json:"initial_configs,omitempty"`
-	// linux_runtime provides Linux-specific runtime information from the agent.
-	// such as kernel version and cgroup configuration. The agent can send this
-	// during an INITIAL request. The server uses this information to optimize
-	// configuration delivery and ensure compatibility with the agent's runtime
-	// environment.
-	LinuxRuntime *v12.Linux `protobuf:"bytes,5,opt,name=linux_runtime,json=linuxRuntime,proto3" json:"linux_runtime,omitempty"`
+	InitialConfigs []*v11.Object `protobuf:"bytes,3,rep,name=initial_configs,json=initialConfigs,proto3" json:"initial_configs,omitempty"`
 	// response_seq_num is the sequence number of the server response being
 	// acknowledged or rejected. This field is REQUIRED for ACK and NACK
 	// request types and MUST be empty for INITIAL requests.
-	ResponseSeqNum string `protobuf:"bytes,6,opt,name=response_seq_num,json=responseSeqNum,proto3" json:"response_seq_num,omitempty"`
+	ResponseSeqNum string `protobuf:"bytes,4,opt,name=response_seq_num,json=responseSeqNum,proto3" json:"response_seq_num,omitempty"`
 	// error_detail provides information about why a configuration was rejected.
 	// This field is REQUIRED for NACK requests and MUST be empty for other
 	// request types. The error should be detailed enough for server-side
 	// debugging and corrective action.
-	ErrorDetail   *status.Status `protobuf:"bytes,7,opt,name=error_detail,json=errorDetail,proto3" json:"error_detail,omitempty"`
+	ErrorDetail   *status.Status `protobuf:"bytes,5,opt,name=error_detail,json=errorDetail,proto3" json:"error_detail,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -177,23 +167,9 @@ func (x *WatchConfigRequest) GetType() WatchConfigRequestType {
 	return WatchConfigRequestType_WATCH_CONFIG_REQUEST_TYPE_INITIAL
 }
 
-func (x *WatchConfigRequest) GetSupportedCollectors() []v1.Collectors {
-	if x != nil {
-		return x.SupportedCollectors
-	}
-	return nil
-}
-
 func (x *WatchConfigRequest) GetInitialConfigs() []*v11.Object {
 	if x != nil {
 		return x.InitialConfigs
-	}
-	return nil
-}
-
-func (x *WatchConfigRequest) GetLinuxRuntime() *v12.Linux {
-	if x != nil {
-		return x.LinuxRuntime
 	}
 	return nil
 }
@@ -276,15 +252,13 @@ var File_antimetal_service_agent_v1_service_proto protoreflect.FileDescriptor
 
 const file_antimetal_service_agent_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"(antimetal/service/agent/v1/service.proto\x12\x1aantimetal.service.agent.v1\x1a\x1fantimetal/agent/v1/config.proto\x1a!antimetal/agent/v1/instance.proto\x1a antimetal/runtime/v1/linux.proto\x1a\x1eantimetal/types/v1/types.proto\x1a\x17google/rpc/status.proto\"\xd1\x03\n" +
+	"(antimetal/service/agent/v1/service.proto\x12\x1aantimetal.service.agent.v1\x1a!antimetal/agent/v1/instance.proto\x1a\x1fantimetal/types/v1/object.proto\x1a\x17google/rpc/status.proto\"\xbc\x02\n" +
 	"\x12WatchConfigRequest\x128\n" +
 	"\binstance\x18\x01 \x01(\v2\x1c.antimetal.agent.v1.InstanceR\binstance\x12F\n" +
-	"\x04type\x18\x02 \x01(\x0e22.antimetal.service.agent.v1.WatchConfigRequestTypeR\x04type\x12Q\n" +
-	"\x14supported_collectors\x18\x03 \x03(\x0e2\x1e.antimetal.agent.v1.CollectorsR\x13supportedCollectors\x12C\n" +
-	"\x0finitial_configs\x18\x04 \x03(\v2\x1a.antimetal.types.v1.ObjectR\x0einitialConfigs\x12@\n" +
-	"\rlinux_runtime\x18\x05 \x01(\v2\x1b.antimetal.runtime.v1.LinuxR\flinuxRuntime\x12(\n" +
-	"\x10response_seq_num\x18\x06 \x01(\tR\x0eresponseSeqNum\x125\n" +
-	"\ferror_detail\x18\a \x01(\v2\x12.google.rpc.StatusR\verrorDetail\"d\n" +
+	"\x04type\x18\x02 \x01(\x0e22.antimetal.service.agent.v1.WatchConfigRequestTypeR\x04type\x12C\n" +
+	"\x0finitial_configs\x18\x03 \x03(\v2\x1a.antimetal.types.v1.ObjectR\x0einitialConfigs\x12(\n" +
+	"\x10response_seq_num\x18\x04 \x01(\tR\x0eresponseSeqNum\x125\n" +
+	"\ferror_detail\x18\x05 \x01(\v2\x12.google.rpc.StatusR\verrorDetail\"d\n" +
 	"\x13WatchConfigResponse\x124\n" +
 	"\aconfigs\x18\x01 \x03(\v2\x1a.antimetal.types.v1.ObjectR\aconfigs\x12\x17\n" +
 	"\aseq_num\x18\x02 \x01(\tR\x06seqNum*\x86\x01\n" +
@@ -315,26 +289,22 @@ var file_antimetal_service_agent_v1_service_proto_goTypes = []any{
 	(*WatchConfigRequest)(nil),  // 1: antimetal.service.agent.v1.WatchConfigRequest
 	(*WatchConfigResponse)(nil), // 2: antimetal.service.agent.v1.WatchConfigResponse
 	(*v1.Instance)(nil),         // 3: antimetal.agent.v1.Instance
-	(v1.Collectors)(0),          // 4: antimetal.agent.v1.Collectors
-	(*v11.Object)(nil),          // 5: antimetal.types.v1.Object
-	(*v12.Linux)(nil),           // 6: antimetal.runtime.v1.Linux
-	(*status.Status)(nil),       // 7: google.rpc.Status
+	(*v11.Object)(nil),          // 4: antimetal.types.v1.Object
+	(*status.Status)(nil),       // 5: google.rpc.Status
 }
 var file_antimetal_service_agent_v1_service_proto_depIdxs = []int32{
 	3, // 0: antimetal.service.agent.v1.WatchConfigRequest.instance:type_name -> antimetal.agent.v1.Instance
 	0, // 1: antimetal.service.agent.v1.WatchConfigRequest.type:type_name -> antimetal.service.agent.v1.WatchConfigRequestType
-	4, // 2: antimetal.service.agent.v1.WatchConfigRequest.supported_collectors:type_name -> antimetal.agent.v1.Collectors
-	5, // 3: antimetal.service.agent.v1.WatchConfigRequest.initial_configs:type_name -> antimetal.types.v1.Object
-	6, // 4: antimetal.service.agent.v1.WatchConfigRequest.linux_runtime:type_name -> antimetal.runtime.v1.Linux
-	7, // 5: antimetal.service.agent.v1.WatchConfigRequest.error_detail:type_name -> google.rpc.Status
-	5, // 6: antimetal.service.agent.v1.WatchConfigResponse.configs:type_name -> antimetal.types.v1.Object
-	1, // 7: antimetal.service.agent.v1.AgentManagementService.WatchConfig:input_type -> antimetal.service.agent.v1.WatchConfigRequest
-	2, // 8: antimetal.service.agent.v1.AgentManagementService.WatchConfig:output_type -> antimetal.service.agent.v1.WatchConfigResponse
-	8, // [8:9] is the sub-list for method output_type
-	7, // [7:8] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+	4, // 2: antimetal.service.agent.v1.WatchConfigRequest.initial_configs:type_name -> antimetal.types.v1.Object
+	5, // 3: antimetal.service.agent.v1.WatchConfigRequest.error_detail:type_name -> google.rpc.Status
+	4, // 4: antimetal.service.agent.v1.WatchConfigResponse.configs:type_name -> antimetal.types.v1.Object
+	1, // 5: antimetal.service.agent.v1.AgentManagementService.WatchConfig:input_type -> antimetal.service.agent.v1.WatchConfigRequest
+	2, // 6: antimetal.service.agent.v1.AgentManagementService.WatchConfig:output_type -> antimetal.service.agent.v1.WatchConfigResponse
+	6, // [6:7] is the sub-list for method output_type
+	5, // [5:6] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_antimetal_service_agent_v1_service_proto_init() }

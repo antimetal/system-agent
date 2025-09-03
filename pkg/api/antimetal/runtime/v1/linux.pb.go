@@ -16,6 +16,7 @@ package runtimev1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -137,6 +138,142 @@ func (x CgroupDriver) Number() protoreflect.EnumNumber {
 // Deprecated: Use CgroupDriver.Descriptor instead.
 func (CgroupDriver) EnumDescriptor() ([]byte, []int) {
 	return file_antimetal_runtime_v1_linux_proto_rawDescGZIP(), []int{1}
+}
+
+// ContainerRuntime defines the supported container runtime implementations.
+type ContainerRuntime int32
+
+const (
+	ContainerRuntime_CONTAINER_RUNTIME_UNKNOWN        ContainerRuntime = 0
+	ContainerRuntime_CONTAINER_RUNTIME_DOCKER         ContainerRuntime = 1
+	ContainerRuntime_CONTAINER_RUNTIME_CONTAINERD     ContainerRuntime = 2
+	ContainerRuntime_CONTAINER_RUNTIME_CRI_CONTAINERD ContainerRuntime = 3
+	ContainerRuntime_CONTAINER_RUNTIME_CRI_O          ContainerRuntime = 4
+	ContainerRuntime_CONTAINER_RUNTIME_PODMAN         ContainerRuntime = 5
+)
+
+// Enum value maps for ContainerRuntime.
+var (
+	ContainerRuntime_name = map[int32]string{
+		0: "CONTAINER_RUNTIME_UNKNOWN",
+		1: "CONTAINER_RUNTIME_DOCKER",
+		2: "CONTAINER_RUNTIME_CONTAINERD",
+		3: "CONTAINER_RUNTIME_CRI_CONTAINERD",
+		4: "CONTAINER_RUNTIME_CRI_O",
+		5: "CONTAINER_RUNTIME_PODMAN",
+	}
+	ContainerRuntime_value = map[string]int32{
+		"CONTAINER_RUNTIME_UNKNOWN":        0,
+		"CONTAINER_RUNTIME_DOCKER":         1,
+		"CONTAINER_RUNTIME_CONTAINERD":     2,
+		"CONTAINER_RUNTIME_CRI_CONTAINERD": 3,
+		"CONTAINER_RUNTIME_CRI_O":          4,
+		"CONTAINER_RUNTIME_PODMAN":         5,
+	}
+)
+
+func (x ContainerRuntime) Enum() *ContainerRuntime {
+	p := new(ContainerRuntime)
+	*p = x
+	return p
+}
+
+func (x ContainerRuntime) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ContainerRuntime) Descriptor() protoreflect.EnumDescriptor {
+	return file_antimetal_runtime_v1_linux_proto_enumTypes[2].Descriptor()
+}
+
+func (ContainerRuntime) Type() protoreflect.EnumType {
+	return &file_antimetal_runtime_v1_linux_proto_enumTypes[2]
+}
+
+func (x ContainerRuntime) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ContainerRuntime.Descriptor instead.
+func (ContainerRuntime) EnumDescriptor() ([]byte, []int) {
+	return file_antimetal_runtime_v1_linux_proto_rawDescGZIP(), []int{2}
+}
+
+// ProcessState defines the possible states of a Linux process.
+type ProcessState int32
+
+const (
+	ProcessState_PROCESS_STATE_UNKNOWN      ProcessState = 0
+	ProcessState_PROCESS_STATE_RUNNING      ProcessState = 1
+	ProcessState_PROCESS_STATE_SLEEPING     ProcessState = 2
+	ProcessState_PROCESS_STATE_DISK_SLEEP   ProcessState = 3
+	ProcessState_PROCESS_STATE_ZOMBIE       ProcessState = 4
+	ProcessState_PROCESS_STATE_STOPPED      ProcessState = 5
+	ProcessState_PROCESS_STATE_TRACING_STOP ProcessState = 6
+	ProcessState_PROCESS_STATE_PAGING       ProcessState = 7
+	ProcessState_PROCESS_STATE_DEAD         ProcessState = 8
+	ProcessState_PROCESS_STATE_WAKEKILL     ProcessState = 9
+	ProcessState_PROCESS_STATE_WAKING       ProcessState = 10
+	ProcessState_PROCESS_STATE_PARKED       ProcessState = 11
+)
+
+// Enum value maps for ProcessState.
+var (
+	ProcessState_name = map[int32]string{
+		0:  "PROCESS_STATE_UNKNOWN",
+		1:  "PROCESS_STATE_RUNNING",
+		2:  "PROCESS_STATE_SLEEPING",
+		3:  "PROCESS_STATE_DISK_SLEEP",
+		4:  "PROCESS_STATE_ZOMBIE",
+		5:  "PROCESS_STATE_STOPPED",
+		6:  "PROCESS_STATE_TRACING_STOP",
+		7:  "PROCESS_STATE_PAGING",
+		8:  "PROCESS_STATE_DEAD",
+		9:  "PROCESS_STATE_WAKEKILL",
+		10: "PROCESS_STATE_WAKING",
+		11: "PROCESS_STATE_PARKED",
+	}
+	ProcessState_value = map[string]int32{
+		"PROCESS_STATE_UNKNOWN":      0,
+		"PROCESS_STATE_RUNNING":      1,
+		"PROCESS_STATE_SLEEPING":     2,
+		"PROCESS_STATE_DISK_SLEEP":   3,
+		"PROCESS_STATE_ZOMBIE":       4,
+		"PROCESS_STATE_STOPPED":      5,
+		"PROCESS_STATE_TRACING_STOP": 6,
+		"PROCESS_STATE_PAGING":       7,
+		"PROCESS_STATE_DEAD":         8,
+		"PROCESS_STATE_WAKEKILL":     9,
+		"PROCESS_STATE_WAKING":       10,
+		"PROCESS_STATE_PARKED":       11,
+	}
+)
+
+func (x ProcessState) Enum() *ProcessState {
+	p := new(ProcessState)
+	*p = x
+	return p
+}
+
+func (x ProcessState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ProcessState) Descriptor() protoreflect.EnumDescriptor {
+	return file_antimetal_runtime_v1_linux_proto_enumTypes[3].Descriptor()
+}
+
+func (ProcessState) Type() protoreflect.EnumType {
+	return &file_antimetal_runtime_v1_linux_proto_enumTypes[3]
+}
+
+func (x ProcessState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ProcessState.Descriptor instead.
+func (ProcessState) EnumDescriptor() ([]byte, []int) {
+	return file_antimetal_runtime_v1_linux_proto_rawDescGZIP(), []int{3}
 }
 
 // Linux contains Linux-specific runtime information reported by agents.
@@ -261,11 +398,295 @@ func (x *CgroupInfo) GetDriver() CgroupDriver {
 	return CgroupDriver_CGROUP_DRIVER_CGROUPFS
 }
 
+// ContainerNode represents a discovered container in the runtime topology.
+// Container nodes connect to hardware resources and contain process nodes.
+type ContainerNode struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// container_id is the unique identifier for the container (may be truncated for some runtimes).
+	ContainerId string `protobuf:"bytes,1,opt,name=container_id,json=containerId,proto3" json:"container_id,omitempty"`
+	// runtime identifies the container runtime that manages this container.
+	Runtime ContainerRuntime `protobuf:"varint,2,opt,name=runtime,proto3,enum=antimetal.runtime.v1.ContainerRuntime" json:"runtime,omitempty"`
+	// cgroup_version indicates whether this container uses cgroup v1 or v2.
+	// Different runtimes on the same host may use different cgroup versions.
+	CgroupVersion CgroupVersion `protobuf:"varint,3,opt,name=cgroup_version,json=cgroupVersion,proto3,enum=antimetal.runtime.v1.CgroupVersion" json:"cgroup_version,omitempty"`
+	// cgroup_path is the filesystem path to the container's cgroup directory.
+	CgroupPath string `protobuf:"bytes,4,opt,name=cgroup_path,json=cgroupPath,proto3" json:"cgroup_path,omitempty"`
+	// image_name is the container image name (e.g., "nginx", "alpine").
+	ImageName string `protobuf:"bytes,5,opt,name=image_name,json=imageName,proto3" json:"image_name,omitempty"`
+	// image_tag is the container image tag (e.g., "latest", "1.21").
+	ImageTag string `protobuf:"bytes,6,opt,name=image_tag,json=imageTag,proto3" json:"image_tag,omitempty"`
+	// labels contains runtime-specific labels and annotations.
+	Labels map[string]string `protobuf:"bytes,7,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// created_at is when the container was created.
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// started_at is when the container was started (may differ from created_at).
+	StartedAt *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
+	// cpu_shares represents the relative CPU weight (cgroup v1 cpu.shares).
+	CpuShares *int32 `protobuf:"varint,10,opt,name=cpu_shares,json=cpuShares,proto3,oneof" json:"cpu_shares,omitempty"`
+	// cpu_quota_us represents the CPU quota in microseconds per period.
+	CpuQuotaUs *int32 `protobuf:"varint,11,opt,name=cpu_quota_us,json=cpuQuotaUs,proto3,oneof" json:"cpu_quota_us,omitempty"`
+	// cpu_period_us represents the CPU quota enforcement period in microseconds.
+	CpuPeriodUs *int32 `protobuf:"varint,12,opt,name=cpu_period_us,json=cpuPeriodUs,proto3,oneof" json:"cpu_period_us,omitempty"`
+	// memory_limit_bytes represents the memory limit in bytes (if set).
+	MemoryLimitBytes *uint64 `protobuf:"varint,13,opt,name=memory_limit_bytes,json=memoryLimitBytes,proto3,oneof" json:"memory_limit_bytes,omitempty"`
+	// cpuset_cpus contains the CPU cores this container is allowed to use.
+	CpusetCpus string `protobuf:"bytes,14,opt,name=cpuset_cpus,json=cpusetCpus,proto3" json:"cpuset_cpus,omitempty"`
+	// cpuset_mems contains the NUMA memory nodes this container is allowed to use.
+	CpusetMems    string `protobuf:"bytes,15,opt,name=cpuset_mems,json=cpusetMems,proto3" json:"cpuset_mems,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ContainerNode) Reset() {
+	*x = ContainerNode{}
+	mi := &file_antimetal_runtime_v1_linux_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ContainerNode) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ContainerNode) ProtoMessage() {}
+
+func (x *ContainerNode) ProtoReflect() protoreflect.Message {
+	mi := &file_antimetal_runtime_v1_linux_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ContainerNode.ProtoReflect.Descriptor instead.
+func (*ContainerNode) Descriptor() ([]byte, []int) {
+	return file_antimetal_runtime_v1_linux_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ContainerNode) GetContainerId() string {
+	if x != nil {
+		return x.ContainerId
+	}
+	return ""
+}
+
+func (x *ContainerNode) GetRuntime() ContainerRuntime {
+	if x != nil {
+		return x.Runtime
+	}
+	return ContainerRuntime_CONTAINER_RUNTIME_UNKNOWN
+}
+
+func (x *ContainerNode) GetCgroupVersion() CgroupVersion {
+	if x != nil {
+		return x.CgroupVersion
+	}
+	return CgroupVersion_CGROUP_VERSION_V1
+}
+
+func (x *ContainerNode) GetCgroupPath() string {
+	if x != nil {
+		return x.CgroupPath
+	}
+	return ""
+}
+
+func (x *ContainerNode) GetImageName() string {
+	if x != nil {
+		return x.ImageName
+	}
+	return ""
+}
+
+func (x *ContainerNode) GetImageTag() string {
+	if x != nil {
+		return x.ImageTag
+	}
+	return ""
+}
+
+func (x *ContainerNode) GetLabels() map[string]string {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
+func (x *ContainerNode) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *ContainerNode) GetStartedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartedAt
+	}
+	return nil
+}
+
+func (x *ContainerNode) GetCpuShares() int32 {
+	if x != nil && x.CpuShares != nil {
+		return *x.CpuShares
+	}
+	return 0
+}
+
+func (x *ContainerNode) GetCpuQuotaUs() int32 {
+	if x != nil && x.CpuQuotaUs != nil {
+		return *x.CpuQuotaUs
+	}
+	return 0
+}
+
+func (x *ContainerNode) GetCpuPeriodUs() int32 {
+	if x != nil && x.CpuPeriodUs != nil {
+		return *x.CpuPeriodUs
+	}
+	return 0
+}
+
+func (x *ContainerNode) GetMemoryLimitBytes() uint64 {
+	if x != nil && x.MemoryLimitBytes != nil {
+		return *x.MemoryLimitBytes
+	}
+	return 0
+}
+
+func (x *ContainerNode) GetCpusetCpus() string {
+	if x != nil {
+		return x.CpusetCpus
+	}
+	return ""
+}
+
+func (x *ContainerNode) GetCpusetMems() string {
+	if x != nil {
+		return x.CpusetMems
+	}
+	return ""
+}
+
+// ProcessNode represents a running process in the runtime topology.
+// Process nodes connect to containers via relationships and hardware resources.
+type ProcessNode struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// pid is the process identifier.
+	Pid int32 `protobuf:"varint,1,opt,name=pid,proto3" json:"pid,omitempty"`
+	// ppid is the parent process identifier.
+	Ppid int32 `protobuf:"varint,2,opt,name=ppid,proto3" json:"ppid,omitempty"`
+	// pgid is the process group identifier.
+	Pgid int32 `protobuf:"varint,3,opt,name=pgid,proto3" json:"pgid,omitempty"`
+	// sid is the session identifier.
+	Sid int32 `protobuf:"varint,4,opt,name=sid,proto3" json:"sid,omitempty"`
+	// command is the process command name.
+	Command string `protobuf:"bytes,5,opt,name=command,proto3" json:"command,omitempty"`
+	// cmdline is the full command line with arguments.
+	Cmdline string `protobuf:"bytes,6,opt,name=cmdline,proto3" json:"cmdline,omitempty"`
+	// state is the current process state.
+	State ProcessState `protobuf:"varint,7,opt,name=state,proto3,enum=antimetal.runtime.v1.ProcessState" json:"state,omitempty"`
+	// start_time is when the process was started.
+	StartTime     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProcessNode) Reset() {
+	*x = ProcessNode{}
+	mi := &file_antimetal_runtime_v1_linux_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProcessNode) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProcessNode) ProtoMessage() {}
+
+func (x *ProcessNode) ProtoReflect() protoreflect.Message {
+	mi := &file_antimetal_runtime_v1_linux_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProcessNode.ProtoReflect.Descriptor instead.
+func (*ProcessNode) Descriptor() ([]byte, []int) {
+	return file_antimetal_runtime_v1_linux_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ProcessNode) GetPid() int32 {
+	if x != nil {
+		return x.Pid
+	}
+	return 0
+}
+
+func (x *ProcessNode) GetPpid() int32 {
+	if x != nil {
+		return x.Ppid
+	}
+	return 0
+}
+
+func (x *ProcessNode) GetPgid() int32 {
+	if x != nil {
+		return x.Pgid
+	}
+	return 0
+}
+
+func (x *ProcessNode) GetSid() int32 {
+	if x != nil {
+		return x.Sid
+	}
+	return 0
+}
+
+func (x *ProcessNode) GetCommand() string {
+	if x != nil {
+		return x.Command
+	}
+	return ""
+}
+
+func (x *ProcessNode) GetCmdline() string {
+	if x != nil {
+		return x.Cmdline
+	}
+	return ""
+}
+
+func (x *ProcessNode) GetState() ProcessState {
+	if x != nil {
+		return x.State
+	}
+	return ProcessState_PROCESS_STATE_UNKNOWN
+}
+
+func (x *ProcessNode) GetStartTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartTime
+	}
+	return nil
+}
+
 var File_antimetal_runtime_v1_linux_proto protoreflect.FileDescriptor
 
 const file_antimetal_runtime_v1_linux_proto_rawDesc = "" +
 	"\n" +
-	" antimetal/runtime/v1/linux.proto\x12\x14antimetal.runtime.v1\"q\n" +
+	" antimetal/runtime/v1/linux.proto\x12\x14antimetal.runtime.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"q\n" +
 	"\x05Linux\x12%\n" +
 	"\x0ekernel_version\x18\x01 \x01(\tR\rkernelVersion\x12A\n" +
 	"\vcgroup_info\x18\x02 \x01(\v2 .antimetal.runtime.v1.CgroupInfoR\n" +
@@ -273,14 +694,77 @@ const file_antimetal_runtime_v1_linux_proto_rawDesc = "" +
 	"\n" +
 	"CgroupInfo\x12=\n" +
 	"\aversion\x18\x01 \x01(\x0e2#.antimetal.runtime.v1.CgroupVersionR\aversion\x12:\n" +
-	"\x06driver\x18\x02 \x01(\x0e2\".antimetal.runtime.v1.CgroupDriverR\x06driver*X\n" +
+	"\x06driver\x18\x02 \x01(\x0e2\".antimetal.runtime.v1.CgroupDriverR\x06driver\"\xc9\x06\n" +
+	"\rContainerNode\x12!\n" +
+	"\fcontainer_id\x18\x01 \x01(\tR\vcontainerId\x12@\n" +
+	"\aruntime\x18\x02 \x01(\x0e2&.antimetal.runtime.v1.ContainerRuntimeR\aruntime\x12J\n" +
+	"\x0ecgroup_version\x18\x03 \x01(\x0e2#.antimetal.runtime.v1.CgroupVersionR\rcgroupVersion\x12\x1f\n" +
+	"\vcgroup_path\x18\x04 \x01(\tR\n" +
+	"cgroupPath\x12\x1d\n" +
+	"\n" +
+	"image_name\x18\x05 \x01(\tR\timageName\x12\x1b\n" +
+	"\timage_tag\x18\x06 \x01(\tR\bimageTag\x12G\n" +
+	"\x06labels\x18\a \x03(\v2/.antimetal.runtime.v1.ContainerNode.LabelsEntryR\x06labels\x129\n" +
+	"\n" +
+	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"\n" +
+	"started_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x12\"\n" +
+	"\n" +
+	"cpu_shares\x18\n" +
+	" \x01(\x05H\x00R\tcpuShares\x88\x01\x01\x12%\n" +
+	"\fcpu_quota_us\x18\v \x01(\x05H\x01R\n" +
+	"cpuQuotaUs\x88\x01\x01\x12'\n" +
+	"\rcpu_period_us\x18\f \x01(\x05H\x02R\vcpuPeriodUs\x88\x01\x01\x121\n" +
+	"\x12memory_limit_bytes\x18\r \x01(\x04H\x03R\x10memoryLimitBytes\x88\x01\x01\x12\x1f\n" +
+	"\vcpuset_cpus\x18\x0e \x01(\tR\n" +
+	"cpusetCpus\x12\x1f\n" +
+	"\vcpuset_mems\x18\x0f \x01(\tR\n" +
+	"cpusetMems\x1a9\n" +
+	"\vLabelsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\r\n" +
+	"\v_cpu_sharesB\x0f\n" +
+	"\r_cpu_quota_usB\x10\n" +
+	"\x0e_cpu_period_usB\x15\n" +
+	"\x13_memory_limit_bytes\"\x82\x02\n" +
+	"\vProcessNode\x12\x10\n" +
+	"\x03pid\x18\x01 \x01(\x05R\x03pid\x12\x12\n" +
+	"\x04ppid\x18\x02 \x01(\x05R\x04ppid\x12\x12\n" +
+	"\x04pgid\x18\x03 \x01(\x05R\x04pgid\x12\x10\n" +
+	"\x03sid\x18\x04 \x01(\x05R\x03sid\x12\x18\n" +
+	"\acommand\x18\x05 \x01(\tR\acommand\x12\x18\n" +
+	"\acmdline\x18\x06 \x01(\tR\acmdline\x128\n" +
+	"\x05state\x18\a \x01(\x0e2\".antimetal.runtime.v1.ProcessStateR\x05state\x129\n" +
+	"\n" +
+	"start_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime*X\n" +
 	"\rCgroupVersion\x12\x15\n" +
 	"\x11CGROUP_VERSION_V1\x10\x00\x12\x15\n" +
 	"\x11CGROUP_VERSION_V2\x10\x01\x12\x19\n" +
 	"\x15CGROUP_VERSION_HYBRID\x10\x02*E\n" +
 	"\fCgroupDriver\x12\x1a\n" +
 	"\x16CGROUP_DRIVER_CGROUPFS\x10\x00\x12\x19\n" +
-	"\x15CGROUP_DRIVER_SYSTEMD\x10\x01B\xdb\x01\n" +
+	"\x15CGROUP_DRIVER_SYSTEMD\x10\x01*\xd2\x01\n" +
+	"\x10ContainerRuntime\x12\x1d\n" +
+	"\x19CONTAINER_RUNTIME_UNKNOWN\x10\x00\x12\x1c\n" +
+	"\x18CONTAINER_RUNTIME_DOCKER\x10\x01\x12 \n" +
+	"\x1cCONTAINER_RUNTIME_CONTAINERD\x10\x02\x12$\n" +
+	" CONTAINER_RUNTIME_CRI_CONTAINERD\x10\x03\x12\x1b\n" +
+	"\x17CONTAINER_RUNTIME_CRI_O\x10\x04\x12\x1c\n" +
+	"\x18CONTAINER_RUNTIME_PODMAN\x10\x05*\xd5\x02\n" +
+	"\fProcessState\x12\x19\n" +
+	"\x15PROCESS_STATE_UNKNOWN\x10\x00\x12\x19\n" +
+	"\x15PROCESS_STATE_RUNNING\x10\x01\x12\x1a\n" +
+	"\x16PROCESS_STATE_SLEEPING\x10\x02\x12\x1c\n" +
+	"\x18PROCESS_STATE_DISK_SLEEP\x10\x03\x12\x18\n" +
+	"\x14PROCESS_STATE_ZOMBIE\x10\x04\x12\x19\n" +
+	"\x15PROCESS_STATE_STOPPED\x10\x05\x12\x1e\n" +
+	"\x1aPROCESS_STATE_TRACING_STOP\x10\x06\x12\x18\n" +
+	"\x14PROCESS_STATE_PAGING\x10\a\x12\x16\n" +
+	"\x12PROCESS_STATE_DEAD\x10\b\x12\x1a\n" +
+	"\x16PROCESS_STATE_WAKEKILL\x10\t\x12\x18\n" +
+	"\x14PROCESS_STATE_WAKING\x10\n" +
+	"\x12\x18\n" +
+	"\x14PROCESS_STATE_PARKED\x10\vB\xdb\x01\n" +
 	"\x18com.antimetal.runtime.v1B\n" +
 	"LinuxProtoP\x01ZAgithub.com/antimetal/agent/pkg/api/antimetal/runtime/v1;runtimev1\xa2\x02\x03ARX\xaa\x02\x14Antimetal.Runtime.V1\xca\x02\x14Antimetal\\Runtime\\V1\xe2\x02 Antimetal\\Runtime\\V1\\GPBMetadata\xea\x02\x16Antimetal::Runtime::V1b\x06proto3"
 
@@ -296,23 +780,36 @@ func file_antimetal_runtime_v1_linux_proto_rawDescGZIP() []byte {
 	return file_antimetal_runtime_v1_linux_proto_rawDescData
 }
 
-var file_antimetal_runtime_v1_linux_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_antimetal_runtime_v1_linux_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_antimetal_runtime_v1_linux_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_antimetal_runtime_v1_linux_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_antimetal_runtime_v1_linux_proto_goTypes = []any{
-	(CgroupVersion)(0), // 0: antimetal.runtime.v1.CgroupVersion
-	(CgroupDriver)(0),  // 1: antimetal.runtime.v1.CgroupDriver
-	(*Linux)(nil),      // 2: antimetal.runtime.v1.Linux
-	(*CgroupInfo)(nil), // 3: antimetal.runtime.v1.CgroupInfo
+	(CgroupVersion)(0),            // 0: antimetal.runtime.v1.CgroupVersion
+	(CgroupDriver)(0),             // 1: antimetal.runtime.v1.CgroupDriver
+	(ContainerRuntime)(0),         // 2: antimetal.runtime.v1.ContainerRuntime
+	(ProcessState)(0),             // 3: antimetal.runtime.v1.ProcessState
+	(*Linux)(nil),                 // 4: antimetal.runtime.v1.Linux
+	(*CgroupInfo)(nil),            // 5: antimetal.runtime.v1.CgroupInfo
+	(*ContainerNode)(nil),         // 6: antimetal.runtime.v1.ContainerNode
+	(*ProcessNode)(nil),           // 7: antimetal.runtime.v1.ProcessNode
+	nil,                           // 8: antimetal.runtime.v1.ContainerNode.LabelsEntry
+	(*timestamppb.Timestamp)(nil), // 9: google.protobuf.Timestamp
 }
 var file_antimetal_runtime_v1_linux_proto_depIdxs = []int32{
-	3, // 0: antimetal.runtime.v1.Linux.cgroup_info:type_name -> antimetal.runtime.v1.CgroupInfo
-	0, // 1: antimetal.runtime.v1.CgroupInfo.version:type_name -> antimetal.runtime.v1.CgroupVersion
-	1, // 2: antimetal.runtime.v1.CgroupInfo.driver:type_name -> antimetal.runtime.v1.CgroupDriver
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	5,  // 0: antimetal.runtime.v1.Linux.cgroup_info:type_name -> antimetal.runtime.v1.CgroupInfo
+	0,  // 1: antimetal.runtime.v1.CgroupInfo.version:type_name -> antimetal.runtime.v1.CgroupVersion
+	1,  // 2: antimetal.runtime.v1.CgroupInfo.driver:type_name -> antimetal.runtime.v1.CgroupDriver
+	2,  // 3: antimetal.runtime.v1.ContainerNode.runtime:type_name -> antimetal.runtime.v1.ContainerRuntime
+	0,  // 4: antimetal.runtime.v1.ContainerNode.cgroup_version:type_name -> antimetal.runtime.v1.CgroupVersion
+	8,  // 5: antimetal.runtime.v1.ContainerNode.labels:type_name -> antimetal.runtime.v1.ContainerNode.LabelsEntry
+	9,  // 6: antimetal.runtime.v1.ContainerNode.created_at:type_name -> google.protobuf.Timestamp
+	9,  // 7: antimetal.runtime.v1.ContainerNode.started_at:type_name -> google.protobuf.Timestamp
+	3,  // 8: antimetal.runtime.v1.ProcessNode.state:type_name -> antimetal.runtime.v1.ProcessState
+	9,  // 9: antimetal.runtime.v1.ProcessNode.start_time:type_name -> google.protobuf.Timestamp
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_antimetal_runtime_v1_linux_proto_init() }
@@ -320,13 +817,14 @@ func file_antimetal_runtime_v1_linux_proto_init() {
 	if File_antimetal_runtime_v1_linux_proto != nil {
 		return
 	}
+	file_antimetal_runtime_v1_linux_proto_msgTypes[2].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_antimetal_runtime_v1_linux_proto_rawDesc), len(file_antimetal_runtime_v1_linux_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   2,
+			NumEnums:      4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

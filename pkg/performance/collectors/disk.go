@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/go-logr/logr"
@@ -48,7 +49,7 @@ const (
 // Only whole disk devices are reported; partitions are filtered out.
 // All values are cumulative counters since system boot.
 type DiskCollector struct {
-	performance.BaseCollector
+	performance.BaseDeltaCollector
 	diskstatsPath string
 }
 
@@ -65,7 +66,7 @@ func NewDiskCollector(logger logr.Logger, config performance.CollectionConfig) (
 	}
 
 	return &DiskCollector{
-		BaseCollector: performance.NewBaseCollector(
+		BaseDeltaCollector: performance.NewBaseDeltaCollector(
 			performance.MetricTypeDisk,
 			"Disk I/O Statistics Collector",
 			logger,
@@ -82,6 +83,19 @@ func (c *DiskCollector) Collect(ctx context.Context) (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to collect disk stats: %w", err)
 	}
+
+	currentTime := time.Now()
+
+	// Calculate deltas if we have previous state
+	if c.HasDeltaState() {
+		if should, reason := c.ShouldCalculateDeltas(currentTime); should {
+			previous := c.LastSnapshot.([]*performance.DiskStats)
+			c.calculateDiskDeltas(stats, previous, currentTime, c.Config)
+		} else {
+			c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
+		}
+	}
+	c.UpdateDeltaState(stats, currentTime)
 
 	c.Logger().V(1).Info("Collected disk statistics", "devices", len(stats))
 	return stats, nil
@@ -237,4 +251,111 @@ func IsPartition(device string) bool {
 	// Standard devices: partition if ends with digit
 	lastChar := device[len(device)-1]
 	return lastChar >= '0' && lastChar <= '9'
+}
+
+func (c *DiskCollector) calculateDiskDeltas(
+	current, previous []*performance.DiskStats,
+	currentTime time.Time,
+	config performance.DeltaConfig,
+) {
+	interval := currentTime.Sub(c.LastTime)
+
+	// Create a map of previous stats by device name for efficient lookup
+	prevStatsMap := make(map[string]*performance.DiskStats)
+	for _, prevStat := range previous {
+		prevStatsMap[prevStat.Device] = prevStat
+	}
+
+	// Calculate deltas for each current device
+	for _, currentStat := range current {
+		prevStat, exists := prevStatsMap[currentStat.Device]
+		if !exists {
+			// New device - skip delta calculation
+			c.Logger().V(2).Info("New disk device detected, skipping delta calculation",
+				"device", currentStat.Device)
+			continue
+		}
+
+		c.calculateDeviceDeltas(currentStat, prevStat, interval, config)
+	}
+}
+
+func (c *DiskCollector) calculateDeviceDeltas(
+	current, previous *performance.DiskStats,
+	interval time.Duration,
+	config performance.DeltaConfig,
+) {
+	var resetDetected bool
+
+	delta := &performance.DiskDeltaData{}
+
+	calculateField := func(currentVal, previousVal uint64) uint64 {
+		deltaVal, reset := c.CalculateUint64Delta(currentVal, previousVal, interval)
+		resetDetected = resetDetected || reset
+		return deltaVal
+	}
+
+	delta.ReadsCompleted = calculateField(current.ReadsCompleted, previous.ReadsCompleted)
+	delta.WritesCompleted = calculateField(current.WritesCompleted, previous.WritesCompleted)
+	delta.ReadsMerged = calculateField(current.ReadsMerged, previous.ReadsMerged)
+	delta.WritesMerged = calculateField(current.WritesMerged, previous.WritesMerged)
+	delta.SectorsRead = calculateField(current.SectorsRead, previous.SectorsRead)
+	delta.SectorsWritten = calculateField(current.SectorsWritten, previous.SectorsWritten)
+	delta.ReadTime = calculateField(current.ReadTime, previous.ReadTime)
+	delta.WriteTime = calculateField(current.WriteTime, previous.WriteTime)
+	delta.IOTime = calculateField(current.IOTime, previous.IOTime)
+	delta.WeightedIOTime = calculateField(current.WeightedIOTime, previous.WeightedIOTime)
+
+	if !resetDetected {
+		intervalSecs := interval.Seconds()
+		if intervalSecs > 0 {
+			// Basic rate calculations
+			delta.ReadsPerSec = uint64(float64(delta.ReadsCompleted) / intervalSecs)
+			delta.WritesPerSec = uint64(float64(delta.WritesCompleted) / intervalSecs)
+			delta.SectorsReadPerSec = uint64(float64(delta.SectorsRead) / intervalSecs)
+			delta.SectorsWrittenPerSec = uint64(float64(delta.SectorsWritten) / intervalSecs)
+
+			// Calculate iostat-compatible performance metrics
+			c.calculatePerformanceMetrics(delta, intervalSecs)
+		}
+	}
+
+	// Use composition helper to set metadata
+	c.PopulateMetadata(delta, time.Now(), resetDetected)
+	current.Delta = delta
+
+	if resetDetected {
+		c.Logger().V(1).Info("Counter reset detected for disk device", "device", current.Device)
+	}
+}
+
+// calculatePerformanceMetrics computes iostat-compatible performance metrics
+func (c *DiskCollector) calculatePerformanceMetrics(delta *performance.DiskDeltaData, intervalSecs float64) {
+	// IOPS: Total I/O operations per second (iostat: r/s + w/s)
+	delta.IOPS = delta.ReadsPerSec + delta.WritesPerSec
+
+	// Throughput: Convert sectors to bytes (iostat: rKB/s and wKB/s but in bytes)
+	// Linux sectors are always 512 bytes
+	delta.ReadBytesPerSec = delta.SectorsReadPerSec * 512
+	delta.WriteBytesPerSec = delta.SectorsWrittenPerSec * 512
+
+	// Utilization: Percentage of time device was busy (iostat: %util)
+	// IOTime is in milliseconds, convert to percentage of interval
+	delta.Utilization = (float64(delta.IOTime) / (intervalSecs * 1000.0)) * 100.0
+	if delta.Utilization > 100.0 {
+		delta.Utilization = 100.0 // Cap at 100% for devices that can exceed 100% utilization
+	}
+
+	// Average queue size: WeightedIOTime represents queue depth over time (iostat: avgqu-sz)
+	// WeightedIOTime is in milliseconds, convert to average queue depth
+	delta.AvgQueueSize = float64(delta.WeightedIOTime) / (intervalSecs * 1000.0)
+
+	// Average latencies: Time per operation in milliseconds (iostat: r_await, w_await)
+	// Calculate only if there were operations to avoid division by zero
+	if delta.ReadsCompleted > 0 {
+		delta.AvgReadLatency = uint64(float64(delta.ReadTime) / float64(delta.ReadsCompleted))
+	}
+	if delta.WritesCompleted > 0 {
+		delta.AvgWriteLatency = uint64(float64(delta.WriteTime) / float64(delta.WritesCompleted))
+	}
 }

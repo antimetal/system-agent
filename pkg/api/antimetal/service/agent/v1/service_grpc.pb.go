@@ -101,7 +101,11 @@ const (
 // the response was invalid and was not applied. The Agent sends back the sequence
 // number of the rejected response and MUST include detailed error information in
 // `error_detail`. The management server can use the error details to send corrected
-// configuration
+// configuration.
+//
+// For configuration-specific errors, agents should include ConfigError details
+// in the error_detail to provide structured information about which configuration
+// object failed and why.
 //
 // Agent                                    Management Server
 //
@@ -132,8 +136,8 @@ const (
 //
 // ## Mandatory Capability Declaration
 //
-// The supported_collectors field is a list of antimetal.agent.v1.Collectors
-// enum values. Agents MUST include all collectors they can support:
+// The supported_collectors field is a list of collector identifier strings.
+// Agents MUST include all collectors they can support:
 //
 // ```
 //
@@ -141,11 +145,11 @@ const (
 //	  type: INITIAL
 //	  instance: { id: "agent-123", ... }
 //	  supported_collectors: [
-//	    COLLECTORS_SYS_CPU,
-//	    COLLECTORS_CPU_INFO,
-//	    COLLECTORS_SYS_MEM,
-//	    COLLECTORS_MEM_INFO,
-//	    COLLECTORS_SYS_NET
+//	    "sys.cpu",
+//	    "cpu.info",
+//	    "sys.mem",
+//	    "mem.info",
+//	    "sys.net"
 //	  ]
 //	  initial_configs: [...]
 //	}
@@ -162,12 +166,12 @@ const (
 //	|                                           |
 //	|-------- INITIAL request ----------------->|
 //	|         supported_collectors: [           |
-//	|           COLLECTORS_SYS_CPU,             | (CPU + MEM only)
-//	|           COLLECTORS_SYS_MEM              |
+//	|           "sys.cpu",                      | (CPU + MEM only)
+//	|           "sys.mem"                       |
 //	|         ]                                 |
 //	|                                           |
 //	|<------- network config ------------------|
-//	|         (requires COLLECTORS_SYS_NET)     |
+//	|         (requires "sys.net")              |
 //	|         seq_num: "1"                      |
 //	|                                           |
 //	|-------- NACK request -------------------->|
@@ -176,7 +180,7 @@ const (
 //	|           code: FAILED_PRECONDITION       |
 //	|           message: "Unsupported collector:|
 //	|                     config requires       |
-//	|                     COLLECTORS_SYS_NET"   |
+//	|                     sys.net"              |
 //	|         }                                 |
 //
 // # Reconnection with Version Sync
@@ -223,8 +227,8 @@ const (
 //	|         type: INITIAL                     |
 //	|         instance: {id: "agt-abc123"}      |
 //	|         supported_collectors: [           | (CPU+MEM capabilities)
-//	|           COLLECTORS_SYS_CPU,             |
-//	|           COLLECTORS_SYS_MEM              |
+//	|           "sys.cpu",                      |
+//	|           "sys.mem"                       |
 //	|         ]                                 |
 //	|         initial_configs: []               | (new agent)
 //	|                                           |
@@ -289,8 +293,8 @@ const (
 //	|         type: INITIAL                     |
 //	|         instance: {id: "agt-abc123"}      | (same agent instance)
 //	|         supported_collectors: [           | (same capabilities)
-//	|           COLLECTORS_SYS_CPU,             |
-//	|           COLLECTORS_SYS_MEM              |
+//	|           "sys.cpu",                      |
+//	|           "sys.mem"                       |
 //	|         ]                                 |
 //	|         initial_configs: [{               |
 //	|           type: {                         |
@@ -428,7 +432,11 @@ type AgentManagementService_WatchConfigClient = grpc.BidiStreamingClient[WatchCo
 // the response was invalid and was not applied. The Agent sends back the sequence
 // number of the rejected response and MUST include detailed error information in
 // `error_detail`. The management server can use the error details to send corrected
-// configuration
+// configuration.
+//
+// For configuration-specific errors, agents should include ConfigError details
+// in the error_detail to provide structured information about which configuration
+// object failed and why.
 //
 // Agent                                    Management Server
 //
@@ -459,8 +467,8 @@ type AgentManagementService_WatchConfigClient = grpc.BidiStreamingClient[WatchCo
 //
 // ## Mandatory Capability Declaration
 //
-// The supported_collectors field is a list of antimetal.agent.v1.Collectors
-// enum values. Agents MUST include all collectors they can support:
+// The supported_collectors field is a list of collector identifier strings.
+// Agents MUST include all collectors they can support:
 //
 // ```
 //
@@ -468,11 +476,11 @@ type AgentManagementService_WatchConfigClient = grpc.BidiStreamingClient[WatchCo
 //	  type: INITIAL
 //	  instance: { id: "agent-123", ... }
 //	  supported_collectors: [
-//	    COLLECTORS_SYS_CPU,
-//	    COLLECTORS_CPU_INFO,
-//	    COLLECTORS_SYS_MEM,
-//	    COLLECTORS_MEM_INFO,
-//	    COLLECTORS_SYS_NET
+//	    "sys.cpu",
+//	    "cpu.info",
+//	    "sys.mem",
+//	    "mem.info",
+//	    "sys.net"
 //	  ]
 //	  initial_configs: [...]
 //	}
@@ -489,12 +497,12 @@ type AgentManagementService_WatchConfigClient = grpc.BidiStreamingClient[WatchCo
 //	|                                           |
 //	|-------- INITIAL request ----------------->|
 //	|         supported_collectors: [           |
-//	|           COLLECTORS_SYS_CPU,             | (CPU + MEM only)
-//	|           COLLECTORS_SYS_MEM              |
+//	|           "sys.cpu",                      | (CPU + MEM only)
+//	|           "sys.mem"                       |
 //	|         ]                                 |
 //	|                                           |
 //	|<------- network config ------------------|
-//	|         (requires COLLECTORS_SYS_NET)     |
+//	|         (requires "sys.net")              |
 //	|         seq_num: "1"                      |
 //	|                                           |
 //	|-------- NACK request -------------------->|
@@ -503,7 +511,7 @@ type AgentManagementService_WatchConfigClient = grpc.BidiStreamingClient[WatchCo
 //	|           code: FAILED_PRECONDITION       |
 //	|           message: "Unsupported collector:|
 //	|                     config requires       |
-//	|                     COLLECTORS_SYS_NET"   |
+//	|                     sys.net"              |
 //	|         }                                 |
 //
 // # Reconnection with Version Sync
@@ -550,8 +558,8 @@ type AgentManagementService_WatchConfigClient = grpc.BidiStreamingClient[WatchCo
 //	|         type: INITIAL                     |
 //	|         instance: {id: "agt-abc123"}      |
 //	|         supported_collectors: [           | (CPU+MEM capabilities)
-//	|           COLLECTORS_SYS_CPU,             |
-//	|           COLLECTORS_SYS_MEM              |
+//	|           "sys.cpu",                      |
+//	|           "sys.mem"                       |
 //	|         ]                                 |
 //	|         initial_configs: []               | (new agent)
 //	|                                           |
@@ -616,8 +624,8 @@ type AgentManagementService_WatchConfigClient = grpc.BidiStreamingClient[WatchCo
 //	|         type: INITIAL                     |
 //	|         instance: {id: "agt-abc123"}      | (same agent instance)
 //	|         supported_collectors: [           | (same capabilities)
-//	|           COLLECTORS_SYS_CPU,             |
-//	|           COLLECTORS_SYS_MEM              |
+//	|           "sys.cpu",                      |
+//	|           "sys.mem"                       |
 //	|         ]                                 |
 //	|         initial_configs: [{               |
 //	|           type: {                         |
