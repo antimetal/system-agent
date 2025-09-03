@@ -34,6 +34,8 @@ import (
 	"github.com/antimetal/agent/internal/kubernetes/cluster"
 )
 
+var _ manager.LeaderElectionRunnable = (*controller)(nil)
+
 // +kubebuilder:rbac:groups=apps,resources=daemonsets;deployments;replicasets;statefulsets,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=daemonsets/status;deployments/status;replicasets/status;statefulsets/status,verbs=get
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch

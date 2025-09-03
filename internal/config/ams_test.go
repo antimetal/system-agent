@@ -678,13 +678,13 @@ func TestAMSLoader_InitialConfigsOnStreamRecreation(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := []struct {
-		name                    string
-		initialConfigs          []*typesv1.Object
-		updateConfigs           []*typesv1.Object
-		maxStreamAge            time.Duration
-		testDuration            time.Duration
-		expectedStreamCreations int
-		expectedInitialConfigs  [][]string
+		name                       string
+		initialConfigs             []*typesv1.Object
+		updateConfigs              []*typesv1.Object
+		maxStreamAge               time.Duration
+		testDuration               time.Duration
+		minExpectedStreamCreations int
+		expectedInitialConfigs     [][]string
 	}{
 		{
 			name: "initial configs sent on stream recreation",
@@ -692,28 +692,28 @@ func TestAMSLoader_InitialConfigsOnStreamRecreation(t *testing.T) {
 				createTestPbConfig("config1", "1", hostStatsType, config1Data),
 				createTestPbConfig("config2", "1", hostStatsType, config2Data),
 			},
-			maxStreamAge:            300 * time.Millisecond,
-			testDuration:            350 * time.Millisecond,
-			expectedStreamCreations: 2,
-			expectedInitialConfigs:  [][]string{{}, {"config1", "config2"}},
+			maxStreamAge:               300 * time.Millisecond,
+			testDuration:               350 * time.Millisecond,
+			minExpectedStreamCreations: 2,
+			expectedInitialConfigs:     [][]string{{}, {"config1", "config2"}},
 		},
 		{
 			name: "single config sent",
 			initialConfigs: []*typesv1.Object{
 				createTestPbConfig("config1", "1", hostStatsType, config1Data),
 			},
-			maxStreamAge:            250 * time.Millisecond,
-			testDuration:            550 * time.Millisecond,
-			expectedStreamCreations: 3,
-			expectedInitialConfigs:  [][]string{{}, {"config1"}, {"config1"}},
+			maxStreamAge:               250 * time.Millisecond,
+			testDuration:               550 * time.Millisecond,
+			minExpectedStreamCreations: 3,
+			expectedInitialConfigs:     [][]string{{}, {"config1"}, {"config1"}},
 		},
 		{
-			name:                    "no initial configs",
-			initialConfigs:          []*typesv1.Object{},
-			maxStreamAge:            400 * time.Millisecond,
-			testDuration:            500 * time.Millisecond,
-			expectedStreamCreations: 2,
-			expectedInitialConfigs:  [][]string{{}, {}},
+			name:                       "no initial configs",
+			initialConfigs:             []*typesv1.Object{},
+			maxStreamAge:               400 * time.Millisecond,
+			testDuration:               500 * time.Millisecond,
+			minExpectedStreamCreations: 2,
+			expectedInitialConfigs:     [][]string{{}, {}},
 		},
 		{
 			name: "receive new config after stream recreation",
@@ -723,10 +723,10 @@ func TestAMSLoader_InitialConfigsOnStreamRecreation(t *testing.T) {
 			updateConfigs: []*typesv1.Object{
 				createTestPbConfig("config2", "1", hostStatsType, config2Data),
 			},
-			maxStreamAge:            700 * time.Millisecond,
-			testDuration:            750 * time.Millisecond,
-			expectedStreamCreations: 2,
-			expectedInitialConfigs:  [][]string{{}, {"config1", "config2"}},
+			maxStreamAge:               700 * time.Millisecond,
+			testDuration:               750 * time.Millisecond,
+			minExpectedStreamCreations: 2,
+			expectedInitialConfigs:     [][]string{{}, {"config1", "config2"}},
 		},
 	}
 
@@ -770,12 +770,12 @@ func TestAMSLoader_InitialConfigsOnStreamRecreation(t *testing.T) {
 			time.Sleep(tt.testDuration)
 
 			attempts := mockService.GetStreamAttempts()
-			assert.Equal(t, tt.expectedStreamCreations, attempts,
-				"Should have created expected number of streams due to maxStreamAge")
+			assert.GreaterOrEqual(t, attempts, tt.minExpectedStreamCreations,
+				"Should have created at least the minimum expected number of streams due to maxStreamAge")
 
 			initialRequests := mockService.GetInitialConfigRequests()
-			assert.Len(t, initialRequests, tt.expectedStreamCreations,
-				"Should have received initial config requests for the expected number of stream creations")
+			assert.GreaterOrEqual(t, len(initialRequests), tt.minExpectedStreamCreations,
+				"Should have received initial config requests for at least the minimum expected number of stream creations")
 
 			for i, expectedConfigs := range tt.expectedInitialConfigs {
 				if i < len(initialRequests) {

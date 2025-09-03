@@ -19,8 +19,8 @@ import (
 
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/antimetal/agent/pkg/performance/capabilities"
-	"github.com/antimetal/agent/pkg/performance/procutils"
-	"github.com/antimetal/agent/pkg/performance/ringbuffer"
+	"github.com/antimetal/agent/pkg/ringbuffer"
+	"github.com/antimetal/agent/pkg/proc"
 	"github.com/go-logr/logr"
 )
 
@@ -60,12 +60,11 @@ type KernelCollector struct {
 	logger       logr.Logger
 	kmsgPath     string
 	messageLimit int
-	procUtils    *procutils.ProcUtils
+	procPath     string
 
 	// Continuous collection state
 	continuousMu   sync.Mutex
 	continuousChan chan any
-	stopped        chan struct{}
 	isRunning      bool
 	lastError      error
 }
@@ -106,7 +105,7 @@ func NewKernelCollector(logger logr.Logger, config performance.CollectionConfig,
 		logger:       logger.WithName("kernel"),
 		kmsgPath:     filepath.Join(config.HostDevPath, "kmsg"),
 		messageLimit: defaultMessageLimit,
-		procUtils:    procutils.New(config.HostProcPath),
+		procPath:     config.HostProcPath,
 	}
 
 	for _, opt := range opts {
@@ -129,7 +128,7 @@ func (c *KernelCollector) Collect(ctx context.Context) (any, error) {
 }
 
 func (c *KernelCollector) collectKernelMessages(ctx context.Context) ([]*performance.KernelMessage, error) {
-	bootTime, err := c.procUtils.GetBootTime()
+	bootTime, err := proc.BootTime(c.procPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get boot time: %w", err)
 	}
@@ -342,46 +341,18 @@ func (c *KernelCollector) Start(ctx context.Context) (<-chan any, error) {
 		return nil, fmt.Errorf("collector is already running")
 	}
 
-	bootTime, err := c.procUtils.GetBootTime()
+	bootTime, err := proc.BootTime(c.procPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get boot time: %w", err)
 	}
 
 	c.continuousChan = make(chan any, continuousChannelBuffer)
-	c.stopped = make(chan struct{})
 	c.isRunning = true
 	c.lastError = nil
 
 	go c.continuousCollectionLoop(ctx, bootTime)
 
 	return c.continuousChan, nil
-}
-
-func (c *KernelCollector) Stop() error {
-	c.continuousMu.Lock()
-	defer c.continuousMu.Unlock()
-
-	if !c.isRunning {
-		return nil
-	}
-
-	if c.stopped != nil {
-		close(c.stopped)
-		c.stopped = nil
-	}
-
-	// Give the goroutine a moment to exit cleanly
-	time.Sleep(10 * time.Millisecond)
-
-	if c.continuousChan != nil {
-		close(c.continuousChan)
-		c.continuousChan = nil
-	}
-
-	c.isRunning = false
-	c.lastError = nil // Clear error on stop to reset to disabled status
-
-	return nil
 }
 
 func (c *KernelCollector) Status() performance.CollectorStatus {
@@ -405,6 +376,16 @@ func (c *KernelCollector) LastError() error {
 
 func (c *KernelCollector) continuousCollectionLoop(ctx context.Context, bootTime time.Time) {
 	defer func() {
+		// Cleanup on exit
+		c.continuousMu.Lock()
+		if c.continuousChan != nil {
+			close(c.continuousChan)
+			c.continuousChan = nil
+		}
+		c.isRunning = false
+		c.lastError = nil // Clear error on cleanup to reset to disabled status
+		c.continuousMu.Unlock()
+
 		if r := recover(); r != nil {
 			c.continuousMu.Lock()
 			c.lastError = fmt.Errorf("panic in collection loop: %v", r)
@@ -432,8 +413,6 @@ func (c *KernelCollector) continuousCollectionLoop(ctx context.Context, bootTime
 	for {
 		select {
 		case <-ctx.Done():
-			return
-		case <-c.stopped:
 			return
 		default:
 		}

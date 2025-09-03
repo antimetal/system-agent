@@ -19,7 +19,6 @@ import (
 	"github.com/antimetal/agent/pkg/performance"
 	_ "github.com/antimetal/agent/pkg/performance/collectors" // Import to register collectors
 	"github.com/go-logr/logr"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -205,9 +204,8 @@ func TestCollectorCompatibility(t *testing.T) {
 				t.Errorf("%s: Timeout waiting for data", tc.name)
 			}
 
-			// Stop the collector
-			err = collector.Stop()
-			assert.NoError(t, err, "Failed to stop %s", tc.name)
+			// Context cancellation will trigger cleanup
+			cancel()
 		})
 	}
 }

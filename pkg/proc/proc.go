@@ -4,7 +4,7 @@
 // LICENSE file or at:
 // https://polyformproject.org/wp-content/uploads/2020/06/PolyForm-Shield-1.0.0.txt
 
-package procutils
+package proc
 
 import (
 	"encoding/binary"
@@ -17,46 +17,106 @@ import (
 	"time"
 )
 
-// ProcUtils provides common utilities for parsing /proc files
-type ProcUtils struct {
-	procPath string
+const defaultPath = "/proc"
 
-	// Cached boot time - this never changes during system runtime
-	bootTime     time.Time
-	bootTimeOnce sync.Once
-	bootTimeErr  error
+var (
+	cache   = make(map[string]*proc)
+	cacheMu sync.Mutex
+)
 
-	// Cached USER_HZ value - this never changes during system runtime
-	userHZ     int64
-	userHZOnce sync.Once
-	userHZErr  error
-
-	// Cached page size - this never changes during system runtime
-	pageSize     int64
-	pageSizeOnce sync.Once
-	pageSizeErr  error
-}
-
-// New creates a new ProcUtils instance
-func New(procPath string) *ProcUtils {
-	return &ProcUtils{
-		procPath: procPath,
+// BootTime returns the system boot time from /proc/stat.
+// The result is cached after the first read
+func BootTime(path ...string) (time.Time, error) {
+	if len(path) > 1 {
+		return time.Time{}, fmt.Errorf("at most one path can be supplied")
 	}
+
+	procPath := defaultPath
+	if path != nil && path[0] != "" {
+		procPath = path[0]
+	}
+
+	cacheMu.Lock()
+	p, ok := cache[procPath]
+	if !ok {
+		p = newProc(procPath)
+		cache[procPath] = p
+	}
+	cacheMu.Unlock()
+
+	return p.bootTime()
 }
 
-// GetBootTime returns the system boot time from /proc/stat
-// The result is cached after the first successful read
-func (p *ProcUtils) GetBootTime() (time.Time, error) {
-	p.bootTimeOnce.Do(func() {
-		p.bootTime, p.bootTimeErr = p.readBootTime()
-	})
-	return p.bootTime, p.bootTimeErr
+// UserHZ returns the USER_HZ value (clock ticks per second).
+// The result is cached after the first read
+func UserHZ(path ...string) (int64, error) {
+	if len(path) > 1 {
+		return 0, fmt.Errorf("at most one path can be supplied")
+	}
+
+	procPath := defaultPath
+	if path != nil && path[0] != "" {
+		procPath = path[0]
+	}
+
+	cacheMu.Lock()
+	p, ok := cache[procPath]
+	if !ok {
+		p = newProc(procPath)
+		cache[procPath] = p
+	}
+	cacheMu.Unlock()
+
+	return p.userHZ()
+}
+
+// PageSize returns the system page size in bytes.
+// The result is cached after the first read
+func PageSize(path ...string) (int64, error) {
+	if len(path) > 1 {
+		return 0, fmt.Errorf("at most one path can be supplied")
+	}
+
+	procPath := defaultPath
+	if path != nil && path[0] != "" {
+		procPath = path[0]
+	}
+
+	cacheMu.Lock()
+	p, ok := cache[procPath]
+	if !ok {
+		p = newProc(procPath)
+		cache[procPath] = p
+	}
+	cacheMu.Unlock()
+
+	return p.pageSize()
+}
+
+type proc struct {
+	bootTime func() (time.Time, error)
+	userHZ   func() (int64, error)
+	pageSize func() (int64, error)
+}
+
+func newProc(path string) *proc {
+	return &proc{
+		bootTime: sync.OnceValues(func() (time.Time, error) {
+			return readBootTime(path)
+		}),
+		userHZ: sync.OnceValues(func() (int64, error) {
+			return readUserHZ(path)
+		}),
+		pageSize: sync.OnceValues(func() (int64, error) {
+			return readPageSize(path)
+		}),
+	}
 }
 
 // readBootTime reads the boot time from /proc/stat
 // Format: btime <seconds_since_epoch>
-func (p *ProcUtils) readBootTime() (time.Time, error) {
-	statPath := filepath.Join(p.procPath, "stat")
+func readBootTime(procPath string) (time.Time, error) {
+	statPath := filepath.Join(procPath, "stat")
 	data, err := os.ReadFile(statPath)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("failed to read %s: %w", statPath, err)
@@ -79,15 +139,6 @@ func (p *ProcUtils) readBootTime() (time.Time, error) {
 	return time.Time{}, fmt.Errorf("btime not found in %s", statPath)
 }
 
-// GetUserHZ returns the USER_HZ value (clock ticks per second)
-// The result is cached after the first successful read
-func (p *ProcUtils) GetUserHZ() (int64, error) {
-	p.userHZOnce.Do(func() {
-		p.userHZ, p.userHZErr = p.readUserHZ()
-	})
-	return p.userHZ, p.userHZErr
-}
-
 // readUserHZ reads the USER_HZ value from /proc/self/auxv
 //
 // The auxiliary vector contains system information passed from the kernel to
@@ -98,10 +149,10 @@ func (p *ProcUtils) GetUserHZ() (int64, error) {
 // - Next 8 bytes: value
 //
 // Reference: https://man7.org/linux/man-pages/man3/getauxval.3.html
-func (p *ProcUtils) readUserHZ() (int64, error) {
+func readUserHZ(procPath string) (int64, error) {
 	const AT_CLKTCK = 17 // Frequency of times() from <asm/auxvec.h>
 
-	auxvPath := filepath.Join(p.procPath, "self", "auxv")
+	auxvPath := filepath.Join(procPath, "self", "auxv")
 	data, err := os.ReadFile(auxvPath)
 	if err != nil {
 		// Fallback to standard value if auxv is not available
@@ -127,23 +178,14 @@ func (p *ProcUtils) readUserHZ() (int64, error) {
 	return 100, nil
 }
 
-// GetPageSize returns the system page size in bytes
-// The result is cached after the first successful read
-func (p *ProcUtils) GetPageSize() (int64, error) {
-	p.pageSizeOnce.Do(func() {
-		p.pageSize, p.pageSizeErr = p.readPageSize()
-	})
-	return p.pageSize, p.pageSizeErr
-}
-
 // readPageSize reads the page size from /proc/self/auxv
 //
 // AT_PAGESZ (value 6) contains the system page size.
 // This is typically 4096 bytes on x86_64 systems.
-func (p *ProcUtils) readPageSize() (int64, error) {
+func readPageSize(procPath string) (int64, error) {
 	const AT_PAGESZ = 6 // System page size from <asm/auxvec.h>
 
-	auxvPath := filepath.Join(p.procPath, "self", "auxv")
+	auxvPath := filepath.Join(procPath, "self", "auxv")
 	data, err := os.ReadFile(auxvPath)
 	if err != nil {
 		// Fallback to standard value if auxv is not available

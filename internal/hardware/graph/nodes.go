@@ -21,7 +21,7 @@ import (
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"github.com/antimetal/agent/pkg/kernel"
 	"github.com/antimetal/agent/pkg/performance"
-	"github.com/antimetal/agent/pkg/performance/procutils"
+	"github.com/antimetal/agent/pkg/proc"
 )
 
 // getSystemInfo gathers system information using existing utilities
@@ -39,11 +39,8 @@ func (b *Builder) getSystemInfo() (arch hardwarev1.Architecture, bootTime time.T
 		arch = hardwarev1.Architecture_ARCHITECTURE_UNKNOWN
 	}
 
-	// Use existing procutils for boot time - same as kernel collector does
-	procUtil := procutils.New("/proc")
-	if bt, err := procUtil.GetBootTime(); err == nil {
-		bootTime = bt
-	} else {
+	bootTime, err := proc.BootTime()
+	if err != nil {
 		b.logger.Error(err, "Failed to get boot time, using current time")
 		bootTime = time.Now()
 	}

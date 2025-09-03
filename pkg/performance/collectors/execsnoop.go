@@ -59,8 +59,6 @@ type ExecSnoopCollector struct {
 	exitLink      link.Link
 	reader        *ringbuf.Reader
 	outputChan    chan any
-	stopChan      chan struct{}
-	wg            sync.WaitGroup
 }
 
 func NewExecSnoopCollector(logger logr.Logger, config performance.CollectionConfig, bpfObjectPath string) (*ExecSnoopCollector, error) {
@@ -88,7 +86,6 @@ func NewExecSnoopCollector(logger logr.Logger, config performance.CollectionConf
 			},
 		),
 		bpfObjectPath: bpfObjectPath,
-		stopChan:      make(chan struct{}),
 	}
 
 	return collector, nil
@@ -173,43 +170,10 @@ func (c *ExecSnoopCollector) Start(ctx context.Context) (<-chan any, error) {
 	c.outputChan = make(chan any, 100)
 
 	// Start reading events
-	c.wg.Add(1)
 	go c.readEvents(ctx)
 
 	c.SetStatus(performance.CollectorStatusActive)
 	return c.outputChan, nil
-}
-
-func (c *ExecSnoopCollector) Stop() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.Status() != performance.CollectorStatusActive {
-		return nil
-	}
-
-	// Signal stop
-	select {
-	case <-c.stopChan:
-		// Already closed
-	default:
-		close(c.stopChan)
-	}
-
-	// Wait for reader to finish
-	c.wg.Wait()
-
-	// Cleanup BPF resources
-	c.cleanup()
-
-	// Close output channel
-	if c.outputChan != nil {
-		close(c.outputChan)
-		c.outputChan = nil
-	}
-
-	c.SetStatus(performance.CollectorStatusDisabled)
-	return nil
 }
 
 func (c *ExecSnoopCollector) cleanup() {
@@ -235,13 +199,21 @@ func (c *ExecSnoopCollector) cleanup() {
 }
 
 func (c *ExecSnoopCollector) readEvents(ctx context.Context) {
-	defer c.wg.Done()
+	// Cleanup on exit
+	defer func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		c.cleanup()
+		if c.outputChan != nil {
+			close(c.outputChan)
+			c.outputChan = nil
+		}
+		c.SetStatus(performance.CollectorStatusDisabled)
+	}()
 
 	for {
 		select {
 		case <-ctx.Done():
-			return
-		case <-c.stopChan:
 			return
 		default:
 			record, err := c.reader.Read()
@@ -262,8 +234,6 @@ func (c *ExecSnoopCollector) readEvents(ctx context.Context) {
 			select {
 			case c.outputChan <- event:
 			case <-ctx.Done():
-				return
-			case <-c.stopChan:
 				return
 			default:
 				// Channel full, drop event

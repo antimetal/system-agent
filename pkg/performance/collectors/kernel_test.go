@@ -4,7 +4,7 @@
 // LICENSE file or at:
 // https://polyformproject.org/wp-content/uploads/2020/06/PolyForm-Shield-1.0.0.txt
 
-//go:build !integration
+//go:build integration
 
 package collectors
 
@@ -15,10 +15,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/antimetal/agent/pkg/performance"
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/antimetal/agent/pkg/performance"
+	"github.com/antimetal/agent/pkg/proc"
 )
 
 func TestKernelCollector_Constructor(t *testing.T) {
@@ -99,7 +101,7 @@ func TestKernelCollector_parseKmsgLine(t *testing.T) {
 	err = os.WriteFile(filepath.Join(config.HostProcPath, "stat"), []byte(statContent), 0644)
 	require.NoError(t, err)
 
-	bootTime, err := collector.procUtils.GetBootTime()
+	bootTime, err := proc.BootTime(config.HostProcPath)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -238,16 +240,13 @@ func TestKernelCollector_ContinuousCollection(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "already running")
 
-	// Test Stop
-	err = collector.Stop()
-	require.NoError(t, err)
+	// Test cleanup via context cancellation
+	cancel()
+	// Give the collector time to clean up
+	time.Sleep(50 * time.Millisecond)
 
-	// Test Status after stopping
+	// Test Status after context cancellation
 	assert.Equal(t, performance.CollectorStatusDisabled, collector.Status())
-
-	// Test double stop should be ok
-	err = collector.Stop()
-	assert.NoError(t, err)
 }
 
 func TestKernelCollector_ParseMessageContent(t *testing.T) {

@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/antimetal/agent/pkg/performance"
-	"github.com/antimetal/agent/pkg/performance/procutils"
+	"github.com/antimetal/agent/pkg/proc"
 	"github.com/go-logr/logr"
 )
 
@@ -63,7 +63,7 @@ type ProcessCollector struct {
 	ProcPath     string // Made public for testing
 	TopProcesses int    // Made public for testing
 	interval     time.Duration
-	procUtils    *procutils.ProcUtils
+	procPath     string
 
 	// State tracking for CPU percentage calculations
 	mu             sync.RWMutex
@@ -71,8 +71,7 @@ type ProcessCollector struct {
 	lastUpdateTime time.Time
 
 	// Channel management
-	ch      chan any
-	stopped chan struct{}
+	ch chan any
 }
 
 // ProcessCPUTime tracks CPU usage for a process over time
@@ -119,7 +118,7 @@ func NewProcessCollector(logger logr.Logger, config performance.CollectionConfig
 		TopProcesses: topProcesses,
 		interval:     interval,
 		lastCPUTimes: make(map[int32]*ProcessCPUTime),
-		procUtils:    procutils.New(config.HostProcPath),
+		procPath:     config.HostProcPath,
 	}, nil
 }
 
@@ -143,42 +142,25 @@ func (c *ProcessCollector) Start(ctx context.Context) (<-chan any, error) {
 	c.mu.Unlock()
 
 	c.ch = make(chan any)
-	c.stopped = make(chan struct{})
 	go c.runCollection(ctx)
 	return c.ch, nil
 }
 
-func (c *ProcessCollector) Stop() error {
-	if c.Status() == performance.CollectorStatusDisabled {
-		return nil
-	}
-
-	if c.stopped != nil {
-		close(c.stopped)
-		c.stopped = nil
-	}
-
-	// Give the goroutine a moment to exit cleanly
-	time.Sleep(10 * time.Millisecond)
-
-	if c.ch != nil {
-		close(c.ch)
-		c.ch = nil
-	}
-
-	c.SetStatus(performance.CollectorStatusDisabled)
-	return nil
-}
-
 func (c *ProcessCollector) runCollection(ctx context.Context) {
+	defer func() {
+		if c.ch != nil {
+			close(c.ch)
+			c.ch = nil
+		}
+		c.SetStatus(performance.CollectorStatusDisabled)
+	}()
+
 	ticker := time.NewTicker(c.interval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			return
-		case <-c.stopped:
 			return
 		case <-ticker.C:
 			processes, err := c.collectWithDeltas(ctx)
@@ -191,8 +173,6 @@ func (c *ProcessCollector) runCollection(ctx context.Context) {
 			select {
 			case c.ch <- processes:
 			case <-ctx.Done():
-				return
-			case <-c.stopped:
 				return
 			}
 		}
@@ -352,7 +332,7 @@ func (c *ProcessCollector) ReadMinimalStats(pid int32, timeDelta float64, lastCP
 	// Calculate CPU percentage
 	if lastCPU, exists := lastCPUTimes[pid]; exists && timeDelta > 0 {
 		cpuDelta := float64(minimal.CPUTime - lastCPU.TotalTime)
-		userHZ, err := c.procUtils.GetUserHZ()
+		userHZ, err := proc.UserHZ(c.procPath)
 		if err != nil {
 			userHZ = 100
 		}
@@ -511,7 +491,7 @@ func (c *ProcessCollector) ParseStatFull(stats *performance.ProcessStats, statDa
 
 	// Field 21: rss (resident set size in pages)
 	if rss, err := strconv.ParseUint(fields[statFieldRSS], 10, 64); err == nil {
-		pageSize, err := c.procUtils.GetPageSize()
+		pageSize, err := proc.PageSize(c.procPath)
 		if err != nil {
 			pageSize = 4096 // Safe assumption if we can't determine it
 		}
@@ -521,9 +501,9 @@ func (c *ProcessCollector) ParseStatFull(stats *performance.ProcessStats, statDa
 	// Field 19: starttime (in clock ticks since boot)
 	if len(fields) > statFieldStartTime {
 		if starttime, err := strconv.ParseUint(fields[statFieldStartTime], 10, 64); err == nil {
-			bootTime, err := c.procUtils.GetBootTime()
+			bootTime, err := proc.BootTime(c.procPath)
 			if err == nil {
-				userHZ, err := c.procUtils.GetUserHZ()
+				userHZ, err := proc.UserHZ(c.procPath)
 				if err != nil {
 					userHZ = 100 // Safe assumption if we can't determine it
 				}

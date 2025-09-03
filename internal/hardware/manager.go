@@ -221,12 +221,6 @@ func (m *Manager) collectHardwareSnapshot(ctx context.Context) (*performance.Sna
 			Duration: time.Since(collectorStartTime),
 			Data:     data,
 		}
-
-		// Stop the collector to clean up resources
-		if err := collector.Stop(); err != nil {
-			m.logger.V(1).Info("Error stopping collector",
-				"metric_type", metricType, "error", err)
-		}
 	}
 
 	snapshot.CollectorRun.Duration = time.Since(startTime)
