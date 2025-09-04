@@ -24,6 +24,8 @@ import (
 	"github.com/antimetal/agent/pkg/proc"
 )
 
+var kindResource = string((&resourcev1.Resource{}).ProtoReflect().Descriptor().FullName())
+
 // getSystemInfo gathers system information using existing utilities
 func (b *Builder) getSystemInfo() (arch hardwarev1.Architecture, bootTime time.Time, kernelVersion string, osInfo string) {
 	// Get architecture from runtime - this is what the agent was compiled for
@@ -164,7 +166,7 @@ func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.Resource
 	// Create resource with machine ID as the name (globally unique)
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
-			Kind: "SystemNode",
+			Kind: kindResource,
 			Type: string(systemSpec.ProtoReflect().Descriptor().FullName()),
 		},
 		Metadata: &resourcev1.ResourceMeta{
@@ -235,7 +237,7 @@ func (b *Builder) createCPUPackageNode(cpuInfo *performance.CPUInfo, physicalID 
 	packageName := fmt.Sprintf("cpu-package-%d", physicalID)
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
-			Kind: "CPUPackageNode",
+			Kind: kindResource,
 			Type: string(packageSpec.ProtoReflect().Descriptor().FullName()),
 		},
 		Metadata: &resourcev1.ResourceMeta{
@@ -276,7 +278,7 @@ func (b *Builder) createCPUCoreNode(core *performance.CPUCore) (*resourcev1.Reso
 	coreName := fmt.Sprintf("cpu-core-%d", core.Processor)
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
-			Kind: "CPUCoreNode",
+			Kind: kindResource,
 			Type: string(coreSpec.ProtoReflect().Descriptor().FullName()),
 		},
 		Metadata: &resourcev1.ResourceMeta{
@@ -316,7 +318,7 @@ func (b *Builder) createMemoryModuleNode(memInfo *performance.MemoryInfo) (*reso
 	memName := "system-memory"
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
-			Kind: "MemoryModuleNode",
+			Kind: kindResource,
 			Type: string(memSpec.ProtoReflect().Descriptor().FullName()),
 		},
 		Metadata: &resourcev1.ResourceMeta{
@@ -370,7 +372,7 @@ func (b *Builder) createNUMANode(numa *performance.NUMANode) (*resourcev1.Resour
 	numaName := fmt.Sprintf("numa-node-%d", numa.NodeID)
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
-			Kind: "NUMANode",
+			Kind: kindResource,
 			Type: string(numaSpec.ProtoReflect().Descriptor().FullName()),
 		},
 		Metadata: &resourcev1.ResourceMeta{
@@ -414,7 +416,7 @@ func (b *Builder) createDiskDeviceNode(disk *performance.DiskInfo) (*resourcev1.
 	// Create resource
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
-			Kind: "DiskDeviceNode",
+			Kind: kindResource,
 			Type: string(diskSpec.ProtoReflect().Descriptor().FullName()),
 		},
 		Metadata: &resourcev1.ResourceMeta{
@@ -453,7 +455,7 @@ func (b *Builder) createDiskPartitionNode(partition *performance.PartitionInfo, 
 	// Create resource
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
-			Kind: "DiskPartitionNode",
+			Kind: kindResource,
 			Type: string(partSpec.ProtoReflect().Descriptor().FullName()),
 		},
 		Metadata: &resourcev1.ResourceMeta{
@@ -548,7 +550,7 @@ func (b *Builder) createNetworkInterfaceNode(iface *performance.NetworkInfo) (*r
 	// Create resource
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
-			Kind: "NetworkInterfaceNode",
+			Kind: kindResource,
 			Type: string(netSpec.ProtoReflect().Descriptor().FullName()),
 		},
 		Metadata: &resourcev1.ResourceMeta{

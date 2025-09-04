@@ -17,6 +17,8 @@ import (
 	"github.com/antimetal/agent/pkg/performance"
 )
 
+var kindRelationship = string((&resourcev1.Relationship{}).ProtoReflect().Descriptor().FullName())
+
 // createContainsRelationship creates a containment relationship between two resources
 func (b *Builder) createContainsRelationship(subject, object *resourcev1.ResourceRef, containsType string) error {
 	// Map string containment type to protobuf enum
@@ -45,8 +47,8 @@ func (b *Builder) createContainsRelationship(subject, object *resourcev1.Resourc
 
 	relationship := &resourcev1.Relationship{
 		Type: &resourcev1.TypeDescriptor{
-			Kind: "Contains",
-			Type: containsType,
+			Kind: kindRelationship,
+			Type: string(predicate.ProtoReflect().Descriptor().FullName()),
 		},
 		Subject:   subject,
 		Object:    object,
@@ -76,8 +78,8 @@ func (b *Builder) createNUMAAffinityRelationship(subject, object *resourcev1.Res
 
 	relationship := &resourcev1.Relationship{
 		Type: &resourcev1.TypeDescriptor{
-			Kind: "BelongsToNUMA",
-			Type: fmt.Sprintf("numa-%d", nodeID),
+			Kind: kindRelationship,
+			Type: string(predicate.ProtoReflect().Descriptor().FullName()),
 		},
 		Subject:   subject,
 		Object:    object,
@@ -107,8 +109,8 @@ func (b *Builder) createSocketSharingRelationship(core1, core2 *resourcev1.Resou
 
 	relationship := &resourcev1.Relationship{
 		Type: &resourcev1.TypeDescriptor{
-			Kind: "SharesSocket",
-			Type: fmt.Sprintf("socket-%d", physicalID),
+			Kind: kindRelationship,
+			Type: string(predicate.ProtoReflect().Descriptor().FullName()),
 		},
 		Subject:   core1,
 		Object:    core2,
@@ -138,8 +140,8 @@ func (b *Builder) createNUMADistanceRelationship(sourceNode, targetNode *resourc
 
 	relationship := &resourcev1.Relationship{
 		Type: &resourcev1.TypeDescriptor{
-			Kind: "NUMADistance",
-			Type: fmt.Sprintf("distance-%d", distance),
+			Kind: kindRelationship,
+			Type: string(predicate.ProtoReflect().Descriptor().FullName()),
 		},
 		Subject:   sourceNode,
 		Object:    targetNode,
@@ -231,8 +233,8 @@ func (b *Builder) createBusConnectionRelationship(device, system *resourcev1.Res
 
 	relationship := &resourcev1.Relationship{
 		Type: &resourcev1.TypeDescriptor{
-			Kind: "ConnectedTo",
-			Type: busType,
+			Kind: kindRelationship,
+			Type: string(predicate.ProtoReflect().Descriptor().FullName()),
 		},
 		Subject:   device,
 		Object:    system,

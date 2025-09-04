@@ -16,12 +16,13 @@ import (
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"github.com/antimetal/agent/pkg/errors"
 	"github.com/antimetal/agent/pkg/resource"
+	"github.com/go-logr/logr"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
 func TestStore_AddResource(t *testing.T) {
-	inv, err := New("")
+	inv, err := New("", logr.Discard())
 	if err != nil {
 		t.Fatalf("failed to create inventory: %v", err)
 	}
@@ -65,7 +66,7 @@ func TestStore_AddResource(t *testing.T) {
 }
 
 func TestStore_UpdateResourceNewResource(t *testing.T) {
-	inv, err := New("")
+	inv, err := New("", logr.Discard())
 	if err != nil {
 		t.Fatalf("failed to create inventory: %v", err)
 	}
@@ -109,7 +110,7 @@ func TestStore_UpdateResourceNewResource(t *testing.T) {
 }
 
 func TestStore_UpdateResource(t *testing.T) {
-	inv, err := New("")
+	inv, err := New("", logr.Discard())
 	if err != nil {
 		t.Fatalf("failed to create inventory: %v", err)
 	}
@@ -181,7 +182,7 @@ func TestStore_GetRelationships(t *testing.T) {
 		expectedNumResult int
 	}
 
-	inv, err := New("")
+	inv, err := New("", logr.Discard())
 	if err != nil {
 		t.Fatalf("failed to create inventory: %v", err)
 	}
@@ -385,7 +386,7 @@ func TestStore_GetRelationships(t *testing.T) {
 }
 
 func TestStore_DeleteResource_CascadeDelete(t *testing.T) {
-	inv, err := New("")
+	inv, err := New("", logr.Discard())
 	if err != nil {
 		t.Fatalf("failed to create inventory: %v", err)
 	}
@@ -482,7 +483,7 @@ func TestStore_DeleteResource_CascadeDelete(t *testing.T) {
 }
 
 func TestStore_DeleteResource_NoRelationships(t *testing.T) {
-	inv, err := New("")
+	inv, err := New("", logr.Discard())
 	if err != nil {
 		t.Fatalf("failed to create inventory: %v", err)
 	}
@@ -510,7 +511,7 @@ func TestStore_DeleteResource_NoRelationships(t *testing.T) {
 }
 
 func TestStore_Subscribe(t *testing.T) {
-	s, err := New("")
+	s, err := New("", logr.Discard())
 	if err != nil {
 		t.Fatalf("failed to create inventory: %v", err)
 	}

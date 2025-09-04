@@ -117,8 +117,7 @@ Always run `make generate` after:
 
 #### License Headers
 - **ALWAYS** run `make gen-license-headers` before committing
-- All Go files must have the PolyForm Shield license header
-- Uses `tools/license_check/license_check.py` for enforcement
+- **ALL** .go files must have the PolyForm Shield license header located in @tools/license_check/license_header.txt
 
 #### Testing Philosophy
 - Use standard Go testing framework

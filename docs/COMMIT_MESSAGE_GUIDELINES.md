@@ -50,9 +50,8 @@ The following is the list of supported scopes:
 #### **Infrastructure Graph**
 - **`intake`** - gRPC intake worker, streaming, batching
 - **`resource`** - Resource store
-
-#### **Kubernetes Agent**
 - **`k8s`** - Kubernetes controller, agent, indexer, handler changes
+- **`hardware`** - Hardware agent
 
 #### **Performance Monitoring Agent**
 - **`perf`** - Performance monitoring system and collectors
