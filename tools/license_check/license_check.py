@@ -2,6 +2,7 @@
 
 import argparse
 import os
+from pathlib import Path
 
 parser = argparse.ArgumentParser(description="Check that license header is included in Go files.")
 parser.add_argument(
@@ -17,13 +18,8 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-# Define the header you want to check for and insert
-header = """// Copyright Antimetal, Inc. All rights reserved.
-//
-// Use of this source code is governed by a source available license that can be found in the
-// LICENSE file or at:
-// https://polyformproject.org/wp-content/uploads/2020/06/PolyForm-Shield-1.0.0.txt
-"""
+with open(Path(__file__).with_name("license_header.txt")) as f:
+    header = f.read().strip()
 
 exclude_dirs = (
   './.git',
