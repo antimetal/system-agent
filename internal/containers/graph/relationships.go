@@ -7,7 +7,7 @@
 package graph
 
 import (
-	hardwarev1 "github.com/antimetal/agent/pkg/api/antimetal/hardware/v1"
+	runtimev1 "github.com/antimetal/agent/pkg/api/antimetal/runtime/v1"
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"google.golang.org/protobuf/types/known/anypb"
 )
@@ -15,16 +15,17 @@ import (
 // Define Kind and Type constants using proto descriptor full names
 var (
 	kindRelationship = string((&resourcev1.Relationship{}).ProtoReflect().Descriptor().FullName())
-	typeContains     = string((&hardwarev1.Contains{}).ProtoReflect().Descriptor().FullName())
+	typeContains     = string((&runtimev1.Contains{}).ProtoReflect().Descriptor().FullName())
+	typeContainedBy  = string((&runtimev1.ContainedBy{}).ProtoReflect().Descriptor().FullName())
 )
 
-// Runtime relationship creation using hardware protobuf definitions
+// Runtime relationship creation using runtime protobuf definitions
 
 // createParentOfRelationship creates a parent-child process relationship
 func (b *Builder) createParentOfRelationship(parentRef, childRef *resourcev1.ResourceRef) error {
-	// Use Contains relationship with logical containment type for process hierarchy
-	contains := &hardwarev1.Contains{
-		Type: hardwarev1.ContainmentType_CONTAINMENT_TYPE_LOGICAL,
+	// Use Contains relationship with runtime containment type for process hierarchy
+	contains := &runtimev1.Contains{
+		Type: runtimev1.ContainmentType_CONTAINMENT_TYPE_RUNTIME,
 	}
 
 	predicate, err := anypb.New(contains)
@@ -55,9 +56,9 @@ func (b *Builder) createParentOfRelationship(parentRef, childRef *resourcev1.Res
 
 // createContainerProcessRelationship creates a container-to-process relationship
 func (b *Builder) createContainerProcessRelationship(containerRef, processRef *resourcev1.ResourceRef) error {
-	// Use Contains relationship with logical containment type for container-process
-	contains := &hardwarev1.Contains{
-		Type: hardwarev1.ContainmentType_CONTAINMENT_TYPE_LOGICAL,
+	// Use Contains relationship with runtime containment type for container-process
+	contains := &runtimev1.Contains{
+		Type: runtimev1.ContainmentType_CONTAINMENT_TYPE_RUNTIME,
 	}
 
 	predicate, err := anypb.New(contains)
@@ -88,13 +89,13 @@ func (b *Builder) createContainerProcessRelationship(containerRef, processRef *r
 
 // createContainerHardwareRelationship creates relationships between containers and hardware
 func (b *Builder) createContainerHardwareRelationship(containerRef, hardwareRef *resourcev1.ResourceRef) error {
-	// Use Contains relationship with partition type for container-hardware affinity
-	// This represents the container being assigned to specific hardware resources
-	contains := &hardwarev1.Contains{
-		Type: hardwarev1.ContainmentType_CONTAINMENT_TYPE_PARTITION,
+	// Use ContainedBy relationship for container-hardware affinity
+	// This represents the container being contained by specific hardware resources
+	containedBy := &runtimev1.ContainedBy{
+		Type: runtimev1.ContainmentType_CONTAINMENT_TYPE_RUNTIME,
 	}
 
-	predicateAny, err := anypb.New(contains)
+	predicateAny, err := anypb.New(containedBy)
 	if err != nil {
 		return err
 	}
@@ -102,11 +103,11 @@ func (b *Builder) createContainerHardwareRelationship(containerRef, hardwareRef 
 	relationship := &resourcev1.Relationship{
 		Type: &resourcev1.TypeDescriptor{
 			Kind: kindRelationship,
-			Type: typeContains,
+			Type: typeContainedBy,
 		},
-		Subject:   hardwareRef, // Hardware contains the container
+		Subject:   containerRef, // Container is contained by hardware (subject is what is contained)
 		Predicate: predicateAny,
-		Object:    containerRef, // Container is contained by hardware
+		Object:    hardwareRef, // Hardware is what contains
 	}
 
 	if err := b.store.AddRelationships(relationship); err != nil {
