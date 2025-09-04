@@ -305,12 +305,12 @@ preview-deploy: manifests kustomize ## Generate a consolidated YAML for deployme
 	@rm -r $(ROOT)/tmp
 
 .PHONY: cluster
-cluster: ktf kustomize ## Build a KIND cluster which can be used for testing and development.
-	PATH="$(LOCALBIN):${PATH}" $(KTF) env create --name $(KIND_CLUSTER) --addon metallb
+cluster: kind ## Build a KIND cluster using topology configuration for testing and development.
+	$(KIND) create cluster --config config/kind-topology-cluster.yaml --name $(KIND_CLUSTER)
 
 .PHONY: delete-cluster
-destroy-cluster: ktf ## Delete the KIND cluster.
-	PATH="$(LOCALBIN):${PATH}" $(KTF) env delete --name $(KIND_CLUSTER)
+destroy-cluster: kind ## Delete the KIND cluster.
+	$(KIND) delete cluster --name $(KIND_CLUSTER)
 
 .PHONY: load.image
 load-image: kind ## Loads Docker image into KIND cluster and restarts agent for new image if it exists.

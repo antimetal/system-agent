@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	"github.com/antimetal/agent/internal/containers"
 	"github.com/antimetal/agent/internal/hardware"
 	"github.com/antimetal/agent/internal/intake"
 	k8sagent "github.com/antimetal/agent/internal/kubernetes/agent"
@@ -42,27 +43,28 @@ var (
 	setupLog logr.Logger
 
 	// CLI Options
-	intakeAddr             string
-	intakeAPIKey           string
-	intakeSecure           bool
-	metricsAddr            string
-	metricsSecure          bool
-	metricsCertDir         string
-	metricsCertName        string
-	metricsKeyName         string
-	enableLeaderElection   bool
-	probeAddr              string
-	enableHTTP2            bool
-	enableK8sController    bool
-	kubernetesProvider     string
-	eksAccountID           string
-	eksRegion              string
-	eksClusterName         string
-	eksAutodiscover        bool
-	maxStreamAge           time.Duration
-	pprofAddr              string
-	dataDir                string
-	hardwareUpdateInterval time.Duration
+	intakeAddr               string
+	intakeAPIKey             string
+	intakeSecure             bool
+	metricsAddr              string
+	metricsSecure            bool
+	metricsCertDir           string
+	metricsCertName          string
+	metricsKeyName           string
+	enableLeaderElection     bool
+	probeAddr                string
+	enableHTTP2              bool
+	enableK8sController      bool
+	kubernetesProvider       string
+	eksAccountID             string
+	eksRegion                string
+	eksClusterName           string
+	eksAutodiscover          bool
+	maxStreamAge             time.Duration
+	pprofAddr                string
+	dataDir                  string
+	hardwareUpdateInterval   time.Duration
+	containersUpdateInterval time.Duration
 )
 
 func init() {
@@ -114,6 +116,8 @@ func init() {
 		"The directory where the agent will place its persistent data files. Set to empty string for in-memory mode.")
 	flag.DurationVar(&hardwareUpdateInterval, "hardware-update-interval", 5*time.Minute,
 		"Interval for hardware topology discovery updates")
+	flag.DurationVar(&containersUpdateInterval, "containers-update-interval", 30*time.Second,
+		"Interval for container and process discovery updates")
 
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
@@ -284,6 +288,24 @@ func main() {
 	}
 	if err := mgr.Add(hwManager); err != nil {
 		setupLog.Error(err, "unable to register hardware manager")
+		os.Exit(1)
+	}
+
+	// Setup Containers Manager (for container/process discovery)
+	containersManager, err := containers.NewManager(
+		mgr.GetLogger().WithName("containers-manager"),
+		containers.ManagerConfig{
+			Store:              rsrcStore,
+			PerformanceManager: perfManager,
+			UpdateInterval:     containersUpdateInterval,
+		},
+	)
+	if err != nil {
+		setupLog.Error(err, "unable to create containers manager")
+		os.Exit(1)
+	}
+	if err := mgr.Add(containersManager); err != nil {
+		setupLog.Error(err, "unable to register containers manager")
 		os.Exit(1)
 	}
 
