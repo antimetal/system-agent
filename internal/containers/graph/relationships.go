@@ -12,6 +12,12 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
+// Define Kind and Type constants using proto descriptor full names
+var (
+	kindRelationship = string((&resourcev1.Relationship{}).ProtoReflect().Descriptor().FullName())
+	typeContains     = string((&hardwarev1.Contains{}).ProtoReflect().Descriptor().FullName())
+)
+
 // Runtime relationship creation using hardware protobuf definitions
 
 // createParentOfRelationship creates a parent-child process relationship
@@ -27,6 +33,10 @@ func (b *Builder) createParentOfRelationship(parentRef, childRef *resourcev1.Res
 	}
 
 	relationship := &resourcev1.Relationship{
+		Type: &resourcev1.TypeDescriptor{
+			Kind: kindRelationship,
+			Type: typeContains,
+		},
 		Subject:   parentRef,
 		Predicate: predicate,
 		Object:    childRef,
@@ -56,6 +66,10 @@ func (b *Builder) createContainerProcessRelationship(containerRef, processRef *r
 	}
 
 	relationship := &resourcev1.Relationship{
+		Type: &resourcev1.TypeDescriptor{
+			Kind: kindRelationship,
+			Type: typeContains,
+		},
 		Subject:   containerRef,
 		Predicate: predicate,
 		Object:    processRef,
@@ -86,6 +100,10 @@ func (b *Builder) createContainerHardwareRelationship(containerRef, hardwareRef 
 	}
 
 	relationship := &resourcev1.Relationship{
+		Type: &resourcev1.TypeDescriptor{
+			Kind: kindRelationship,
+			Type: typeContains,
+		},
 		Subject:   hardwareRef, // Hardware contains the container
 		Predicate: predicateAny,
 		Object:    containerRef, // Container is contained by hardware

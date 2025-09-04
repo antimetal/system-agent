@@ -17,6 +17,7 @@ import (
 	pkgcontainers "github.com/antimetal/agent/pkg/containers"
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/antimetal/agent/pkg/resource/store"
+	"github.com/go-logr/logr"
 	"github.com/go-logr/zapr"
 	"go.uber.org/zap"
 )
@@ -45,7 +46,7 @@ func BenchmarkRuntimeDiscovery(b *testing.B) {
 	}
 
 	// Create in-memory store using correct constructor (empty string = in-memory)
-	rsrcStore, err := store.New("")
+	rsrcStore, err := store.New("", logr.Discard())
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -144,7 +145,7 @@ func BenchmarkGraphBuilding(b *testing.B) {
 	for _, bm := range benchmarks {
 		b.Run(bm.name, func(b *testing.B) {
 			// Create in-memory store for each benchmark
-			rsrcStore, err := store.New("")
+			rsrcStore, err := store.New("", logr.Discard())
 			if err != nil {
 				b.Fatal(err)
 			}

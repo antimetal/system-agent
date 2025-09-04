@@ -14,6 +14,13 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
+// Define Kind and Type constants using proto descriptor full names
+var (
+	kindResource  = string((&resourcev1.Resource{}).ProtoReflect().Descriptor().FullName())
+	typeContainer = string((&runtimev1.ContainerNode{}).ProtoReflect().Descriptor().FullName())
+	typeProcess   = string((&runtimev1.ProcessNode{}).ProtoReflect().Descriptor().FullName())
+)
+
 // Constants for resource metadata
 const (
 	// RuntimePseudoCluster is used as the cluster name for runtime-discovered resources
@@ -62,8 +69,8 @@ func (b *Builder) createContainerNode(container *ContainerInfo) (*resourcev1.Res
 	// Create the resource
 	rsrc := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
-			Kind: "antimetal.runtime.v1.ContainerNode",
-			Type: "antimetal.runtime.v1.ContainerNode",
+			Kind: kindResource,
+			Type: typeContainer,
 		},
 		Metadata: &resourcev1.ResourceMeta{
 			Provider: resourcev1.Provider_PROVIDER_ANTIMETAL,
@@ -74,7 +81,7 @@ func (b *Builder) createContainerNode(container *ContainerInfo) (*resourcev1.Res
 
 	// Create resource reference
 	ref := &resourcev1.ResourceRef{
-		TypeUrl: "antimetal.runtime.v1.ContainerNode",
+		TypeUrl: typeContainer,
 		Name:    containerName,
 	}
 
@@ -110,8 +117,8 @@ func (b *Builder) createProcessNode(process *ProcessInfo) (*resourcev1.Resource,
 	// Create the resource
 	rsrc := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
-			Kind: "antimetal.runtime.v1.ProcessNode",
-			Type: "antimetal.runtime.v1.ProcessNode",
+			Kind: kindResource,
+			Type: typeProcess,
 		},
 		Metadata: &resourcev1.ResourceMeta{
 			Provider: resourcev1.Provider_PROVIDER_ANTIMETAL,
@@ -122,7 +129,7 @@ func (b *Builder) createProcessNode(process *ProcessInfo) (*resourcev1.Resource,
 
 	// Create resource reference
 	ref := &resourcev1.ResourceRef{
-		TypeUrl: "antimetal.runtime.v1.ProcessNode",
+		TypeUrl: typeProcess,
 		Name:    processName,
 	}
 
@@ -133,7 +140,7 @@ func (b *Builder) createProcessNode(process *ProcessInfo) (*resourcev1.Resource,
 func (b *Builder) createProcessRef(pid int32) *resourcev1.ResourceRef {
 	processName := fmt.Sprintf("process-%d", pid)
 	return &resourcev1.ResourceRef{
-		TypeUrl: "antimetal.runtime.v1.ProcessNode",
+		TypeUrl: typeProcess,
 		Name:    processName,
 	}
 }
@@ -142,7 +149,7 @@ func (b *Builder) createProcessRef(pid int32) *resourcev1.ResourceRef {
 func (b *Builder) createContainerRef(containerID string) *resourcev1.ResourceRef {
 	containerName := fmt.Sprintf("container-%s", containerID)
 	return &resourcev1.ResourceRef{
-		TypeUrl: "antimetal.runtime.v1.ContainerNode",
+		TypeUrl: typeContainer,
 		Name:    containerName,
 	}
 }

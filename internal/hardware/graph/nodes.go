@@ -24,7 +24,20 @@ import (
 	"github.com/antimetal/agent/pkg/proc"
 )
 
-var kindResource = string((&resourcev1.Resource{}).ProtoReflect().Descriptor().FullName())
+// Define Kind and Type constants using proto descriptor full names
+var (
+	kindResource = string((&resourcev1.Resource{}).ProtoReflect().Descriptor().FullName())
+
+	// Hardware node types
+	typeSystemNode           = string((&hardwarev1.SystemNode{}).ProtoReflect().Descriptor().FullName())
+	typeCPUPackageNode       = string((&hardwarev1.CPUPackageNode{}).ProtoReflect().Descriptor().FullName())
+	typeCPUCoreNode          = string((&hardwarev1.CPUCoreNode{}).ProtoReflect().Descriptor().FullName())
+	typeMemoryModuleNode     = string((&hardwarev1.MemoryModuleNode{}).ProtoReflect().Descriptor().FullName())
+	typeNUMANode             = string((&hardwarev1.NUMANode{}).ProtoReflect().Descriptor().FullName())
+	typeDiskDeviceNode       = string((&hardwarev1.DiskDeviceNode{}).ProtoReflect().Descriptor().FullName())
+	typeDiskPartitionNode    = string((&hardwarev1.DiskPartitionNode{}).ProtoReflect().Descriptor().FullName())
+	typeNetworkInterfaceNode = string((&hardwarev1.NetworkInterfaceNode{}).ProtoReflect().Descriptor().FullName())
+)
 
 // getSystemInfo gathers system information using existing utilities
 func (b *Builder) getSystemInfo() (arch hardwarev1.Architecture, bootTime time.Time, kernelVersion string, osInfo string) {
@@ -167,7 +180,7 @@ func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.Resource
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
 			Kind: kindResource,
-			Type: string(systemSpec.ProtoReflect().Descriptor().FullName()),
+			Type: typeSystemNode,
 		},
 		Metadata: &resourcev1.ResourceMeta{
 			Provider:   resourcev1.Provider_PROVIDER_ANTIMETAL,
@@ -180,7 +193,7 @@ func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.Resource
 
 	// Create reference
 	ref := &resourcev1.ResourceRef{
-		TypeUrl: string(systemSpec.ProtoReflect().Descriptor().FullName()),
+		TypeUrl: typeSystemNode,
 		Name:    hostname, // Keep hostname for readability, machine ID is in ProviderId
 	}
 
@@ -238,7 +251,7 @@ func (b *Builder) createCPUPackageNode(cpuInfo *performance.CPUInfo, physicalID 
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
 			Kind: kindResource,
-			Type: string(packageSpec.ProtoReflect().Descriptor().FullName()),
+			Type: typeCPUPackageNode,
 		},
 		Metadata: &resourcev1.ResourceMeta{
 			Provider:   resourcev1.Provider_PROVIDER_ANTIMETAL,
@@ -250,7 +263,7 @@ func (b *Builder) createCPUPackageNode(cpuInfo *performance.CPUInfo, physicalID 
 
 	// Create reference
 	ref := &resourcev1.ResourceRef{
-		TypeUrl: string(packageSpec.ProtoReflect().Descriptor().FullName()),
+		TypeUrl: typeCPUPackageNode,
 		Name:    packageName,
 	}
 
@@ -279,7 +292,7 @@ func (b *Builder) createCPUCoreNode(core *performance.CPUCore) (*resourcev1.Reso
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
 			Kind: kindResource,
-			Type: string(coreSpec.ProtoReflect().Descriptor().FullName()),
+			Type: typeCPUCoreNode,
 		},
 		Metadata: &resourcev1.ResourceMeta{
 			Provider:   resourcev1.Provider_PROVIDER_ANTIMETAL,
@@ -291,7 +304,7 @@ func (b *Builder) createCPUCoreNode(core *performance.CPUCore) (*resourcev1.Reso
 
 	// Create reference
 	ref := &resourcev1.ResourceRef{
-		TypeUrl: string(coreSpec.ProtoReflect().Descriptor().FullName()),
+		TypeUrl: typeCPUCoreNode,
 		Name:    coreName,
 	}
 
@@ -319,7 +332,7 @@ func (b *Builder) createMemoryModuleNode(memInfo *performance.MemoryInfo) (*reso
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
 			Kind: kindResource,
-			Type: string(memSpec.ProtoReflect().Descriptor().FullName()),
+			Type: typeMemoryModuleNode,
 		},
 		Metadata: &resourcev1.ResourceMeta{
 			Provider:   resourcev1.Provider_PROVIDER_ANTIMETAL,
@@ -331,7 +344,7 @@ func (b *Builder) createMemoryModuleNode(memInfo *performance.MemoryInfo) (*reso
 
 	// Create reference
 	ref := &resourcev1.ResourceRef{
-		TypeUrl: string(memSpec.ProtoReflect().Descriptor().FullName()),
+		TypeUrl: typeMemoryModuleNode,
 		Name:    memName,
 	}
 
@@ -373,7 +386,7 @@ func (b *Builder) createNUMANode(numa *performance.NUMANode) (*resourcev1.Resour
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
 			Kind: kindResource,
-			Type: string(numaSpec.ProtoReflect().Descriptor().FullName()),
+			Type: typeNUMANode,
 		},
 		Metadata: &resourcev1.ResourceMeta{
 			Provider:   resourcev1.Provider_PROVIDER_ANTIMETAL,
@@ -385,7 +398,7 @@ func (b *Builder) createNUMANode(numa *performance.NUMANode) (*resourcev1.Resour
 
 	// Create reference
 	ref := &resourcev1.ResourceRef{
-		TypeUrl: string(numaSpec.ProtoReflect().Descriptor().FullName()),
+		TypeUrl: typeNUMANode,
 		Name:    numaName,
 	}
 
@@ -417,7 +430,7 @@ func (b *Builder) createDiskDeviceNode(disk *performance.DiskInfo) (*resourcev1.
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
 			Kind: kindResource,
-			Type: string(diskSpec.ProtoReflect().Descriptor().FullName()),
+			Type: typeDiskDeviceNode,
 		},
 		Metadata: &resourcev1.ResourceMeta{
 			Provider:   resourcev1.Provider_PROVIDER_ANTIMETAL,
@@ -429,7 +442,7 @@ func (b *Builder) createDiskDeviceNode(disk *performance.DiskInfo) (*resourcev1.
 
 	// Create reference
 	ref := &resourcev1.ResourceRef{
-		TypeUrl: string(diskSpec.ProtoReflect().Descriptor().FullName()),
+		TypeUrl: typeDiskDeviceNode,
 		Name:    disk.Device,
 	}
 
@@ -456,7 +469,7 @@ func (b *Builder) createDiskPartitionNode(partition *performance.PartitionInfo, 
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
 			Kind: kindResource,
-			Type: string(partSpec.ProtoReflect().Descriptor().FullName()),
+			Type: typeDiskPartitionNode,
 		},
 		Metadata: &resourcev1.ResourceMeta{
 			Provider:   resourcev1.Provider_PROVIDER_ANTIMETAL,
@@ -468,7 +481,7 @@ func (b *Builder) createDiskPartitionNode(partition *performance.PartitionInfo, 
 
 	// Create reference
 	ref := &resourcev1.ResourceRef{
-		TypeUrl: string(partSpec.ProtoReflect().Descriptor().FullName()),
+		TypeUrl: typeDiskPartitionNode,
 		Name:    partition.Name,
 	}
 
@@ -551,7 +564,7 @@ func (b *Builder) createNetworkInterfaceNode(iface *performance.NetworkInfo) (*r
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
 			Kind: kindResource,
-			Type: string(netSpec.ProtoReflect().Descriptor().FullName()),
+			Type: typeNetworkInterfaceNode,
 		},
 		Metadata: &resourcev1.ResourceMeta{
 			Provider:   resourcev1.Provider_PROVIDER_ANTIMETAL,
@@ -563,7 +576,7 @@ func (b *Builder) createNetworkInterfaceNode(iface *performance.NetworkInfo) (*r
 
 	// Create reference
 	ref := &resourcev1.ResourceRef{
-		TypeUrl: string(netSpec.ProtoReflect().Descriptor().FullName()),
+		TypeUrl: typeNetworkInterfaceNode,
 		Name:    iface.Interface,
 	}
 

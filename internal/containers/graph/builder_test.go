@@ -14,6 +14,7 @@ import (
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"github.com/antimetal/agent/pkg/resource"
 	"github.com/antimetal/agent/pkg/resource/store"
+	"github.com/go-logr/logr"
 	"github.com/go-logr/zapr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -132,7 +133,7 @@ func TestBuilder_BuildFromSnapshot_Containers(t *testing.T) {
 
 	// Verify container nodes were created correctly
 	for i, rsrc := range mockStore.resources {
-		assert.Equal(t, "antimetal.runtime.v1.ContainerNode", rsrc.Type.Kind)
+		assert.Equal(t, "resource.v1.Resource", rsrc.Type.Kind)
 		assert.Equal(t, "antimetal.runtime.v1.ContainerNode", rsrc.Type.Type)
 		// Service field was removed as containers are provider-agnostic
 		assert.Contains(t, rsrc.Metadata.Name, snapshot.containers[i].ID)
@@ -179,7 +180,7 @@ func TestBuilder_BuildFromSnapshot_Processes(t *testing.T) {
 
 	// Verify process nodes were created
 	for _, rsrc := range mockStore.resources {
-		assert.Equal(t, "antimetal.runtime.v1.ProcessNode", rsrc.Type.Kind)
+		assert.Equal(t, "resource.v1.Resource", rsrc.Type.Kind)
 		assert.Equal(t, "antimetal.runtime.v1.ProcessNode", rsrc.Type.Type)
 	}
 
@@ -195,7 +196,7 @@ func TestBuilder_BuildFromSnapshot_CompleteTopology(t *testing.T) {
 	logger := zapr.NewLogger(zapLog)
 
 	// Use real in-memory store for more complete testing
-	realStore, err := store.New("")
+	realStore, err := store.New("", logr.Discard())
 	require.NoError(t, err)
 
 	builder := NewBuilder(logger, realStore)

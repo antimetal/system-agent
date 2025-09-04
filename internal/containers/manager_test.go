@@ -19,6 +19,7 @@ import (
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/antimetal/agent/pkg/resource"
 	"github.com/antimetal/agent/pkg/resource/store"
+	"github.com/go-logr/logr"
 	"github.com/go-logr/zapr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,7 +28,7 @@ import (
 
 // Helper functions for creating test objects
 func createTestStore(t *testing.T) resource.Store {
-	store, err := store.New("")
+	store, err := store.New("", logr.Discard())
 	require.NoError(t, err)
 	return store
 }
