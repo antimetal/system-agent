@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 
+	hardwaregraph "github.com/antimetal/agent/internal/hardware/graph"
 	runtimev1 "github.com/antimetal/agent/pkg/api/antimetal/runtime/v1"
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"github.com/antimetal/agent/pkg/performance"
@@ -273,7 +274,7 @@ func (b *Builder) createContainerCPURelationships(containerRef *resourcev1.Resou
 	// Create relationships to each CPU core
 	for _, cpuID := range cpuList {
 		cpuRef := &resourcev1.ResourceRef{
-			TypeUrl: "hardware.antimetal.com/v1/CPU",
+			TypeUrl: hardwaregraph.TypeCPUCoreNode,
 			Name:    fmt.Sprintf("cpu-%d", cpuID),
 		}
 
@@ -297,7 +298,7 @@ func (b *Builder) createContainerNUMARelationships(containerRef *resourcev1.Reso
 	// Create relationships to each NUMA node
 	for _, numaID := range numaList {
 		numaRef := &resourcev1.ResourceRef{
-			TypeUrl: "hardware.antimetal.com/v1/NUMANode",
+			TypeUrl: hardwaregraph.TypeNUMANode,
 			Name:    fmt.Sprintf("numa-node-%d", numaID),
 		}
 
