@@ -184,11 +184,26 @@ func TestBuilder_BuildFromSnapshot_Processes(t *testing.T) {
 		assert.Equal(t, "antimetal.runtime.v1.ProcessNode", rsrc.Type.Type)
 	}
 
-	// Should have created parent-child relationship
-	assert.Equal(t, 1, len(mockStore.relationships), "Should create 1 parent-child relationship")
-	rel := mockStore.relationships[0]
-	assert.Contains(t, rel.Subject.Name, "100") // Parent PID
-	assert.Contains(t, rel.Object.Name, "101")  // Child PID
+	// Should have created bidirectional parent-child relationships (2 relationships)
+	assert.Equal(t, 2, len(mockStore.relationships), "Should create 2 relationships (bidirectional)")
+
+	// Check that we have both Contains and ContainedBy relationships
+	hasContains := false
+	hasContainedBy := false
+	for _, rel := range mockStore.relationships {
+		if rel.Type.Type == string((&runtimev1.Contains{}).ProtoReflect().Descriptor().FullName()) {
+			hasContains = true
+			assert.Contains(t, rel.Subject.Name, "100") // Parent PID
+			assert.Contains(t, rel.Object.Name, "101")  // Child PID
+		}
+		if rel.Type.Type == string((&runtimev1.ContainedBy{}).ProtoReflect().Descriptor().FullName()) {
+			hasContainedBy = true
+			assert.Contains(t, rel.Subject.Name, "101") // Child PID
+			assert.Contains(t, rel.Object.Name, "100")  // Parent PID
+		}
+	}
+	assert.True(t, hasContains, "Should have Contains relationship")
+	assert.True(t, hasContainedBy, "Should have ContainedBy relationship")
 }
 
 func TestBuilder_BuildFromSnapshot_CompleteTopology(t *testing.T) {
@@ -381,7 +396,7 @@ func TestBuilder_BuildFromSnapshot_ProcessHierarchy(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 8, len(mockStore.resources), "Should create 8 process nodes")
 
-	// Should create relationships for all parent-child pairs (7 relationships)
+	// Should create bidirectional relationships for all parent-child pairs (7 pairs = 14 relationships)
 	// Note: PID 1 has PPID 0, which doesn't exist, so no relationship for that
-	assert.Equal(t, 7, len(mockStore.relationships), "Should create 7 parent-child relationships")
+	assert.Equal(t, 14, len(mockStore.relationships), "Should create 14 relationships (7 bidirectional pairs)")
 }

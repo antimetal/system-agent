@@ -21,100 +21,162 @@ var (
 
 // Runtime relationship creation using runtime protobuf definitions
 
-// createParentOfRelationship creates a parent-child process relationship
+// createParentOfRelationship creates bidirectional parent-child process relationships
 func (b *Builder) createParentOfRelationship(parentRef, childRef *resourcev1.ResourceRef) error {
-	// Use Contains relationship with runtime containment type for process hierarchy
+	// Create forward relationship: parent Contains child
 	contains := &runtimev1.Contains{
 		Type: runtimev1.ContainmentType_CONTAINMENT_TYPE_RUNTIME,
 	}
 
-	predicate, err := anypb.New(contains)
+	containsPredicate, err := anypb.New(contains)
 	if err != nil {
 		return err
 	}
 
-	relationship := &resourcev1.Relationship{
+	containsRel := &resourcev1.Relationship{
 		Type: &resourcev1.TypeDescriptor{
 			Kind: kindRelationship,
 			Type: typeContains,
 		},
 		Subject:   parentRef,
-		Predicate: predicate,
+		Predicate: containsPredicate,
 		Object:    childRef,
 	}
 
-	if err := b.store.AddRelationships(relationship); err != nil {
+	// Create inverse relationship: child ContainedBy parent
+	containedBy := &runtimev1.ContainedBy{
+		Type: runtimev1.ContainmentType_CONTAINMENT_TYPE_RUNTIME,
+	}
+
+	containedByPredicate, err := anypb.New(containedBy)
+	if err != nil {
 		return err
 	}
 
-	b.logger.V(2).Info("Created parent-child relationship",
+	containedByRel := &resourcev1.Relationship{
+		Type: &resourcev1.TypeDescriptor{
+			Kind: kindRelationship,
+			Type: typeContainedBy,
+		},
+		Subject:   childRef,
+		Predicate: containedByPredicate,
+		Object:    parentRef,
+	}
+
+	// Add both relationships
+	if err := b.store.AddRelationships(containsRel, containedByRel); err != nil {
+		return err
+	}
+
+	b.logger.V(2).Info("Created bidirectional parent-child relationships",
 		"parent", parentRef.Name,
 		"child", childRef.Name)
 
 	return nil
 }
 
-// createContainerProcessRelationship creates a container-to-process relationship
+// createContainerProcessRelationship creates bidirectional container-to-process relationships
 func (b *Builder) createContainerProcessRelationship(containerRef, processRef *resourcev1.ResourceRef) error {
-	// Use Contains relationship with runtime containment type for container-process
+	// Create forward relationship: container Contains process
 	contains := &runtimev1.Contains{
 		Type: runtimev1.ContainmentType_CONTAINMENT_TYPE_RUNTIME,
 	}
 
-	predicate, err := anypb.New(contains)
+	containsPredicate, err := anypb.New(contains)
 	if err != nil {
 		return err
 	}
 
-	relationship := &resourcev1.Relationship{
+	containsRel := &resourcev1.Relationship{
 		Type: &resourcev1.TypeDescriptor{
 			Kind: kindRelationship,
 			Type: typeContains,
 		},
 		Subject:   containerRef,
-		Predicate: predicate,
+		Predicate: containsPredicate,
 		Object:    processRef,
 	}
 
-	if err := b.store.AddRelationships(relationship); err != nil {
+	// Create inverse relationship: process ContainedBy container
+	containedBy := &runtimev1.ContainedBy{
+		Type: runtimev1.ContainmentType_CONTAINMENT_TYPE_RUNTIME,
+	}
+
+	containedByPredicate, err := anypb.New(containedBy)
+	if err != nil {
 		return err
 	}
 
-	b.logger.V(2).Info("Created container-process relationship",
+	containedByRel := &resourcev1.Relationship{
+		Type: &resourcev1.TypeDescriptor{
+			Kind: kindRelationship,
+			Type: typeContainedBy,
+		},
+		Subject:   processRef,
+		Predicate: containedByPredicate,
+		Object:    containerRef,
+	}
+
+	// Add both relationships
+	if err := b.store.AddRelationships(containsRel, containedByRel); err != nil {
+		return err
+	}
+
+	b.logger.V(2).Info("Created bidirectional container-process relationships",
 		"container", containerRef.Name,
 		"process", processRef.Name)
 
 	return nil
 }
 
-// createContainerHardwareRelationship creates relationships between containers and hardware
+// createContainerHardwareRelationship creates bidirectional relationships between containers and hardware
 func (b *Builder) createContainerHardwareRelationship(containerRef, hardwareRef *resourcev1.ResourceRef) error {
-	// Use ContainedBy relationship for container-hardware affinity
-	// This represents the container being contained by specific hardware resources
-	containedBy := &runtimev1.ContainedBy{
+	// Create forward relationship: hardware Contains container
+	contains := &runtimev1.Contains{
 		Type: runtimev1.ContainmentType_CONTAINMENT_TYPE_RUNTIME,
 	}
 
-	predicateAny, err := anypb.New(containedBy)
+	containsPredicate, err := anypb.New(contains)
 	if err != nil {
 		return err
 	}
 
-	relationship := &resourcev1.Relationship{
+	containsRel := &resourcev1.Relationship{
+		Type: &resourcev1.TypeDescriptor{
+			Kind: kindRelationship,
+			Type: typeContains,
+		},
+		Subject:   hardwareRef, // Hardware contains the container
+		Predicate: containsPredicate,
+		Object:    containerRef,
+	}
+
+	// Create inverse relationship: container ContainedBy hardware
+	containedBy := &runtimev1.ContainedBy{
+		Type: runtimev1.ContainmentType_CONTAINMENT_TYPE_RUNTIME,
+	}
+
+	containedByPredicate, err := anypb.New(containedBy)
+	if err != nil {
+		return err
+	}
+
+	containedByRel := &resourcev1.Relationship{
 		Type: &resourcev1.TypeDescriptor{
 			Kind: kindRelationship,
 			Type: typeContainedBy,
 		},
-		Subject:   containerRef, // Container is contained by hardware (subject is what is contained)
-		Predicate: predicateAny,
-		Object:    hardwareRef, // Hardware is what contains
+		Subject:   containerRef, // Container is contained by hardware
+		Predicate: containedByPredicate,
+		Object:    hardwareRef,
 	}
 
-	if err := b.store.AddRelationships(relationship); err != nil {
+	// Add both relationships
+	if err := b.store.AddRelationships(containsRel, containedByRel); err != nil {
 		return err
 	}
 
-	b.logger.V(2).Info("Created container-hardware relationship",
+	b.logger.V(2).Info("Created bidirectional container-hardware relationships",
 		"container", containerRef.Name,
 		"hardware", hardwareRef.Name)
 
