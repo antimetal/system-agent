@@ -22,6 +22,31 @@ import (
 	"github.com/go-logr/logr"
 )
 
+// getMachineID reads the OS-specific machine ID from /etc/machine-id
+// This provides a stable, unique identifier for the host machine
+func getMachineID() string {
+	// Try /etc/machine-id (OS-specific identifier)
+	if data, err := os.ReadFile("/etc/machine-id"); err == nil {
+		if id := strings.TrimSpace(string(data)); id != "" {
+			return id
+		}
+	}
+
+	// Fall back to system UUID if machine-id not available
+	if data, err := os.ReadFile("/sys/class/dmi/id/product_uuid"); err == nil {
+		if uuid := strings.TrimSpace(string(data)); uuid != "" {
+			return uuid
+		}
+	}
+
+	// Last resort: use hostname
+	if hostname, err := os.Hostname(); err == nil {
+		return hostname
+	}
+
+	return "unknown"
+}
+
 // RuntimeSnapshot contains all runtime information at a specific point in time
 // This is imported from the runtime package to avoid circular dependencies
 type RuntimeSnapshot interface {
@@ -60,15 +85,20 @@ type ProcessInfo struct {
 
 // Builder constructs the runtime graph from runtime discovery data
 type Builder struct {
-	logger logr.Logger
-	store  resource.Store
+	logger    logr.Logger
+	store     resource.Store
+	machineID string // machine ID for namespacing resources
 }
 
 // NewBuilder creates a new runtime graph builder
 func NewBuilder(logger logr.Logger, store resource.Store) *Builder {
+	// Get machine ID for namespacing - this ensures container/process IDs are unique across hosts
+	machineID := getMachineID()
+
 	return &Builder{
-		logger: logger,
-		store:  store,
+		logger:    logger,
+		store:     store,
+		machineID: machineID,
 	}
 }
 

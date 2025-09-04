@@ -66,7 +66,7 @@ func (b *Builder) createContainerNode(container *ContainerInfo) (*resourcev1.Res
 
 	containerName := fmt.Sprintf("container-%s", container.ID)
 
-	// Create the resource
+	// Create the resource with host namespace
 	rsrc := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
 			Kind: kindResource,
@@ -75,14 +75,30 @@ func (b *Builder) createContainerNode(container *ContainerInfo) (*resourcev1.Res
 		Metadata: &resourcev1.ResourceMeta{
 			Provider: resourcev1.Provider_PROVIDER_ANTIMETAL,
 			Name:     containerName,
+			Namespace: &resourcev1.Namespace{
+				Namespace: &resourcev1.Namespace_Kube{
+					Kube: &resourcev1.KubernetesNamespace{
+						Cluster:   b.machineID, // Use machine ID as cluster for host-scoped resources
+						Namespace: "host",      // Fixed namespace for host-level resources
+					},
+				},
+			},
 		},
 		Spec: specAny,
 	}
 
-	// Create resource reference
+	// Create resource reference with namespace
 	ref := &resourcev1.ResourceRef{
 		TypeUrl: typeContainer,
 		Name:    containerName,
+		Namespace: &resourcev1.Namespace{
+			Namespace: &resourcev1.Namespace_Kube{
+				Kube: &resourcev1.KubernetesNamespace{
+					Cluster:   b.machineID, // Use machine ID as cluster for host-scoped resources
+					Namespace: "host",      // Fixed namespace for host-level resources
+				},
+			},
+		},
 	}
 
 	return rsrc, ref, nil
@@ -114,7 +130,7 @@ func (b *Builder) createProcessNode(process *ProcessInfo) (*resourcev1.Resource,
 
 	processName := fmt.Sprintf("process-%d", process.PID)
 
-	// Create the resource
+	// Create the resource with host namespace
 	rsrc := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
 			Kind: kindResource,
@@ -123,14 +139,30 @@ func (b *Builder) createProcessNode(process *ProcessInfo) (*resourcev1.Resource,
 		Metadata: &resourcev1.ResourceMeta{
 			Provider: resourcev1.Provider_PROVIDER_ANTIMETAL,
 			Name:     processName,
+			Namespace: &resourcev1.Namespace{
+				Namespace: &resourcev1.Namespace_Kube{
+					Kube: &resourcev1.KubernetesNamespace{
+						Cluster:   b.machineID, // Use machine ID as cluster for host-scoped resources
+						Namespace: "host",      // Fixed namespace for host-level resources
+					},
+				},
+			},
 		},
 		Spec: specAny,
 	}
 
-	// Create resource reference
+	// Create resource reference with namespace
 	ref := &resourcev1.ResourceRef{
 		TypeUrl: typeProcess,
 		Name:    processName,
+		Namespace: &resourcev1.Namespace{
+			Namespace: &resourcev1.Namespace_Kube{
+				Kube: &resourcev1.KubernetesNamespace{
+					Cluster:   b.machineID, // Use machine ID as cluster for host-scoped resources
+					Namespace: "host",      // Fixed namespace for host-level resources
+				},
+			},
+		},
 	}
 
 	return rsrc, ref, nil
@@ -142,6 +174,14 @@ func (b *Builder) createProcessRef(pid int32) *resourcev1.ResourceRef {
 	return &resourcev1.ResourceRef{
 		TypeUrl: typeProcess,
 		Name:    processName,
+		Namespace: &resourcev1.Namespace{
+			Namespace: &resourcev1.Namespace_Kube{
+				Kube: &resourcev1.KubernetesNamespace{
+					Cluster:   b.machineID, // Use machine ID as cluster for host-scoped resources
+					Namespace: "host",      // Fixed namespace for host-level resources
+				},
+			},
+		},
 	}
 }
 
@@ -151,6 +191,14 @@ func (b *Builder) createContainerRef(containerID string) *resourcev1.ResourceRef
 	return &resourcev1.ResourceRef{
 		TypeUrl: typeContainer,
 		Name:    containerName,
+		Namespace: &resourcev1.Namespace{
+			Namespace: &resourcev1.Namespace_Kube{
+				Kube: &resourcev1.KubernetesNamespace{
+					Cluster:   b.machineID, // Use machine ID as cluster for host-scoped resources
+					Namespace: "host",      // Fixed namespace for host-level resources
+				},
+			},
+		},
 	}
 }
 
