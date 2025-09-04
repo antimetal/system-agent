@@ -177,27 +177,27 @@ func TestBuilder_BuildFromSnapshot(t *testing.T) {
 	// Count resource types
 	resourceCounts := make(map[string]int)
 	for _, r := range testStore.resources {
-		resourceCounts[r.Type.Kind]++
+		resourceCounts[r.Type.Type]++
 	}
 
 	// Verify expected resource types
-	assert.Equal(t, 1, resourceCounts["SystemNode"], "Should have 1 system node")
-	assert.Equal(t, 1, resourceCounts["CPUPackageNode"], "Should have 1 CPU package")
-	assert.Equal(t, 2, resourceCounts["CPUCoreNode"], "Should have 2 CPU cores")
-	assert.Equal(t, 1, resourceCounts["MemoryModuleNode"], "Should have 1 memory module")
-	assert.Equal(t, 1, resourceCounts["NUMANode"], "Should have 1 NUMA node")
-	assert.Equal(t, 1, resourceCounts["DiskDeviceNode"], "Should have 1 disk device")
-	assert.Equal(t, 1, resourceCounts["DiskPartitionNode"], "Should have 1 disk partition")
-	assert.Equal(t, 1, resourceCounts["NetworkInterfaceNode"], "Should have 1 network interface")
+	assert.Equal(t, 1, resourceCounts["antimetal.hardware.v1.SystemNode"], "Should have 1 system node")
+	assert.Equal(t, 1, resourceCounts["antimetal.hardware.v1.CPUPackageNode"], "Should have 1 CPU package")
+	assert.Equal(t, 2, resourceCounts["antimetal.hardware.v1.CPUCoreNode"], "Should have 2 CPU cores")
+	assert.Equal(t, 1, resourceCounts["antimetal.hardware.v1.MemoryModuleNode"], "Should have 1 memory module")
+	assert.Equal(t, 1, resourceCounts["antimetal.hardware.v1.NUMANode"], "Should have 1 NUMA node")
+	assert.Equal(t, 1, resourceCounts["antimetal.hardware.v1.DiskDeviceNode"], "Should have 1 disk device")
+	assert.Equal(t, 1, resourceCounts["antimetal.hardware.v1.DiskPartitionNode"], "Should have 1 disk partition")
+	assert.Equal(t, 1, resourceCounts["antimetal.hardware.v1.NetworkInterfaceNode"], "Should have 1 network interface")
 
 	// Verify relationships were created
 	relationshipCounts := make(map[string]int)
 	for _, r := range testStore.relationships {
-		relationshipCounts[r.Type.Kind]++
+		relationshipCounts[r.Type.Type]++
 	}
 
-	assert.Greater(t, relationshipCounts["Contains"], 0, "Should have containment relationships")
-	assert.Greater(t, relationshipCounts["BelongsToNUMA"], 0, "Should have NUMA affinity relationships")
+	assert.Greater(t, relationshipCounts["antimetal.hardware.v1.Contains"], 0, "Should have containment relationships")
+	assert.Greater(t, relationshipCounts["antimetal.hardware.v1.NUMAAffinity"], 0, "Should have NUMA affinity relationships")
 
 	// Verify specific resource details
 	for _, r := range testStore.resources {
@@ -206,22 +206,22 @@ func TestBuilder_BuildFromSnapshot(t *testing.T) {
 		assert.NotNil(t, r.Spec)
 
 		// Verify the spec can be unmarshaled based on type
-		switch r.Type.Kind {
-		case "CPUPackageNode":
+		switch r.Type.Type {
+		case "antimetal.hardware.v1.CPUPackageNode":
 			var spec hardwarev1.CPUPackageNode
 			err := anypb.UnmarshalTo(r.Spec, &spec, proto.UnmarshalOptions{})
 			require.NoError(t, err)
 			assert.Equal(t, "GenuineIntel", spec.VendorId)
 			assert.Equal(t, int32(2), spec.PhysicalCores)
 			assert.Equal(t, int32(2), spec.LogicalCores)
-		case "DiskDeviceNode":
+		case "antimetal.hardware.v1.DiskDeviceNode":
 			var spec hardwarev1.DiskDeviceNode
 			err := anypb.UnmarshalTo(r.Spec, &spec, proto.UnmarshalOptions{})
 			require.NoError(t, err)
 			assert.Equal(t, "nvme0n1", spec.Device)
 			assert.Equal(t, uint64(107374182400), spec.SizeBytes)
 			assert.False(t, spec.Rotational)
-		case "NetworkInterfaceNode":
+		case "antimetal.hardware.v1.NetworkInterfaceNode":
 			var spec hardwarev1.NetworkInterfaceNode
 			err := anypb.UnmarshalTo(r.Spec, &spec, proto.UnmarshalOptions{})
 			require.NoError(t, err)
@@ -252,7 +252,7 @@ func TestBuilder_BuildFromSnapshot_EmptySnapshot(t *testing.T) {
 
 	// Should have at least the system node
 	assert.Equal(t, 1, len(testStore.resources), "Should have created system node")
-	assert.Equal(t, "SystemNode", testStore.resources[0].Type.Kind)
+	assert.Equal(t, "resource.v1.Resource", testStore.resources[0].Type.Kind)
 }
 
 func TestBuilder_BuildFromSnapshot_PartialData(t *testing.T) {
@@ -297,12 +297,12 @@ func TestBuilder_BuildFromSnapshot_PartialData(t *testing.T) {
 	// Verify resources were created
 	resourceCounts := make(map[string]int)
 	for _, r := range testStore.resources {
-		resourceCounts[r.Type.Kind]++
+		resourceCounts[r.Type.Type]++
 	}
 
-	assert.Equal(t, 1, resourceCounts["SystemNode"], "Should have 1 system node")
-	assert.Equal(t, 1, resourceCounts["CPUPackageNode"], "Should have 1 CPU package")
-	assert.Equal(t, 2, resourceCounts["CPUCoreNode"], "Should have 2 CPU cores")
-	assert.Equal(t, 0, resourceCounts["MemoryModuleNode"], "Should have no memory module")
-	assert.Equal(t, 0, resourceCounts["DiskDeviceNode"], "Should have no disk devices")
+	assert.Equal(t, 1, resourceCounts["antimetal.hardware.v1.SystemNode"], "Should have 1 system node")
+	assert.Equal(t, 1, resourceCounts["antimetal.hardware.v1.CPUPackageNode"], "Should have 1 CPU package")
+	assert.Equal(t, 2, resourceCounts["antimetal.hardware.v1.CPUCoreNode"], "Should have 2 CPU cores")
+	assert.Equal(t, 0, resourceCounts["antimetal.hardware.v1.MemoryModuleNode"], "Should have no memory module")
+	assert.Equal(t, 0, resourceCounts["antimetal.hardware.v1.DiskDeviceNode"], "Should have no disk devices")
 }
