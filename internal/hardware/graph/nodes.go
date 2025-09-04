@@ -19,6 +19,7 @@ import (
 
 	hardwarev1 "github.com/antimetal/agent/pkg/api/antimetal/hardware/v1"
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
+	"github.com/antimetal/agent/pkg/host"
 	"github.com/antimetal/agent/pkg/kernel"
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/antimetal/agent/pkg/proc"
@@ -101,36 +102,6 @@ func getOSInfo() string {
 	return "Linux" // Fallback
 }
 
-// getMachineID reads the OS-specific machine ID from /etc/machine-id
-// This is distinct from the hardware UUID and hostname
-func getMachineID() string {
-	// Try /etc/machine-id (OS-specific identifier)
-	if data, err := os.ReadFile("/etc/machine-id"); err == nil {
-		if id := strings.TrimSpace(string(data)); id != "" {
-			return id
-		}
-	}
-
-	// Fall back to system UUID if machine-id not available
-	if data, err := os.ReadFile("/sys/class/dmi/id/product_uuid"); err == nil {
-		if uuid := strings.TrimSpace(string(data)); uuid != "" {
-			return uuid
-		}
-	}
-
-	return "unknown"
-}
-
-// getSystemUUID reads the hardware UUID from DMI
-func getSystemUUID() string {
-	// Try /sys/class/dmi/id/product_uuid (hardware-based, requires root)
-	if data, err := os.ReadFile("/sys/class/dmi/id/product_uuid"); err == nil {
-		if uuid := strings.TrimSpace(string(data)); uuid != "" {
-			return uuid
-		}
-	}
-	return ""
-}
 
 // createSystemNode creates the root system node representing the machine
 func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
@@ -138,10 +109,10 @@ func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.Resource
 	arch, bootTime, kernelVersion, osInfo := b.getSystemInfo()
 
 	// Get machine ID for unique identification (OS-specific)
-	machineID := getMachineID()
+	machineID := host.GetMachineID()
 
 	// Get system UUID (hardware-specific)
-	systemUUID := getSystemUUID()
+	systemUUID := host.GetSystemUUID()
 
 	// Get hostname (network identifier)
 	hostname, err := os.Hostname()
