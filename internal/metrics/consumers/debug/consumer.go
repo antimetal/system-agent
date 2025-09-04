@@ -49,10 +49,6 @@ type Consumer struct {
 }
 
 func NewConsumer(config Config, logger logr.Logger) (*Consumer, error) {
-	if !config.Enabled {
-		return nil, nil // Return nil if disabled
-	}
-
 	// Validate configuration
 	if err := config.Validate(); err != nil {
 		return nil, err
@@ -393,11 +389,6 @@ func (c *Consumer) logFinalStats(stats *ConsumerStats) {
 // NewConsumerFromConfig creates a consumer from configuration
 // Returns nil if Debug consumer is disabled in config
 func NewConsumerFromConfig(config Config, logger logr.Logger) (*Consumer, error) {
-	if !config.Enabled {
-		logger.V(1).Info("Debug consumer is disabled")
-		return nil, nil
-	}
-
 	consumer, err := NewConsumer(config, logger)
 	if err != nil {
 		return nil, err

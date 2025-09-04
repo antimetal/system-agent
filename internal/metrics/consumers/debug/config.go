@@ -56,8 +56,6 @@ func (f LogFormat) IsValid() bool {
 }
 
 type Config struct {
-	Enabled bool
-
 	// LogLevel determines the verbosity of debug output
 	LogLevel LogLevel
 
@@ -78,7 +76,6 @@ type Config struct {
 // DefaultConfig returns a sensible default configuration
 func DefaultConfig() Config {
 	return Config{
-		Enabled:          true,
 		LogLevel:         LogLevelDetails, // Include basic details
 		LogFormat:        LogFormatText,
 		IncludeTimestamp: true,

@@ -4,10 +4,6 @@
 // LICENSE file or at:
 // https://polyformproject.org/wp-content/uploads/2020/06/PolyForm-Shield-1.0.0.txt
 
-// PolyForm Shield License 1.0.0
-// This file is licensed under the PolyForm Shield License 1.0.0.
-// See the LICENSE file in the root of this repository for details.
-
 package store
 
 import "github.com/go-logr/logr"
