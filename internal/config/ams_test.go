@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/antimetal/agent/internal/config"
 	"github.com/antimetal/agent/internal/config/internal/mock"
@@ -24,8 +25,8 @@ import (
 
 var hostStatsType = string((&agentv1.HostStatsCollectionConfig{}).ProtoReflect().Descriptor().FullName())
 
-func createTestPbConfig(name, version, typeUrl string, data []byte) *typesv1.Object {
-	return &typesv1.Object{
+func createTestPbConfig(name, version, typeUrl string, data []byte, ttl time.Duration) *typesv1.Object {
+	obj := &typesv1.Object{
 		Name:    name,
 		Version: version,
 		Type: &typesv1.TypeDescriptor{
@@ -33,6 +34,10 @@ func createTestPbConfig(name, version, typeUrl string, data []byte) *typesv1.Obj
 		},
 		Data: data,
 	}
+	if ttl > 0 {
+		obj.Ttl = durationpb.New(ttl)
+	}
+	return obj
 }
 
 func createMockAMSServer(t *testing.T, svc *mock.AgentManagementService) (*grpc.ClientConn, func()) {
@@ -160,8 +165,8 @@ func TestAMSLoader_ListConfigs(t *testing.T) {
 		{
 			name: "list all configs with no filters",
 			configsToCache: []*typesv1.Object{
-				createTestPbConfig("config1", "1", hostStatsType, config1Data),
-				createTestPbConfig("config2", "1", hostStatsType, config2Data),
+				createTestPbConfig("config1", "1", hostStatsType, config1Data, 0),
+				createTestPbConfig("config2", "1", hostStatsType, config2Data, 0),
 			},
 			filters:        config.Filters{},
 			expectedTypes:  []string{hostStatsType},
@@ -173,8 +178,8 @@ func TestAMSLoader_ListConfigs(t *testing.T) {
 		{
 			name: "filter by specific type",
 			configsToCache: []*typesv1.Object{
-				createTestPbConfig("config1", "1", hostStatsType, config1Data),
-				createTestPbConfig("config2", "1", "other.Type", config2Data),
+				createTestPbConfig("config1", "1", hostStatsType, config1Data, 0),
+				createTestPbConfig("config2", "1", "other.Type", config2Data, 0),
 			},
 			filters: config.Filters{
 				Types: []string{hostStatsType},
@@ -188,8 +193,8 @@ func TestAMSLoader_ListConfigs(t *testing.T) {
 		{
 			name: "filter by status - only valid configs",
 			configsToCache: []*typesv1.Object{
-				createTestPbConfig("valid-config", "1", hostStatsType, config1Data),
-				createTestPbConfig("invalid-config", "1", hostStatsType, []byte("invalid-data")),
+				createTestPbConfig("valid-config", "1", hostStatsType, config1Data, 0),
+				createTestPbConfig("invalid-config", "1", hostStatsType, []byte("invalid-data"), 0),
 			},
 			filters: config.Filters{
 				Status: config.StatusOK,
@@ -203,8 +208,8 @@ func TestAMSLoader_ListConfigs(t *testing.T) {
 		{
 			name: "filter by status - include both valid and invalid",
 			configsToCache: []*typesv1.Object{
-				createTestPbConfig("valid-config", "1", hostStatsType, config1Data),
-				createTestPbConfig("invalid-config", "1", hostStatsType, []byte("invalid-data")),
+				createTestPbConfig("valid-config", "1", hostStatsType, config1Data, 0),
+				createTestPbConfig("invalid-config", "1", hostStatsType, []byte("invalid-data"), 0),
 			},
 			filters: config.Filters{
 				Status: config.StatusOK | config.StatusInvalid,
@@ -218,9 +223,9 @@ func TestAMSLoader_ListConfigs(t *testing.T) {
 		{
 			name: "combined type and status filters",
 			configsToCache: []*typesv1.Object{
-				createTestPbConfig("config1", "1", hostStatsType, config1Data),
-				createTestPbConfig("config2", "1", "other.Type", config2Data),
-				createTestPbConfig("config3", "1", hostStatsType, []byte("invalid-data")),
+				createTestPbConfig("config1", "1", hostStatsType, config1Data, 0),
+				createTestPbConfig("config2", "1", "other.Type", config2Data, 0),
+				createTestPbConfig("config3", "1", hostStatsType, []byte("invalid-data"), 0),
 			},
 			filters: config.Filters{
 				Types:  []string{hostStatsType},
@@ -243,7 +248,7 @@ func TestAMSLoader_ListConfigs(t *testing.T) {
 		{
 			name: "no matching configs after filtering",
 			configsToCache: []*typesv1.Object{
-				createTestPbConfig("config1", "1", "other.Type", config1Data),
+				createTestPbConfig("config1", "1", "other.Type", config1Data, 0),
 			},
 			filters: config.Filters{
 				Types: []string{hostStatsType},
@@ -320,7 +325,7 @@ func TestAMSLoader_GetConfig(t *testing.T) {
 		{
 			name: "get existing config by type and name",
 			configsToCache: []*typesv1.Object{
-				createTestPbConfig("test-config", "1", hostStatsType, configData),
+				createTestPbConfig("test-config", "1", hostStatsType, configData, 0),
 			},
 			requestType:  hostStatsType,
 			requestName:  "test-config",
@@ -331,8 +336,8 @@ func TestAMSLoader_GetConfig(t *testing.T) {
 		{
 			name: "get config with multiple configs cached",
 			configsToCache: []*typesv1.Object{
-				createTestPbConfig("config1", "1", hostStatsType, configData),
-				createTestPbConfig("config2", "1", hostStatsType, configData),
+				createTestPbConfig("config1", "1", hostStatsType, configData, 0),
+				createTestPbConfig("config2", "1", hostStatsType, configData, 0),
 			},
 			requestType:  hostStatsType,
 			requestName:  "config2",
@@ -343,7 +348,7 @@ func TestAMSLoader_GetConfig(t *testing.T) {
 		{
 			name: "config not found - wrong name",
 			configsToCache: []*typesv1.Object{
-				createTestPbConfig("test-config", "1", hostStatsType, configData),
+				createTestPbConfig("test-config", "1", hostStatsType, configData, 0),
 			},
 			requestType: hostStatsType,
 			requestName: "nonexistent-config",
@@ -352,7 +357,7 @@ func TestAMSLoader_GetConfig(t *testing.T) {
 		{
 			name: "config not found - wrong type",
 			configsToCache: []*typesv1.Object{
-				createTestPbConfig("test-config", "1", hostStatsType, configData),
+				createTestPbConfig("test-config", "1", hostStatsType, configData, 0),
 			},
 			requestType: "nonexistent.Type",
 			requestName: "test-config",
@@ -368,7 +373,7 @@ func TestAMSLoader_GetConfig(t *testing.T) {
 		{
 			name: "get invalid config by type and name",
 			configsToCache: []*typesv1.Object{
-				createTestPbConfig("invalid-config", "1", hostStatsType, []byte("invalid-data")),
+				createTestPbConfig("invalid-config", "1", hostStatsType, []byte("invalid-data"), 0),
 			},
 			requestType:  hostStatsType,
 			requestName:  "invalid-config",
@@ -443,8 +448,8 @@ func TestAMSLoader_Watch(t *testing.T) {
 			name: "watch with no filters returns all configs",
 			updateSequence: [][]*typesv1.Object{
 				{
-					createTestPbConfig("config1", "1", hostStatsType, config1Data),
-					createTestPbConfig("config2", "1", hostStatsType, config2Data),
+					createTestPbConfig("config1", "1", hostStatsType, config1Data, 0),
+					createTestPbConfig("config2", "1", hostStatsType, config2Data, 0),
 				},
 			},
 			filters:       config.Filters{},
@@ -455,8 +460,8 @@ func TestAMSLoader_Watch(t *testing.T) {
 			name: "watch with type filter returns matching configs",
 			updateSequence: [][]*typesv1.Object{
 				{
-					createTestPbConfig("config1", "1", hostStatsType, config1Data),
-					createTestPbConfig("config2", "1", "other.Type", config2Data),
+					createTestPbConfig("config1", "1", hostStatsType, config1Data, 0),
+					createTestPbConfig("config2", "1", "other.Type", config2Data, 0),
 				},
 			},
 			filters: config.Filters{
@@ -469,8 +474,8 @@ func TestAMSLoader_Watch(t *testing.T) {
 			name: "watch with status bitmask filter returns matching configs",
 			updateSequence: [][]*typesv1.Object{
 				{
-					createTestPbConfig("config1", "1", hostStatsType, config1Data),
-					createTestPbConfig("config2", "1", hostStatsType, []byte("invalid-data")),
+					createTestPbConfig("config1", "1", hostStatsType, config1Data, 0),
+					createTestPbConfig("config2", "1", hostStatsType, []byte("invalid-data"), 0),
 				},
 			},
 			filters: config.Filters{
@@ -483,8 +488,8 @@ func TestAMSLoader_Watch(t *testing.T) {
 			name: "watch with combined status bitmask filter",
 			updateSequence: [][]*typesv1.Object{
 				{
-					createTestPbConfig("config1", "1", hostStatsType, config1Data),
-					createTestPbConfig("config2", "1", hostStatsType, []byte("invalid-data")),
+					createTestPbConfig("config1", "1", hostStatsType, config1Data, 0),
+					createTestPbConfig("config2", "1", hostStatsType, []byte("invalid-data"), 0),
 				},
 			},
 			filters: config.Filters{
@@ -497,9 +502,9 @@ func TestAMSLoader_Watch(t *testing.T) {
 			name: "watch with multiple type filters",
 			updateSequence: [][]*typesv1.Object{
 				{
-					createTestPbConfig("config1", "1", hostStatsType, config1Data),
-					createTestPbConfig("config2", "1", "other.Type", config2Data),
-					createTestPbConfig("config3", "1", "third.Type", config1Data),
+					createTestPbConfig("config1", "1", hostStatsType, config1Data, 0),
+					createTestPbConfig("config2", "1", "other.Type", config2Data, 0),
+					createTestPbConfig("config3", "1", "third.Type", config1Data, 0),
 				},
 			},
 			filters: config.Filters{
@@ -519,8 +524,8 @@ func TestAMSLoader_Watch(t *testing.T) {
 		{
 			name: "watch receives config update",
 			updateSequence: [][]*typesv1.Object{
-				{createTestPbConfig("config1", "1", hostStatsType, config1Data)},
-				{createTestPbConfig("config1", "2", hostStatsType, config1UpdatedData)},
+				{createTestPbConfig("config1", "1", hostStatsType, config1Data, 0)},
+				{createTestPbConfig("config1", "2", hostStatsType, config1UpdatedData, 0)},
 			},
 			filters:       config.Filters{},
 			expectedCount: 2,
@@ -529,8 +534,8 @@ func TestAMSLoader_Watch(t *testing.T) {
 		{
 			name: "watch receives new config via update",
 			updateSequence: [][]*typesv1.Object{
-				{createTestPbConfig("config1", "1", hostStatsType, config1Data)},
-				{createTestPbConfig("config2", "1", hostStatsType, config2Data)},
+				{createTestPbConfig("config1", "1", hostStatsType, config1Data, 0)},
+				{createTestPbConfig("config2", "1", hostStatsType, config2Data, 0)},
 			},
 			filters:       config.Filters{},
 			expectedCount: 2,
@@ -539,10 +544,10 @@ func TestAMSLoader_Watch(t *testing.T) {
 		{
 			name: "watch receives multiple configs in single update",
 			updateSequence: [][]*typesv1.Object{
-				{createTestPbConfig("config1", "1", hostStatsType, config1Data)},
+				{createTestPbConfig("config1", "1", hostStatsType, config1Data, 0)},
 				{
-					createTestPbConfig("config1", "2", hostStatsType, config1UpdatedData),
-					createTestPbConfig("config2", "1", hostStatsType, config2Data),
+					createTestPbConfig("config1", "2", hostStatsType, config1UpdatedData, 0),
+					createTestPbConfig("config2", "1", hostStatsType, config2Data, 0),
 				},
 			},
 			filters:       config.Filters{},
@@ -552,9 +557,9 @@ func TestAMSLoader_Watch(t *testing.T) {
 		{
 			name: "watch receives multiple sequential updates",
 			updateSequence: [][]*typesv1.Object{
-				{createTestPbConfig("config1", "1", hostStatsType, config1Data)},
-				{createTestPbConfig("config2", "1", hostStatsType, config2Data)},
-				{createTestPbConfig("config1", "2", hostStatsType, config1UpdatedData)},
+				{createTestPbConfig("config1", "1", hostStatsType, config1Data, 0)},
+				{createTestPbConfig("config2", "1", hostStatsType, config2Data, 0)},
+				{createTestPbConfig("config1", "2", hostStatsType, config1UpdatedData, 0)},
 			},
 			filters:       config.Filters{},
 			expectedCount: 3,
@@ -563,8 +568,8 @@ func TestAMSLoader_Watch(t *testing.T) {
 		{
 			name: "watch receives updates with no initial configs",
 			updateSequence: [][]*typesv1.Object{
-				{createTestPbConfig("config1", "1", hostStatsType, config1Data)},
-				{createTestPbConfig("config2", "1", hostStatsType, config2Data)},
+				{createTestPbConfig("config1", "1", hostStatsType, config1Data, 0)},
+				{createTestPbConfig("config2", "1", hostStatsType, config2Data, 0)},
 			},
 			filters:       config.Filters{},
 			expectedCount: 2,
@@ -573,8 +578,8 @@ func TestAMSLoader_Watch(t *testing.T) {
 		{
 			name: "watch receives invalid config update",
 			updateSequence: [][]*typesv1.Object{
-				{createTestPbConfig("config1", "1", hostStatsType, config1Data)},
-				{createTestPbConfig("config1", "2", hostStatsType, []byte("invalid-data"))},
+				{createTestPbConfig("config1", "1", hostStatsType, config1Data, 0)},
+				{createTestPbConfig("config1", "2", hostStatsType, []byte("invalid-data"), 0)},
 			},
 			filters:       config.Filters{Status: config.StatusOK | config.StatusInvalid},
 			expectedCount: 2,
@@ -583,10 +588,10 @@ func TestAMSLoader_Watch(t *testing.T) {
 		{
 			name: "watch with type filter receives matching updates",
 			updateSequence: [][]*typesv1.Object{
-				{createTestPbConfig("config1", "1", hostStatsType, config1Data)},
+				{createTestPbConfig("config1", "1", hostStatsType, config1Data, 0)},
 				{
-					createTestPbConfig("config1", "2", hostStatsType, config1UpdatedData),
-					createTestPbConfig("config2", "1", "other.Type", config2Data),
+					createTestPbConfig("config1", "2", hostStatsType, config1UpdatedData, 0),
+					createTestPbConfig("config2", "1", "other.Type", config2Data, 0),
 				},
 			},
 			filters: config.Filters{
@@ -598,8 +603,8 @@ func TestAMSLoader_Watch(t *testing.T) {
 		{
 			name: "invalid version",
 			updateSequence: [][]*typesv1.Object{
-				{createTestPbConfig("config1", "2", hostStatsType, config1Data)},
-				{createTestPbConfig("config1", "1", hostStatsType, config1UpdatedData)},
+				{createTestPbConfig("config1", "2", hostStatsType, config1Data, 0)},
+				{createTestPbConfig("config1", "1", hostStatsType, config1UpdatedData, 0)},
 			},
 			filters:       config.Filters{Status: config.StatusInvalid},
 			expectedCount: 1,
@@ -608,8 +613,8 @@ func TestAMSLoader_Watch(t *testing.T) {
 		{
 			name: "same version",
 			updateSequence: [][]*typesv1.Object{
-				{createTestPbConfig("config1", "1", hostStatsType, config1Data)},
-				{createTestPbConfig("config1", "1", hostStatsType, config1UpdatedData)},
+				{createTestPbConfig("config1", "1", hostStatsType, config1Data, 0)},
+				{createTestPbConfig("config1", "1", hostStatsType, config1UpdatedData, 0)},
 			},
 			filters:       config.Filters{Status: config.StatusOK},
 			expectedCount: 2,
@@ -704,8 +709,8 @@ func TestAMSLoader_InitialConfigsOnStreamRecreation(t *testing.T) {
 		{
 			name: "initial configs sent on stream recreation",
 			initialConfigs: []*typesv1.Object{
-				createTestPbConfig("config1", "1", hostStatsType, config1Data),
-				createTestPbConfig("config2", "1", hostStatsType, config2Data),
+				createTestPbConfig("config1", "1", hostStatsType, config1Data, 0),
+				createTestPbConfig("config2", "1", hostStatsType, config2Data, 0),
 			},
 			maxStreamAge:               300 * time.Millisecond,
 			testDuration:               350 * time.Millisecond,
@@ -715,7 +720,7 @@ func TestAMSLoader_InitialConfigsOnStreamRecreation(t *testing.T) {
 		{
 			name: "single config sent",
 			initialConfigs: []*typesv1.Object{
-				createTestPbConfig("config1", "1", hostStatsType, config1Data),
+				createTestPbConfig("config1", "1", hostStatsType, config1Data, 0),
 			},
 			maxStreamAge:               250 * time.Millisecond,
 			testDuration:               550 * time.Millisecond,
@@ -733,10 +738,10 @@ func TestAMSLoader_InitialConfigsOnStreamRecreation(t *testing.T) {
 		{
 			name: "receive new config after stream recreation",
 			initialConfigs: []*typesv1.Object{
-				createTestPbConfig("config1", "1", hostStatsType, config1Data),
+				createTestPbConfig("config1", "1", hostStatsType, config1Data, 0),
 			},
 			updateConfigs: []*typesv1.Object{
-				createTestPbConfig("config2", "1", hostStatsType, config2Data),
+				createTestPbConfig("config2", "1", hostStatsType, config2Data, 0),
 			},
 			maxStreamAge:               700 * time.Millisecond,
 			testDuration:               750 * time.Millisecond,
@@ -815,6 +820,113 @@ func TestAMSLoader_InitialConfigsOnStreamRecreation(t *testing.T) {
 				assert.Equal(t, expectedFinalCount, totalConfigs,
 					"All configs should remain accessible after stream recreations")
 			}
+		})
+	}
+}
+
+func TestAMSLoader_TTLPruning(t *testing.T) {
+	hostStatsConfig := &agentv1.HostStatsCollectionConfig{Collector: "cpu", IntervalSeconds: 30}
+	configData, err := proto.Marshal(hostStatsConfig)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name              string
+		configsToSend     []*typesv1.Object
+		expectedPruned    []string
+		expectedRemaining []string
+		waitTime          time.Duration
+	}{
+		{
+			name: "config with TTL gets pruned after expiry",
+			configsToSend: []*typesv1.Object{
+				createTestPbConfig("test-config", "1", hostStatsType, configData, 100*time.Millisecond),
+			},
+			expectedPruned:    []string{"test-config"},
+			expectedRemaining: []string{},
+			waitTime:          200 * time.Millisecond,
+		},
+		{
+			name: "config TTL disabled by setting new version TTL to 0",
+			configsToSend: []*typesv1.Object{
+				createTestPbConfig("test-config", "1", hostStatsType, configData, 100*time.Millisecond),
+				createTestPbConfig("test-config", "2", hostStatsType, configData, 0),
+			},
+			expectedPruned:    []string{},
+			expectedRemaining: []string{"test-config"},
+			waitTime:          200 * time.Millisecond,
+		},
+		{
+			name: "config TTL updated when new version has different TTL > 0",
+			configsToSend: []*typesv1.Object{
+				createTestPbConfig("test-config", "1", hostStatsType, configData, 50*time.Millisecond),
+				createTestPbConfig("test-config", "2", hostStatsType, configData, 500*time.Millisecond),
+			},
+			expectedPruned:    []string{},
+			expectedRemaining: []string{"test-config"},
+			waitTime:          100 * time.Millisecond,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			mockService := mock.NewAgentManagementService(mock.AgentManagementServiceOptions{
+				StreamFailures: 0,
+				StreamDuration: 0,
+				KeepAlive:      true,
+			})
+
+			conn, cleanup := createMockAMSServer(t, mockService)
+			instance := &agentv1.Instance{Id: []byte("test-instance")}
+
+			loader, err := config.NewAMSLoader(conn, config.WithInstance(instance))
+			require.NoError(t, err)
+
+			t.Cleanup(func() {
+				loader.Close()
+				cleanup()
+			})
+
+			watchCh := loader.Watch(config.Options{Filters: config.Filters{Status: config.StatusOK | config.StatusInvalid}})
+
+			var expiredConfigs []config.Instance
+
+			for _, cfg := range tt.configsToSend {
+				mockService.SendUpdates([]*typesv1.Object{cfg})
+				time.Sleep(20 * time.Millisecond)
+			}
+
+			timeout := time.After(tt.waitTime + 100*time.Millisecond)
+
+		collectLoop:
+			for {
+				select {
+				case cfg := <-watchCh:
+					if cfg.Expired {
+						expiredConfigs = append(expiredConfigs, cfg)
+					}
+				case <-timeout:
+					break collectLoop
+				}
+			}
+
+			expiredNames := make([]string, len(expiredConfigs))
+			for i, cfg := range expiredConfigs {
+				expiredNames[i] = cfg.Name
+			}
+			assert.ElementsMatch(t, tt.expectedPruned, expiredNames, "Should prune expected configs")
+
+			remainingConfigs, err := loader.ListConfigs(config.Options{})
+			require.NoError(t, err)
+
+			var remainingNames []string
+			for _, instances := range remainingConfigs {
+				for _, instance := range instances {
+					remainingNames = append(remainingNames, instance.Name)
+				}
+			}
+			assert.ElementsMatch(t, tt.expectedRemaining, remainingNames, "Should keep expected configs")
 		})
 	}
 }
