@@ -33,10 +33,10 @@ import (
 	k8sagent "github.com/antimetal/agent/internal/kubernetes/agent"
 	"github.com/antimetal/agent/internal/kubernetes/cluster"
 	"github.com/antimetal/agent/internal/kubernetes/scheme"
+	"github.com/antimetal/agent/internal/metrics"
+	"github.com/antimetal/agent/internal/metrics/consumers/debug"
+	"github.com/antimetal/agent/internal/metrics/consumers/otel"
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
-	"github.com/antimetal/agent/pkg/metrics"
-	"github.com/antimetal/agent/pkg/metrics/consumers/debug"
-	"github.com/antimetal/agent/pkg/observability/otel"
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/antimetal/agent/pkg/resource/store"
 )

@@ -17,12 +17,6 @@ const (
 	LogLevelVerbose LogLevel = 2 // include full event data and attributes
 )
 
-// Common errors
-var (
-	ErrInvalidLogLevel  = fmt.Errorf("log level must be basic (%d), details (%d), or verbose (%d)", LogLevelBasic, LogLevelDetails, LogLevelVerbose)
-	ErrInvalidLogFormat = fmt.Errorf("log format must be '%s' or '%s'", LogFormatJSON, LogFormatText)
-)
-
 // String returns the string representation of the log level
 func (l LogLevel) String() string {
 	switch l {
@@ -56,6 +50,8 @@ func (f LogFormat) IsValid() bool {
 }
 
 type Config struct {
+	Enabled bool
+
 	// LogLevel determines the verbosity of debug output
 	LogLevel LogLevel
 
@@ -76,6 +72,7 @@ type Config struct {
 // DefaultConfig returns a sensible default configuration
 func DefaultConfig() Config {
 	return Config{
+		Enabled:          false,           // Disabled by default
 		LogLevel:         LogLevelDetails, // Include basic details
 		LogFormat:        LogFormatText,
 		IncludeTimestamp: true,
@@ -128,3 +125,9 @@ func (c *Config) ShouldLogSource(source string) bool {
 	}
 	return false
 }
+
+// Common errors
+var (
+	ErrInvalidLogLevel  = fmt.Errorf("log level must be basic (%d), details (%d), or verbose (%d)", LogLevelBasic, LogLevelDetails, LogLevelVerbose)
+	ErrInvalidLogFormat = fmt.Errorf("log format must be '%s' or '%s'", LogFormatJSON, LogFormatText)
+)

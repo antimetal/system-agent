@@ -11,7 +11,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/antimetal/agent/pkg/metrics"
+	"github.com/antimetal/agent/internal/metrics"
 	"github.com/go-logr/logr"
 )
 
