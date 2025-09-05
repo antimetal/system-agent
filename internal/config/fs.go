@@ -34,6 +34,7 @@ type FSLoader struct {
 	subs     subscriptions
 
 	cache map[string]Instance
+	files map[string]string
 }
 
 func NewFSLoader(basePath string, logger logr.Logger) (*FSLoader, error) {
@@ -60,6 +61,7 @@ func NewFSLoader(basePath string, logger logr.Logger) (*FSLoader, error) {
 		logger:   fsLogger,
 		done:     make(chan struct{}, 1),
 		cache:    make(map[string]Instance),
+		files:    make(map[string]string),
 	}
 
 	// Scan existing files to populate cache.
@@ -191,8 +193,11 @@ func (fl *FSLoader) handleEvent(event fsnotify.Event) {
 
 	fl.logger.V(1).Info("received file event", "file", event.Name, "op", event.Op)
 
-	if event.Has(fsnotify.Create) || event.Has(fsnotify.Write) {
+	switch {
+	case event.Has(fsnotify.Create) || event.Has(fsnotify.Write):
 		fl.processConfigFile(event.Name)
+	case event.Has(fsnotify.Remove):
+		fl.handleFileDelete(event.Name)
 	}
 }
 
@@ -206,7 +211,30 @@ func (fl *FSLoader) processConfigFile(filename string) {
 	if err != nil {
 		fl.logger.Error(err, "failed to load config file", "path", filename)
 	}
-	// Always send instance to subscriptions, even if invalid
+	fl.subs.send(instance)
+}
+
+func (fl *FSLoader) handleFileDelete(filename string) {
+	fl.mu.Lock()
+	defer fl.mu.Unlock()
+
+	cacheKey, exists := fl.files[filename]
+	if !exists {
+		fl.logger.V(1).Info("file not found", "file", filename)
+		return
+	}
+
+	instance, found := fl.cache[cacheKey]
+	if !found {
+		fl.logger.V(1).Info("config not found in cache", "file", filename, "cacheKey", cacheKey)
+		return
+	}
+
+	instance.Expired = true
+
+	delete(fl.cache, cacheKey)
+	delete(fl.files, filename)
+
 	fl.subs.send(instance)
 }
 
@@ -234,6 +262,7 @@ func (fl *FSLoader) loadConfigFile(filename string) (Instance, error) {
 
 	if parseErr == nil || prevInstance.Object == nil {
 		fl.cache[cacheKey] = instance
+		fl.files[filename] = cacheKey
 	}
 
 	return instance, parseErr

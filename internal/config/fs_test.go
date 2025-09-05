@@ -186,7 +186,7 @@ func TestFSLoader_Watch(t *testing.T) {
 
 			fl, err := config.NewFSLoader(tempDir, logger)
 			require.NoError(t, err)
-			defer fl.Close()
+			t.Cleanup(func() { fl.Close() })
 
 			instanceCh := fl.Watch(config.Options{})
 
@@ -236,7 +236,7 @@ func TestFSLoader_ListConfigs(t *testing.T) {
 
 	fl, err := config.NewFSLoader(tempDir, logger)
 	require.NoError(t, err)
-	defer fl.Close()
+	t.Cleanup(func() { fl.Close() })
 
 	configs, err := fl.ListConfigs(config.Options{})
 	require.NoError(t, err)
@@ -270,7 +270,7 @@ func TestFSLoader_GetConfig(t *testing.T) {
 
 	fl, err := config.NewFSLoader(tempDir, logger)
 	require.NoError(t, err)
-	defer fl.Close()
+	t.Cleanup(func() { fl.Close() })
 
 	hostStatsTypeName := string((&agentv1.HostStatsCollectionConfig{}).ProtoReflect().Descriptor().FullName())
 	instance, err := fl.GetConfig(hostStatsTypeName, "config1")
@@ -341,7 +341,7 @@ func TestFSLoader_FileChangeSubscription(t *testing.T) {
 
 			fl, err := config.NewFSLoader(tempDir, logger)
 			require.NoError(t, err)
-			defer fl.Close()
+			t.Cleanup(func() { fl.Close() })
 
 			instanceCh := fl.Watch(config.Options{})
 
@@ -377,4 +377,49 @@ func TestFSLoader_FileChangeSubscription(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFSLoader_FileDeleteSubscription(t *testing.T) {
+	t.Parallel()
+	logger := testr.New(t)
+	tempDir := t.TempDir()
+	configFile := filepath.Join(tempDir, "config1.json")
+
+	initialConfig := createHostStatsJSON("config1", "cpu")
+	err := os.WriteFile(configFile, []byte(initialConfig), 0644)
+	require.NoError(t, err)
+
+	fl, err := config.NewFSLoader(tempDir, logger)
+	require.NoError(t, err)
+	t.Cleanup(func() { fl.Close() })
+
+	instanceCh := fl.Watch(config.Options{})
+
+	// Drain initial config from subscription (loaded at startup)
+	select {
+	case initialInstance := <-instanceCh:
+		assert.Equal(t, config.StatusOK, initialInstance.Status)
+		assert.Equal(t, "config1", initialInstance.Name)
+		assert.False(t, initialInstance.Expired)
+	case <-time.After(1 * time.Second):
+		t.Fatal("timeout waiting for initial config")
+	}
+
+	// Delete the config file
+	err = os.Remove(configFile)
+	require.NoError(t, err)
+
+	// Should receive expired config via subscription
+	select {
+	case expiredInstance := <-instanceCh:
+		assert.Equal(t, "config1", expiredInstance.Name)
+		assert.True(t, expiredInstance.Expired, "Instance should be marked as expired")
+		assert.NotNil(t, expiredInstance.Object, "Object should still be present in expired instance")
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for expired config via subscription")
+	}
+
+	// Verify config is removed from cache
+	_, err = fl.GetConfig(string((&agentv1.HostStatsCollectionConfig{}).ProtoReflect().Descriptor().FullName()), "config1")
+	assert.Error(t, err, "Config should not be found in cache after deletion")
 }
