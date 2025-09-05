@@ -9,6 +9,7 @@ package config
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -28,10 +29,14 @@ import (
 )
 
 const (
-	headerAuthorize         = "authorization"
-	defaultMaxStreamAge     = 10 * time.Minute
-	streamRestartBackoffMax = 30 * time.Second
+	headerAuthorize     = "authorization"
+	defaultMaxStreamAge = 10 * time.Minute
 )
+
+type ttlIdxNode struct {
+	cacheKey string
+	ttl      time.Time
+}
 
 type AMSLoader struct {
 	apiKey       string
@@ -45,6 +50,8 @@ type AMSLoader struct {
 	subs       subscriptions
 	cache      map[string]Instance
 	cacheMu    sync.RWMutex
+	ttlIdx     []*ttlIdxNode
+	ttlIdxMu   sync.Mutex
 	cancel     context.CancelFunc
 	lastSeqNum string
 	closeOnce  sync.Once
@@ -108,6 +115,12 @@ func NewAMSLoader(conn *grpc.ClientConn, opts ...AMSLoaderOpts) (*AMSLoader, err
 	go func() {
 		defer l.wg.Done()
 		l.manageStream(ctx)
+	}()
+
+	l.wg.Add(1)
+	go func() {
+		defer l.wg.Done()
+		l.manageTTLPruning(ctx)
 	}()
 
 	return l, nil
@@ -186,6 +199,30 @@ func (l *AMSLoader) manageStream(ctx context.Context) {
 			return
 		default:
 			l.runStream(ctx)
+		}
+	}
+}
+
+func (l *AMSLoader) manageTTLPruning(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			prunedConfigs := l.pruneTTLIdx()
+			if len(prunedConfigs) == 0 {
+				continue
+			}
+
+			l.cacheMu.Lock()
+			for _, cacheKey := range prunedConfigs {
+				if instance, exists := l.cache[cacheKey]; exists {
+					instance.Expired = true
+					delete(l.cache, cacheKey)
+					l.subs.send(instance)
+				}
+			}
+			l.cacheMu.Unlock()
 		}
 	}
 }
@@ -348,6 +385,7 @@ func (l *AMSLoader) processConfig(obj *typesv1.Object) (Instance, error) {
 	cacheKey := l.getCacheKey(instance.TypeUrl, instance.Name)
 	l.cacheMu.Lock()
 	defer l.cacheMu.Unlock()
+
 	prevInstance := l.cache[cacheKey]
 
 	compVer, err := CompareVersions(instance.Version, prevInstance.Version)
@@ -361,15 +399,122 @@ func (l *AMSLoader) processConfig(obj *typesv1.Object) (Instance, error) {
 			instance.Version, prevInstance.Version,
 		)
 	}
-	if parseErr == nil || prevInstance.Object == nil {
-		l.cache[cacheKey] = instance
+
+	// Update the cache only if it's a new config or the new config is valid
+	if parseErr != nil && prevInstance.Object != nil {
+		return instance, parseErr
 	}
+
+	l.cache[cacheKey] = instance
+
+	var ttlDuration time.Duration
+	if obj.GetTtl() != nil {
+		ttlDuration = obj.GetTtl().AsDuration()
+	}
+
+	// Don't add to ttlIdx if new config object ttl is not set
+	if ttlDuration <= 0 {
+		if prevInstance.Object != nil {
+			l.removeCfgFromTTLIdx(cacheKey)
+		}
+		return instance, parseErr
+	}
+
+	expiryTime := time.Now().Add(ttlDuration)
+
+	if prevInstance.Object == nil {
+		l.addCfgToTTLIdx(cacheKey, expiryTime)
+		return instance, parseErr
+	}
+
+	l.updateCfgInTTLIdx(cacheKey, expiryTime)
 
 	return instance, parseErr
 }
 
 func (l *AMSLoader) getCacheKey(configType, name string) string {
 	return configType + ":" + name
+}
+
+func (l *AMSLoader) addCfgToTTLIdx(name string, ttl time.Time) {
+	l.ttlIdxMu.Lock()
+	defer l.ttlIdxMu.Unlock()
+
+	newNode := &ttlIdxNode{
+		cacheKey: name,
+		ttl:      ttl,
+	}
+
+	idx, _ := slices.BinarySearchFunc(l.ttlIdx, newNode, func(a, b *ttlIdxNode) int {
+		if a.ttl.Before(b.ttl) {
+			return -1
+		}
+		if a.ttl.After(b.ttl) {
+			return 1
+		}
+		return 0
+	})
+
+	l.ttlIdx = slices.Insert(l.ttlIdx, idx, newNode)
+}
+
+func (l *AMSLoader) updateCfgInTTLIdx(name string, ttl time.Time) {
+	l.ttlIdxMu.Lock()
+	defer l.ttlIdxMu.Unlock()
+
+	for _, node := range l.ttlIdx {
+		if node.cacheKey == name {
+			node.ttl = ttl
+			break
+		}
+	}
+
+	slices.SortFunc(l.ttlIdx, func(a, b *ttlIdxNode) int {
+		if a.ttl.Before(b.ttl) {
+			return -1
+		}
+		if a.ttl.After(b.ttl) {
+			return 1
+		}
+		return 0
+	})
+}
+
+func (l *AMSLoader) removeCfgFromTTLIdx(name string) {
+	l.ttlIdxMu.Lock()
+	defer l.ttlIdxMu.Unlock()
+
+	for i, node := range l.ttlIdx {
+		if node.cacheKey == name {
+			l.ttlIdx = slices.Delete(l.ttlIdx, i, i+1)
+			return
+		}
+	}
+}
+
+func (l *AMSLoader) pruneTTLIdx() []string {
+	l.ttlIdxMu.Lock()
+	defer l.ttlIdxMu.Unlock()
+
+	now := time.Now()
+	var prunedConfigs []string
+	var pruneCount int
+
+	for i, node := range l.ttlIdx {
+		if now.After(node.ttl) {
+			pruneCount = i + 1
+			prunedConfigs = append(prunedConfigs, node.cacheKey)
+		} else {
+			break
+		}
+	}
+
+	if pruneCount > 0 {
+		// clear obsolete configs so that they can be garbage collected
+		clear(l.ttlIdx[:pruneCount])
+		l.ttlIdx = l.ttlIdx[pruneCount:]
+	}
+	return prunedConfigs
 }
 
 func instanceToPbObject(instance Instance) *typesv1.Object {
