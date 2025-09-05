@@ -7,6 +7,7 @@
 package config
 
 import (
+	"container/heap"
 	"context"
 	"fmt"
 	"sync"
@@ -28,10 +29,14 @@ import (
 )
 
 const (
-	headerAuthorize         = "authorization"
-	defaultMaxStreamAge     = 10 * time.Minute
-	streamRestartBackoffMax = 30 * time.Second
+	headerAuthorize     = "authorization"
+	defaultMaxStreamAge = 10 * time.Minute
 )
+
+type cacheEntry struct {
+	Instance   Instance
+	ttlHeapIdx int
+}
 
 type AMSLoader struct {
 	apiKey       string
@@ -43,8 +48,10 @@ type AMSLoader struct {
 	// runtime fields
 	wg         sync.WaitGroup
 	subs       subscriptions
-	cache      map[string]Instance
+	cache      map[string]*cacheEntry
 	cacheMu    sync.RWMutex
+	ttlHeap    ttlHeap
+	ttlHeapMu  sync.Mutex
 	cancel     context.CancelFunc
 	lastSeqNum string
 	closeOnce  sync.Once
@@ -84,8 +91,9 @@ func NewAMSLoader(conn *grpc.ClientConn, opts ...AMSLoaderOpts) (*AMSLoader, err
 	l := &AMSLoader{
 		client:       agentsvcv1.NewAgentManagementServiceClient(conn),
 		maxStreamAge: defaultMaxStreamAge,
-		cache:        make(map[string]Instance),
+		cache:        make(map[string]*cacheEntry),
 	}
+	heap.Init(&l.ttlHeap)
 
 	for _, opt := range opts {
 		opt(l)
@@ -110,6 +118,12 @@ func NewAMSLoader(conn *grpc.ClientConn, opts ...AMSLoaderOpts) (*AMSLoader, err
 		l.manageStream(ctx)
 	}()
 
+	l.wg.Add(1)
+	go func() {
+		defer l.wg.Done()
+		l.manageConfigLifecyle(ctx)
+	}()
+
 	return l, nil
 }
 
@@ -119,13 +133,13 @@ func (l *AMSLoader) ListConfigs(opts Options) (map[string][]Instance, error) {
 	l.cacheMu.RLock()
 	defer l.cacheMu.RUnlock()
 
-	for _, instance := range l.cache {
-		if !Matches(instance, opts.Filters) {
+	for _, entry := range l.cache {
+		if !Matches(entry.Instance, opts.Filters) {
 			continue
 		}
 
-		configType := instance.TypeUrl
-		configs[configType] = append(configs[configType], instance)
+		configType := entry.Instance.TypeUrl
+		configs[configType] = append(configs[configType], entry.Instance)
 	}
 
 	return configs, nil
@@ -135,13 +149,13 @@ func (l *AMSLoader) GetConfig(configType, name string) (Instance, error) {
 	cacheKey := l.getCacheKey(configType, name)
 
 	l.cacheMu.RLock()
-	instance, exists := l.cache[cacheKey]
+	entry, exists := l.cache[cacheKey]
 	l.cacheMu.RUnlock()
 
 	if !exists {
 		return Instance{}, fmt.Errorf("config %s of type %s not found", name, configType)
 	}
-	return instance, nil
+	return entry.Instance, nil
 }
 
 func (l *AMSLoader) Watch(opts Options) <-chan Instance {
@@ -186,6 +200,44 @@ func (l *AMSLoader) manageStream(ctx context.Context) {
 			return
 		default:
 			l.runStream(ctx)
+		}
+	}
+}
+
+func (l *AMSLoader) manageConfigLifecyle(ctx context.Context) {
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			l.ttlHeapMu.Lock()
+			if l.ttlHeap.Len() == 0 {
+				l.ttlHeapMu.Unlock()
+				continue
+			}
+
+			now := time.Now()
+			if !now.After(l.ttlHeap[0].ttl) {
+				l.ttlHeapMu.Unlock()
+				continue
+			}
+
+			// TTL expired, pop from heap
+			node := heap.Pop(&l.ttlHeap).(*ttlEntry)
+			l.ttlHeapMu.Unlock()
+
+			l.cacheMu.Lock()
+			if entry, exists := l.cache[node.cacheKey]; exists {
+				// copy instance value so that cached entry can be garbage collected
+				instance := entry.Instance
+				instance.Expired = true
+				delete(l.cache, node.cacheKey)
+				l.subs.send(instance)
+			}
+			l.cacheMu.Unlock()
 		}
 	}
 }
@@ -243,9 +295,9 @@ func (l *AMSLoader) runStream(ctx context.Context) {
 func (l *AMSLoader) sendInitialRequest(stream agentsvcv1.AgentManagementService_WatchConfigClient) error {
 	l.cacheMu.RLock()
 	var initialConfigs []*typesv1.Object
-	for _, instance := range l.cache {
-		obj := instanceToPbObject(instance)
-		if instance.Status == StatusOK && obj != nil {
+	for _, entry := range l.cache {
+		obj := instanceToPbObject(entry.Instance)
+		if entry.Instance.Status == StatusOK && obj != nil {
 			initialConfigs = append(initialConfigs, obj)
 		}
 	}
@@ -348,7 +400,12 @@ func (l *AMSLoader) processConfig(obj *typesv1.Object) (Instance, error) {
 	cacheKey := l.getCacheKey(instance.TypeUrl, instance.Name)
 	l.cacheMu.Lock()
 	defer l.cacheMu.Unlock()
-	prevInstance := l.cache[cacheKey]
+
+	prevEntry, configExists := l.cache[cacheKey]
+	var prevInstance Instance
+	if configExists {
+		prevInstance = prevEntry.Instance
+	}
 
 	compVer, err := CompareVersions(instance.Version, prevInstance.Version)
 	if err != nil {
@@ -361,15 +418,84 @@ func (l *AMSLoader) processConfig(obj *typesv1.Object) (Instance, error) {
 			instance.Version, prevInstance.Version,
 		)
 	}
-	if parseErr == nil || prevInstance.Object == nil {
-		l.cache[cacheKey] = instance
+
+	// Update the cache only if it's a new config or the new config is valid
+	if parseErr != nil && prevInstance.Object != nil {
+		return instance, parseErr
 	}
+
+	if configExists {
+		prevEntry.Instance = instance
+	} else {
+		l.cache[cacheKey] = &cacheEntry{
+			Instance:   instance,
+			ttlHeapIdx: -1,
+		}
+	}
+
+	var ttlDuration time.Duration
+	if obj.GetTtl() != nil {
+		ttlDuration = obj.GetTtl().AsDuration()
+	}
+
+	// Don't add to ttlIdx if new config object ttl is not set
+	if ttlDuration <= 0 {
+		if configExists {
+			l.removeCfgFromTTLHeap(cacheKey)
+		}
+		return instance, parseErr
+	}
+
+	expiryTime := time.Now().Add(ttlDuration)
+
+	if !configExists {
+		l.addCfgToTTLHeap(cacheKey, expiryTime)
+		return instance, parseErr
+	}
+
+	l.updateCfgInTTLHeap(cacheKey, expiryTime)
 
 	return instance, parseErr
 }
 
 func (l *AMSLoader) getCacheKey(configType, name string) string {
 	return configType + ":" + name
+}
+
+func (l *AMSLoader) addCfgToTTLHeap(name string, ttl time.Time) {
+	l.ttlHeapMu.Lock()
+	defer l.ttlHeapMu.Unlock()
+
+	node := &ttlEntry{
+		cacheKey: name,
+		ttl:      ttl,
+	}
+
+	heap.Push(&l.ttlHeap, node)
+
+	if entry, exists := l.cache[name]; exists {
+		entry.ttlHeapIdx = node.index
+	}
+}
+
+func (l *AMSLoader) updateCfgInTTLHeap(name string, ttl time.Time) {
+	l.ttlHeapMu.Lock()
+	defer l.ttlHeapMu.Unlock()
+
+	if entry, exists := l.cache[name]; exists && entry.ttlHeapIdx >= 0 {
+		l.ttlHeap[entry.ttlHeapIdx].ttl = ttl
+		heap.Fix(&l.ttlHeap, entry.ttlHeapIdx)
+	}
+}
+
+func (l *AMSLoader) removeCfgFromTTLHeap(name string) {
+	l.ttlHeapMu.Lock()
+	defer l.ttlHeapMu.Unlock()
+
+	if entry, exists := l.cache[name]; exists && entry.ttlHeapIdx >= 0 {
+		heap.Remove(&l.ttlHeap, entry.ttlHeapIdx)
+		entry.ttlHeapIdx = -1
+	}
 }
 
 func instanceToPbObject(instance Instance) *typesv1.Object {
@@ -390,4 +516,41 @@ func instanceToPbObject(instance Instance) *typesv1.Object {
 		},
 		Data: data,
 	}
+}
+
+type ttlEntry struct {
+	cacheKey string
+	ttl      time.Time
+	index    int
+}
+
+type ttlHeap []*ttlEntry
+
+func (h *ttlHeap) Len() int { return len(*h) }
+
+func (h *ttlHeap) Less(i, j int) bool {
+	return (*h)[i].ttl.Before((*h)[j].ttl)
+}
+
+func (h *ttlHeap) Swap(i, j int) {
+	(*h)[i], (*h)[j] = (*h)[j], (*h)[i]
+	(*h)[i].index = i
+	(*h)[j].index = j
+}
+
+func (h *ttlHeap) Push(x any) {
+	n := len(*h)
+	node := x.(*ttlEntry)
+	node.index = n
+	*h = append(*h, node)
+}
+
+func (h *ttlHeap) Pop() any {
+	old := *h
+	n := len(old)
+	node := old[n-1]
+	old[n-1] = nil
+	node.index = -1
+	*h = old[0 : n-1]
+	return node
 }
