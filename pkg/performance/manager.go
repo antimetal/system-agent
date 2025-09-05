@@ -9,23 +9,29 @@ package performance
 import (
 	"fmt"
 	"os"
+	"time"
 
+	"github.com/antimetal/agent/internal/metrics"
 	"github.com/go-logr/logr"
 )
 
-// Manager coordinates collector registration and will eventually handle collection
+// Manager coordinates collector registration and handles performance collection
 type Manager struct {
 	config      CollectionConfig
 	logger      logr.Logger
 	nodeName    string
 	clusterName string
+
+	// Direct metrics router (no wrapper needed)
+	router metrics.Router
 }
 
 type ManagerOptions struct {
-	Config      CollectionConfig
-	Logger      logr.Logger
-	NodeName    string
-	ClusterName string
+	Config        CollectionConfig
+	Logger        logr.Logger
+	NodeName      string
+	ClusterName   string
+	MetricsRouter metrics.Router // Optional metrics router
 }
 
 func NewManager(opts ManagerOptions) (*Manager, error) {
@@ -68,6 +74,12 @@ func NewManager(opts ManagerOptions) (*Manager, error) {
 		clusterName: opts.ClusterName,
 	}
 
+	// Store the metrics router directly
+	if opts.MetricsRouter != nil {
+		m.router = opts.MetricsRouter
+		m.logger.Info("Metrics router enabled for performance manager")
+	}
+
 	return m, nil
 }
 
@@ -86,9 +98,48 @@ func (m *Manager) GetClusterName() string {
 	return m.clusterName
 }
 
-// TODO: Add methods for:
-// - Starting/stopping collection based on external signals
-// - Performing on-demand collection
-// - Managing collector lifecycle
-// - Integrating with BadgerDB for storage
-// - Forwarding data to intake service
+// PublishCollectorData publishes data from a specific collector
+func (m *Manager) PublishCollectorData(metricType metrics.MetricType, data any) error {
+	if m.router == nil {
+		return nil // Silently ignore if no router
+	}
+
+	// Create the event directly - no need for a wrapper
+	event := metrics.MetricEvent{
+		Timestamp:   time.Now(),
+		Source:      "performance-collector",
+		NodeName:    m.nodeName,
+		ClusterName: m.clusterName,
+		MetricType:  metricType,
+		EventType:   determineEventType(metricType),
+		Data:        data,
+	}
+
+	if err := m.router.Publish(event); err != nil {
+		m.logger.Error(err, "Failed to publish collector data", "metric_type", metricType)
+		return err
+	}
+
+	m.logger.V(2).Info("Published collector data", "metric_type", metricType)
+	return nil
+}
+
+// HasMetricsRouter returns true if the manager has a metrics router configured
+func (m *Manager) HasMetricsRouter() bool {
+	return m.router != nil
+}
+
+// determineEventType maps metric types to appropriate event types
+func determineEventType(metricType metrics.MetricType) metrics.EventType {
+	switch metricType {
+	case metrics.MetricTypeLoad, metrics.MetricTypeMemory, metrics.MetricTypeCPU,
+		metrics.MetricTypeDisk, metrics.MetricTypeNetwork, metrics.MetricTypeProcess,
+		metrics.MetricTypeCPUInfo, metrics.MetricTypeMemoryInfo, metrics.MetricTypeDiskInfo,
+		metrics.MetricTypeNetworkInfo, metrics.MetricTypeNUMAStats:
+		return metrics.EventTypeGauge
+	case metrics.MetricTypeSystem, metrics.MetricTypeTCP, metrics.MetricTypeKernel:
+		return metrics.EventTypeCounter
+	default:
+		return metrics.EventTypeGauge
+	}
+}
