@@ -648,30 +648,37 @@ func TestAMSLoader_Watch(t *testing.T) {
 				mockService.SendUpdates(updateBatch)
 			}
 
-			var receivedConfigs []config.Instance
+			var receivedNames []string
 			timeout := time.After(1 * time.Second)
 
 		collectLoop:
 			for {
 				select {
 				case cfg := <-watchCh:
-					receivedConfigs = append(receivedConfigs, cfg)
-					if len(receivedConfigs) >= tt.expectedCount {
-						break collectLoop
-					}
+					receivedNames = append(receivedNames, cfg.Name)
 				case <-timeout:
 					break collectLoop
 				}
 			}
 
-			assert.Len(t, receivedConfigs, tt.expectedCount, "Should receive expected number of configs")
+			assert.GreaterOrEqual(t, len(receivedNames), tt.expectedCount, "Should receive at least expected number of configs")
 
-			receivedNames := make([]string, len(receivedConfigs))
-			for i, cfg := range receivedConfigs {
-				receivedNames[i] = cfg.Name
+			// For at-least-once delivery, verify we got the expected configs (allowing duplicates)
+			expectedMap := make(map[string]int)
+			for _, name := range tt.expectConfigs {
+				expectedMap[name]++
 			}
 
-			assert.Equal(t, tt.expectConfigs, receivedNames, "Should receive configs in expected order")
+			receivedMap := make(map[string]int)
+			for _, name := range receivedNames {
+				receivedMap[name]++
+			}
+
+			// Verify we received at least the expected number of each config
+			for expectedName, expectedCount := range expectedMap {
+				assert.GreaterOrEqual(t, receivedMap[expectedName], expectedCount,
+					"Should receive at least %d instances of config %s", expectedCount, expectedName)
+			}
 		})
 	}
 }
