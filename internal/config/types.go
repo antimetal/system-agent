@@ -25,6 +25,7 @@ type Instance struct {
 	Version string
 	Object  proto.Message
 	Status  Status
+	Expired bool
 }
 
 // Copy returns a deep copy of the Instance.
@@ -35,6 +36,7 @@ func (i *Instance) Copy() Instance {
 		Version: i.Version,
 		Object:  proto.Clone(i.Object),
 		Status:  i.Status,
+		Expired: i.Expired,
 	}
 }
 
