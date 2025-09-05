@@ -7,6 +7,7 @@
 package debug
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -24,16 +25,12 @@ const (
 	consumerName = "debug"
 )
 
-// Compile-time check that Consumer implements Consumer interface
-var _ metrics.Consumer = (*Consumer)(nil)
-
 // Consumer implements the metrics consumer interface for debug logging
 type Consumer struct {
 	config Config
 	logger logr.Logger
 
 	// Runtime state
-	wg        sync.WaitGroup
 	healthy   atomic.Bool
 	lastError atomic.Pointer[error]
 
@@ -70,16 +67,27 @@ func (c *Consumer) Name() string {
 	return consumerName
 }
 
-// Start begins processing metrics events from the provided channel.
-// The consumer stops when the events channel is closed.
-func (c *Consumer) Start(events <-chan metrics.MetricEvent) error {
+// HandleEvent processes a metric event by logging it immediately.
+// This is non-blocking and returns immediately after logging.
+func (c *Consumer) HandleEvent(event metrics.MetricEvent) error {
+	if err := c.processEvent(event); err != nil {
+		c.logger.Error(err, "Failed to process metrics event",
+			"metric_type", event.MetricType,
+			"source", event.Source)
+		c.errorsCount.Add(1)
+		c.lastError.Store(&err)
+		return err
+	} else {
+		c.eventsProcessed.Add(1)
+	}
+	return nil
+}
+
+func (c *Consumer) Start(ctx context.Context) error {
 	c.logger.Info("Starting Debug consumer",
 		"log_level", c.config.LogLevel,
 		"log_format", c.config.LogFormat,
 		"include_data", c.config.IncludeEventData)
-
-	c.wg.Add(1)
-	go c.processEvents(events)
 
 	return nil
 }
@@ -98,50 +106,9 @@ func (c *Consumer) Health() metrics.ConsumerHealth {
 	}
 }
 
-func (c *Consumer) processEvents(events <-chan metrics.MetricEvent) {
-	defer c.wg.Done()
-
-	// Setup error recovery
-	defer func() {
-		if r := recover(); r != nil {
-			c.logger.Error(nil, "Debug consumer panic recovered", "panic", r)
-			c.healthy.Store(false)
-			if err, ok := r.(error); ok {
-				c.lastError.Store(&err)
-			}
-		}
-	}()
-
-	c.logger.Info("Debug consumer event processing started")
-
-	for event := range events {
-		if err := c.processEvent(event); err != nil {
-			c.logger.Error(err, "Failed to process metrics event",
-				"metric_type", event.MetricType,
-				"source", event.Source)
-			c.errorsCount.Add(1)
-			c.lastError.Store(&err)
-		} else {
-			c.eventsProcessed.Add(1)
-		}
-	}
-
-	// Channel closed, perform cleanup
-	c.logger.Info("Events channel closed, stopping consumer")
-
-	// Log final statistics
-	stats := c.getStats()
-	c.logFinalStats(stats)
-
-	c.logger.Info("Debug consumer stopped",
-		"events_processed", c.eventsProcessed.Load(),
-		"errors", c.errorsCount.Load(),
-		"uptime", time.Since(c.startTime))
-}
-
 func (c *Consumer) processEvent(event metrics.MetricEvent) error {
 	// Check filters
-	if !c.config.ShouldLogMetricType(event.MetricType) {
+	if !c.config.ShouldLogMetricType(string(event.MetricType)) {
 		return nil
 	}
 	if !c.config.ShouldLogSource(event.Source) {
@@ -163,12 +130,13 @@ func (c *Consumer) updateStats(event metrics.MetricEvent) {
 	defer c.statsMutex.Unlock()
 
 	// Track by type
-	if counter, exists := c.eventsByType[event.MetricType]; exists {
+	metricTypeKey := string(event.MetricType) // Convert once for map key
+	if counter, exists := c.eventsByType[metricTypeKey]; exists {
 		counter.Add(1)
 	} else {
 		counter := &atomic.Uint64{}
 		counter.Store(1)
-		c.eventsByType[event.MetricType] = counter
+		c.eventsByType[metricTypeKey] = counter
 	}
 
 	// Track by source
@@ -188,7 +156,6 @@ func (c *Consumer) logEventJSON(event metrics.MetricEvent) error {
 		Consumer: consumerName,
 		Message:  "Metrics event received",
 		Event:    c.createEventSummary(event),
-		Tags:     event.Tags,
 	}
 
 	if c.config.IncludeTimestamp {
@@ -231,8 +198,8 @@ func (c *Consumer) logEventText(event metrics.MetricEvent) error {
 		if event.ClusterName != "" {
 			parts = append(parts, fmt.Sprintf("Cluster: %s", event.ClusterName))
 		}
-		if event.EventType != "" {
-			parts = append(parts, fmt.Sprintf("Type: %s", event.EventType))
+		if string(event.EventType) != "" {
+			parts = append(parts, fmt.Sprintf("Type: %s", string(event.EventType)))
 		}
 	}
 
@@ -246,15 +213,6 @@ func (c *Consumer) logEventText(event metrics.MetricEvent) error {
 				dataStr := c.formatDataForText(event.Data)
 				parts = append(parts, fmt.Sprintf("Data: %s", dataStr))
 			}
-		}
-
-		// Add tags
-		if len(event.Tags) > 0 {
-			var tagParts []string
-			for k, v := range event.Tags {
-				tagParts = append(tagParts, fmt.Sprintf("%s=%s", k, v))
-			}
-			parts = append(parts, fmt.Sprintf("Tags: {%s}", strings.Join(tagParts, ", ")))
 		}
 	}
 
@@ -279,8 +237,8 @@ func (c *Consumer) logEventText(event metrics.MetricEvent) error {
 // createEventSummary creates a summary of the event for JSON logging
 func (c *Consumer) createEventSummary(event metrics.MetricEvent) *MetricEventSummary {
 	summary := &MetricEventSummary{
-		MetricType:  event.MetricType,
-		EventType:   event.EventType,
+		MetricType:  string(event.MetricType), // Explicit conversion needed for struct field
+		EventType:   string(event.EventType),
 		Source:      event.Source,
 		NodeName:    event.NodeName,
 		ClusterName: event.ClusterName,
@@ -370,29 +328,5 @@ func (c *Consumer) logStatsText() {
 		"sources", len(stats.EventsBySource))
 }
 
-// logFinalStats logs comprehensive final statistics
-func (c *Consumer) logFinalStats(stats *ConsumerStats) {
-	c.logger.Info("Final debug consumer statistics",
-		"total_events", stats.EventsProcessed,
-		"total_errors", stats.ErrorsCount,
-		"uptime", stats.Uptime)
-
-	if len(stats.EventsByType) > 0 {
-		c.logger.Info("Events by type", "breakdown", stats.EventsByType)
-	}
-
-	if len(stats.EventsBySource) > 0 {
-		c.logger.Info("Events by source", "breakdown", stats.EventsBySource)
-	}
-}
-
-// NewConsumerFromConfig creates a consumer from configuration
-// Returns nil if Debug consumer is disabled in config
-func NewConsumerFromConfig(config Config, logger logr.Logger) (*Consumer, error) {
-	consumer, err := NewConsumer(config, logger)
-	if err != nil {
-		return nil, err
-	}
-
-	return consumer, nil
-}
+// Compile-time check that Consumer implements ConsumerInterface
+var _ metrics.Consumer = (*Consumer)(nil)

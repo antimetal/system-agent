@@ -24,7 +24,6 @@ func testLogger() logr.Logger {
 
 func TestConsumer_WithTransformerIntegration(t *testing.T) {
 	config := otel.Config{
-		Enabled:     true,
 		Endpoint:    "localhost:4317",
 		Insecure:    true,
 		ServiceName: "test-service",

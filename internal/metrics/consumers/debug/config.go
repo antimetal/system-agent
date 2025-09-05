@@ -6,7 +6,10 @@
 
 package debug
 
-import "fmt"
+import (
+	"flag"
+	"fmt"
+)
 
 // LogLevel determines the verbosity of debug output
 type LogLevel int
@@ -17,11 +20,19 @@ const (
 	LogLevelVerbose LogLevel = 2 // include full event data and attributes
 )
 
-// Common errors
+// Command-line flag variables (populated by init())
 var (
-	ErrInvalidLogLevel  = fmt.Errorf("log level must be basic (%d), details (%d), or verbose (%d)", LogLevelBasic, LogLevelDetails, LogLevelVerbose)
-	ErrInvalidLogFormat = fmt.Errorf("log format must be '%s' or '%s'", LogFormatJSON, LogFormatText)
+	flagEnabled   *bool
+	flagLogLevel  *string
+	flagLogFormat *string
 )
+
+func init() {
+	// Define debug consumer flags that will be parsed in main()
+	flagEnabled = flag.Bool("enable-debug-consumer", false, "Enable debug consumer for logging metrics events")
+	flagLogLevel = flag.String("debug-log-level", "basic", "Debug consumer log level: basic, details, or verbose")
+	flagLogFormat = flag.String("debug-log-format", "json", "Debug consumer log format: json or text")
+}
 
 // String returns the string representation of the log level
 func (l LogLevel) String() string {
@@ -128,3 +139,44 @@ func (c *Config) ShouldLogSource(source string) bool {
 	}
 	return false
 }
+
+// GetConfigFromFlags builds a Config from the package's command-line flags
+func GetConfigFromFlags() Config {
+	// Parse log level
+	var level LogLevel
+	switch *flagLogLevel {
+	case "verbose":
+		level = LogLevelVerbose
+	case "details":
+		level = LogLevelDetails
+	default:
+		level = LogLevelBasic
+	}
+
+	// Parse log format
+	var format LogFormat
+	if *flagLogFormat == "text" {
+		format = LogFormatText
+	} else {
+		format = LogFormatJSON
+	}
+
+	return Config{
+		LogLevel:         level,
+		LogFormat:        format,
+		IncludeTimestamp: true,
+		IncludeEventData: level >= LogLevelDetails,
+		MaxDataLength:    1024,
+	}
+}
+
+// IsEnabled returns whether debug consumer is enabled via flags
+func IsEnabled() bool {
+	return flagEnabled != nil && *flagEnabled
+}
+
+// Common errors
+var (
+	ErrInvalidLogLevel  = fmt.Errorf("log level must be basic (%d), details (%d), or verbose (%d)", LogLevelBasic, LogLevelDetails, LogLevelVerbose)
+	ErrInvalidLogFormat = fmt.Errorf("log format must be '%s' or '%s'", LogFormatJSON, LogFormatText)
+)

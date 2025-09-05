@@ -33,6 +33,10 @@ import (
 	k8sagent "github.com/antimetal/agent/internal/kubernetes/agent"
 	"github.com/antimetal/agent/internal/kubernetes/cluster"
 	"github.com/antimetal/agent/internal/kubernetes/scheme"
+	"github.com/antimetal/agent/internal/metrics"
+	"github.com/antimetal/agent/internal/metrics/consumers/debug"
+	"github.com/antimetal/agent/internal/metrics/consumers/otel"
+	"github.com/antimetal/agent/internal/runtime"
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/antimetal/agent/pkg/resource/store"
@@ -258,11 +262,61 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Setup Metrics Router (if any consumer is enabled)
+	var metricsRouter metrics.Router
+	enableMetricsPipeline := otel.IsEnabled() || debug.IsEnabled()
+
+	if enableMetricsPipeline {
+		router := metrics.NewMetricsRouter(mgr.GetLogger())
+
+		// Register OpenTelemetry consumer if enabled
+		if otel.IsEnabled() {
+			otelConfig := otel.GetConfigFromFlags()
+			// Set the service version from build-time variables
+			otelConfig.ServiceVersion = runtime.Version()
+			otelConsumer, err := otel.NewConsumer(otelConfig, mgr.GetLogger())
+			if err != nil {
+				setupLog.Error(err, "unable to create OpenTelemetry consumer")
+				os.Exit(1)
+			}
+			// Register OpenTelemetry consumer
+			if err := router.RegisterConsumer(ctx, otelConsumer); err != nil {
+				setupLog.Error(err, "unable to register OpenTelemetry consumer")
+				os.Exit(1)
+			}
+			setupLog.Info("OpenTelemetry consumer registered")
+		}
+
+		// Register Debug consumer if enabled
+		if debug.IsEnabled() {
+			debugConfig := debug.GetConfigFromFlags()
+			debugConsumer, err := debug.NewConsumer(debugConfig, mgr.GetLogger())
+			if err != nil {
+				setupLog.Error(err, "unable to create debug consumer")
+				os.Exit(1)
+			}
+			if err := router.RegisterConsumer(ctx, debugConsumer); err != nil {
+				setupLog.Error(err, "unable to register debug consumer")
+				os.Exit(1)
+			}
+			setupLog.Info("Debug consumer registered")
+		}
+
+		// Add bus to manager
+		if err := mgr.Add(router); err != nil {
+			setupLog.Error(err, "unable to register metrics router")
+			os.Exit(1)
+		}
+		metricsRouter = router
+		setupLog.Info("Metrics pipeline enabled")
+	}
+
 	// Setup Performance Manager (for hardware discovery)
 	perfManager, err := performance.NewManager(performance.ManagerOptions{
-		Logger:      mgr.GetLogger().WithName("performance-manager"),
-		NodeName:    os.Getenv("NODE_NAME"),
-		ClusterName: "",
+		Logger:        mgr.GetLogger().WithName("performance-manager"),
+		NodeName:      os.Getenv("NODE_NAME"),
+		ClusterName:   "",
+		MetricsRouter: metricsRouter,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to create performance manager")

@@ -7,11 +7,14 @@
 package otel
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/antimetal/agent/internal/metrics"
 )
 
 // CompressionType represents the compression type for OTLP exports
@@ -26,6 +29,28 @@ const (
 	MaxSafeQueueSize = 100000 // Maximum safe queue size
 )
 
+// Command-line flag variables (populated by init())
+var (
+	flagEnabled        *bool
+	flagEndpoint       *string
+	flagInsecure       *bool
+	flagCompression    *string
+	flagTimeout        *time.Duration
+	flagServiceName    *string
+	flagServiceVersion *string
+)
+
+func init() {
+	// Define OpenTelemetry flags that will be parsed in main()
+	flagEnabled = flag.Bool("enable-otel", false, "Enable OpenTelemetry metrics consumer")
+	flagEndpoint = flag.String("otel-endpoint", "localhost:4317", "OpenTelemetry OTLP gRPC endpoint")
+	flagInsecure = flag.Bool("otel-insecure", false, "Disable TLS for OpenTelemetry connection")
+	flagCompression = flag.String("otel-compression", "gzip", "OpenTelemetry compression: gzip or none")
+	flagTimeout = flag.Duration("otel-timeout", 30*time.Second, "OpenTelemetry export timeout")
+	flagServiceName = flag.String("otel-service-name", "antimetal-agent", "OpenTelemetry service name")
+	flagServiceVersion = flag.String("otel-service-version", "", "OpenTelemetry service version")
+}
+
 // String returns the string representation of the compression type
 func (c CompressionType) String() string {
 	return string(c)
@@ -37,8 +62,6 @@ func (c CompressionType) IsValid() bool {
 }
 
 type Config struct {
-	Enabled bool
-
 	// OTLP gRPC configuration
 	Endpoint string // OTLP gRPC endpoint (default: localhost:4317)
 	Insecure bool   // Disable TLS (default: false)
@@ -63,9 +86,10 @@ type Config struct {
 	GlobalTags []string
 
 	// Advanced options
-	BatchTimeout time.Duration // Max time between batches
-	MaxBatchSize int           // Maximum metrics per batch
-	MaxQueueSize int           // Maximum queued metrics
+	BatchTimeout time.Duration      // Max time between batches
+	MaxBatchSize int                // Maximum metrics per batch
+	MaxQueueSize int                // Maximum queued metrics
+	DropPolicy   metrics.DropPolicy // What to do when buffer is full
 }
 
 // RetryConfig configures retry behavior for failed exports
@@ -80,7 +104,6 @@ type RetryConfig struct {
 // DefaultConfig returns a sensible default configuration
 func DefaultConfig() Config {
 	return Config{
-		Enabled:     false, // Disabled by default
 		Endpoint:    "localhost:4317",
 		Insecure:    false,
 		Headers:     make(map[string]string),
@@ -101,6 +124,7 @@ func DefaultConfig() Config {
 		BatchTimeout: 10 * time.Second,
 		MaxBatchSize: 500,
 		MaxQueueSize: 10000,
+		DropPolicy:   metrics.DropPolicyOldest,
 	}
 }
 
@@ -175,7 +199,7 @@ func parseHeaders(headers string) map[string]string {
 // Validate ensures the configuration is valid and sets reasonable defaults.
 // It validates required fields, enforces safety limits, and normalizes values.
 func (c *Config) Validate() error {
-	if c.Enabled && c.Endpoint == "" {
+	if c.Endpoint == "" {
 		return ErrEndpointRequired
 	}
 
@@ -230,6 +254,49 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+// GetConfigFromFlags builds a Config from the package's command-line flags
+func GetConfigFromFlags() Config {
+	return buildFromFlags(
+		*flagEndpoint,
+		*flagInsecure,
+		*flagCompression,
+		*flagTimeout,
+		*flagServiceName,
+		*flagServiceVersion,
+	)
+}
+
+// IsEnabled returns whether OpenTelemetry is enabled via flags
+func IsEnabled() bool {
+	return flagEnabled != nil && *flagEnabled
+}
+
+// buildFromFlags builds an OTEL configuration from command-line flags and environment variables.
+// Precedence order (highest to lowest): command-line flags → environment variables → defaults.
+// This follows the standard convention where explicit command-line arguments override env vars.
+func buildFromFlags(endpoint string, insecure bool, compression string,
+	timeout time.Duration, serviceName, serviceVersion string) Config {
+
+	config := DefaultConfig()
+
+	// Apply environment variables first (lower priority)
+	config.ApplyEnvironmentVariables()
+
+	// Then apply flag values which override env vars (higher priority)
+	// Flag values always override env vars when explicitly provided
+	config.Endpoint = endpoint
+	config.Insecure = insecure
+	config.Compression = CompressionType(compression)
+	config.Timeout = timeout
+	config.ServiceName = serviceName
+	config.ServiceVersion = serviceVersion
+
+	// Note: Runtime values like nodeName, clusterName, and version should be
+	// added as attributes in the transformer, not as global config tags
+
+	return config
 }
 
 // Common errors
