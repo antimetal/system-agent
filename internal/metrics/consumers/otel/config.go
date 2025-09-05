@@ -7,6 +7,7 @@
 package otel
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"strconv"
@@ -25,6 +26,28 @@ const (
 	MaxSafeBatchSize = 10000  // Maximum safe batch size
 	MaxSafeQueueSize = 100000 // Maximum safe queue size
 )
+
+// Command-line flag variables (populated by init())
+var (
+	flagEnabled        *bool
+	flagEndpoint       *string
+	flagInsecure       *bool
+	flagCompression    *string
+	flagTimeout        *time.Duration
+	flagServiceName    *string
+	flagServiceVersion *string
+)
+
+func init() {
+	// Define OpenTelemetry flags that will be parsed in main()
+	flagEnabled = flag.Bool("enable-otel", false, "Enable OpenTelemetry metrics consumer")
+	flagEndpoint = flag.String("otel-endpoint", "localhost:4317", "OpenTelemetry OTLP gRPC endpoint")
+	flagInsecure = flag.Bool("otel-insecure", false, "Disable TLS for OpenTelemetry connection")
+	flagCompression = flag.String("otel-compression", "gzip", "OpenTelemetry compression: gzip or none")
+	flagTimeout = flag.Duration("otel-timeout", 30*time.Second, "OpenTelemetry export timeout")
+	flagServiceName = flag.String("otel-service-name", "antimetal-agent", "OpenTelemetry service name")
+	flagServiceVersion = flag.String("otel-service-version", "", "OpenTelemetry service version")
+}
 
 // String returns the string representation of the compression type
 func (c CompressionType) String() string {
@@ -230,6 +253,27 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+// GetConfigFromFlags builds a Config from the package's command-line flags
+func GetConfigFromFlags(nodeName, clusterName, version string) Config {
+	return BuildFromFlags(
+		*flagEnabled,
+		*flagEndpoint,
+		*flagInsecure,
+		*flagCompression,
+		*flagTimeout,
+		*flagServiceName,
+		*flagServiceVersion,
+		nodeName,
+		clusterName,
+		version,
+	)
+}
+
+// IsEnabled returns whether OpenTelemetry is enabled via flags
+func IsEnabled() bool {
+	return flagEnabled != nil && *flagEnabled
 }
 
 // BuildFromFlags builds an OTEL configuration from command-line flags and environment variables.

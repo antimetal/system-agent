@@ -7,8 +7,21 @@
 package metrics
 
 import (
+	"flag"
 	"time"
 )
+
+// Command-line flag variables (populated by init())
+var (
+	flagEnabled         *bool
+	flagPublishInterval *time.Duration
+)
+
+func init() {
+	// Define metrics pipeline flags that will be parsed in main()
+	flagEnabled = flag.Bool("enable-metrics", false, "Enable metrics pipeline for external monitoring systems")
+	flagPublishInterval = flag.Duration("metrics-publish-interval", 30*time.Second, "Interval for publishing performance metrics")
+}
 
 // Config configures the metrics pipeline
 type Config struct {
@@ -76,4 +89,20 @@ func (c *Config) ApplyDefaults() {
 func (c *Config) Validate() error {
 	// Add validation logic as needed
 	return nil
+}
+
+// GetConfigFromFlags builds a Config from the package's command-line flags
+func GetConfigFromFlags() Config {
+	config := DefaultConfig()
+	config.Enabled = *flagEnabled
+	config.Performance.Enabled = *flagEnabled
+	config.Performance.PublishInterval = *flagPublishInterval
+	config.Performance.Source = "performance-collector"
+	config.ApplyDefaults()
+	return config
+}
+
+// IsEnabled returns whether metrics pipeline is enabled via flags
+func IsEnabled() bool {
+	return flagEnabled != nil && *flagEnabled
 }
