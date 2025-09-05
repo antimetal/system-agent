@@ -186,7 +186,7 @@ func TestFSLoader_Watch(t *testing.T) {
 
 			fl, err := config.NewFSLoader(tempDir, logger)
 			require.NoError(t, err)
-			defer fl.Close()
+			t.Cleanup(func() { fl.Close() })
 
 			instanceCh := fl.Watch(config.Options{})
 
@@ -236,7 +236,7 @@ func TestFSLoader_ListConfigs(t *testing.T) {
 
 	fl, err := config.NewFSLoader(tempDir, logger)
 	require.NoError(t, err)
-	defer fl.Close()
+	t.Cleanup(func() { fl.Close() })
 
 	configs, err := fl.ListConfigs(config.Options{})
 	require.NoError(t, err)
@@ -270,7 +270,7 @@ func TestFSLoader_GetConfig(t *testing.T) {
 
 	fl, err := config.NewFSLoader(tempDir, logger)
 	require.NoError(t, err)
-	defer fl.Close()
+	t.Cleanup(func() { fl.Close() })
 
 	hostStatsTypeName := string((&agentv1.HostStatsCollectionConfig{}).ProtoReflect().Descriptor().FullName())
 	instance, err := fl.GetConfig(hostStatsTypeName, "config1")
@@ -345,7 +345,7 @@ func TestFSLoader_FileChangeSubscription(t *testing.T) {
 
 			fl, err := config.NewFSLoader(tempDir, logger)
 			require.NoError(t, err)
-			defer fl.Close()
+			t.Cleanup(func() { fl.Close() })
 
 			instanceCh := fl.Watch(config.Options{Filters: tt.filters})
 
