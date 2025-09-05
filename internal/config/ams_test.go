@@ -119,14 +119,16 @@ func TestAMSLoader_StreamRecreation(t *testing.T) {
 				KeepAlive:      tt.keepStreamAlive,
 			})
 			conn, cleanup := createMockAMSServer(t, mockService)
-			defer cleanup()
-
 			instance := &agentv1.Instance{Id: []byte("test-instance")}
 			loader, err := config.NewAMSLoader(conn,
 				config.WithInstance(instance),
 				config.WithMaxStreamAge(tt.maxStreamAge))
 			require.NoError(t, err)
-			defer loader.Close()
+
+			t.Cleanup(func() {
+				loader.Close()
+				cleanup()
+			})
 
 			time.Sleep(tt.testDuration)
 
@@ -263,13 +265,15 @@ func TestAMSLoader_ListConfigs(t *testing.T) {
 			})
 
 			conn, cleanup := createMockAMSServer(t, mockService)
-			defer cleanup()
-
 			instance := &agentv1.Instance{Id: []byte("test-instance")}
 
 			loader, err := config.NewAMSLoader(conn, config.WithInstance(instance))
 			require.NoError(t, err)
-			defer loader.Close()
+
+			t.Cleanup(func() {
+				loader.Close()
+				cleanup()
+			})
 
 			if len(tt.configsToCache) > 0 {
 				mockService.SendUpdates(tt.configsToCache)
@@ -385,13 +389,15 @@ func TestAMSLoader_GetConfig(t *testing.T) {
 			})
 
 			conn, cleanup := createMockAMSServer(t, mockService)
-			defer cleanup()
-
 			instance := &agentv1.Instance{Id: []byte("test-instance")}
 
 			loader, err := config.NewAMSLoader(conn, config.WithInstance(instance))
 			require.NoError(t, err)
-			defer loader.Close()
+
+			t.Cleanup(func() {
+				loader.Close()
+				cleanup()
+			})
 
 			if len(tt.configsToCache) > 0 {
 				mockService.SendUpdates(tt.configsToCache)
@@ -622,13 +628,15 @@ func TestAMSLoader_Watch(t *testing.T) {
 			})
 
 			conn, cleanup := createMockAMSServer(t, mockService)
-			defer cleanup()
-
 			instance := &agentv1.Instance{Id: []byte("test-instance")}
 
 			loader, err := config.NewAMSLoader(conn, config.WithInstance(instance))
 			require.NoError(t, err)
-			defer loader.Close()
+
+			t.Cleanup(func() {
+				loader.Close()
+				cleanup()
+			})
 
 			watchCh := loader.Watch(config.Options{Filters: tt.filters})
 
@@ -741,15 +749,17 @@ func TestAMSLoader_InitialConfigsOnStreamRecreation(t *testing.T) {
 			})
 
 			conn, cleanup := createMockAMSServer(t, mockService)
-			defer cleanup()
-
 			instance := &agentv1.Instance{Id: []byte("test-instance")}
 
 			loader, err := config.NewAMSLoader(conn,
 				config.WithInstance(instance),
 				config.WithMaxStreamAge(tt.maxStreamAge))
 			require.NoError(t, err)
-			defer loader.Close()
+
+			t.Cleanup(func() {
+				loader.Close()
+				cleanup()
+			})
 
 			if len(tt.initialConfigs) > 0 {
 				mockService.SendUpdates(tt.initialConfigs)
