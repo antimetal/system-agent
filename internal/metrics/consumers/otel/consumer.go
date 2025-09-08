@@ -48,7 +48,7 @@ type Consumer struct {
 	transformer *Transformer
 
 	// Internal buffering
-	buffer chan metrics.MetricEvent
+	buffer *MetricsBuffer
 
 	// Runtime state
 	wg        sync.WaitGroup
@@ -69,12 +69,17 @@ func NewConsumer(config Config, logger logr.Logger) (*Consumer, error) {
 		return nil, err
 	}
 
+	// Create ring buffer
+	buffer, err := NewMetricsBuffer(config.MaxQueueSize)
+	if err != nil {
+		return nil, err
+	}
+
 	consumer := &Consumer{
 		config:    config,
 		logger:    logger.WithName("otel-consumer"),
 		startTime: time.Now(),
-		// Create internal buffer for batching
-		buffer: make(chan metrics.MetricEvent, config.MaxQueueSize),
+		buffer:    buffer,
 	}
 
 	// Note: OpenTelemetry components will be initialized in Start() when we have a context
@@ -179,44 +184,12 @@ func (c *Consumer) Name() string {
 }
 
 // HandleEvent processes a metric event by adding it to the internal buffer.
-// This method is non-blocking and implements the configured drop policy.
+// This method is non-blocking. The ring buffer automatically overwrites the
+// oldest event when full, implementing a natural drop-oldest policy.
 func (c *Consumer) HandleEvent(event metrics.MetricEvent) error {
-	switch c.config.DropPolicy {
-	case metrics.DropPolicyNewest:
-		// Try to send, drop if full
-		select {
-		case c.buffer <- event:
-			return nil
-		default:
-			c.eventsDropped.Add(1)
-			return ErrBufferFull
-		}
-
-	case metrics.DropPolicyOldest:
-		fallthrough
-	default:
-		// Try to send, if full, drop oldest by reading one and sending new
-		select {
-		case c.buffer <- event:
-			return nil
-		default:
-			// Buffer full, drop oldest
-			select {
-			case <-c.buffer:
-				c.eventsDropped.Add(1)
-			default:
-			}
-			// Now add the new event (non-blocking)
-			select {
-			case c.buffer <- event:
-				return nil
-			default:
-				// Still full after dropping oldest (shouldn't happen but be safe)
-				c.eventsDropped.Add(1)
-				return ErrBufferFull
-			}
-		}
-	}
+	// Push to ring buffer (never blocks, overwrites oldest if full)
+	c.buffer.Push(event)
+	return nil
 }
 
 // Start begins processing metrics events.
@@ -295,30 +268,29 @@ func (c *Consumer) processEvents(ctx context.Context) {
 	ticker := time.NewTicker(c.config.BatchTimeout)
 	defer ticker.Stop()
 
-	batch := make([]metrics.MetricEvent, 0, c.config.MaxBatchSize)
+	notify := c.buffer.NotifyChannel()
 
 	for {
 		select {
-		case event := <-c.buffer:
-			batch = append(batch, event)
-
-			// Process batch if we hit the threshold
-			if len(batch) >= c.config.MaxBatchSize {
-				c.processBatch(batch)
-				batch = batch[:0] // Reset batch
+		case <-notify:
+			// Drain up to MaxBatchSize events from the buffer
+			events := c.buffer.Drain(c.config.MaxBatchSize)
+			if len(events) > 0 {
+				c.processBatch(events)
 			}
 
 		case <-ticker.C:
-			// Periodic flush of partial batches
-			if len(batch) > 0 {
-				c.processBatch(batch)
-				batch = batch[:0]
+			// Periodic flush - drain all available events
+			events := c.buffer.Drain(c.config.MaxBatchSize)
+			if len(events) > 0 {
+				c.processBatch(events)
 			}
 
 		case <-ctx.Done():
 			// Process any remaining events
-			if len(batch) > 0 {
-				c.processBatch(batch)
+			events := c.buffer.Drain(0) // Drain all
+			if len(events) > 0 {
+				c.processBatch(events)
 			}
 			c.logger.Info("Context cancelled, stopping consumer")
 			return

@@ -10,14 +10,6 @@ import (
 	"time"
 )
 
-// DropPolicy determines behavior when a consumer's buffer is full
-type DropPolicy string
-
-const (
-	DropPolicyOldest DropPolicy = "oldest" // Drop oldest events (default)
-	DropPolicyNewest DropPolicy = "newest" // Drop newest events
-)
-
 // MetricType represents the type of performance metric.
 // These constants mirror those in pkg/performance/types.go to avoid import cycles.
 // Any updates here should be synchronized with the performance package.

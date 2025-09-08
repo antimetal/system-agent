@@ -13,8 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/antimetal/agent/internal/metrics"
 )
 
 // CompressionType represents the compression type for OTLP exports
@@ -86,10 +84,9 @@ type Config struct {
 	GlobalTags []string
 
 	// Advanced options
-	BatchTimeout time.Duration      // Max time between batches
-	MaxBatchSize int                // Maximum metrics per batch
-	MaxQueueSize int                // Maximum queued metrics
-	DropPolicy   metrics.DropPolicy // What to do when buffer is full
+	BatchTimeout time.Duration // Max time between batches
+	MaxBatchSize int           // Maximum metrics per batch
+	MaxQueueSize int           // Maximum queued metrics
 }
 
 // RetryConfig configures retry behavior for failed exports
@@ -124,7 +121,6 @@ func DefaultConfig() Config {
 		BatchTimeout: 10 * time.Second,
 		MaxBatchSize: 500,
 		MaxQueueSize: 10000,
-		DropPolicy:   metrics.DropPolicyOldest,
 	}
 }
 
