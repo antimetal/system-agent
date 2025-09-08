@@ -272,19 +272,16 @@ func main() {
 		// Register OpenTelemetry consumer if enabled
 		if otel.IsEnabled() {
 			otelConfig := otel.GetConfigFromFlags()
-			// Set the service version from build-time variables
 			otelConfig.ServiceVersion = runtime.Version()
 			otelConsumer, err := otel.NewConsumer(otelConfig, mgr.GetLogger())
 			if err != nil {
 				setupLog.Error(err, "unable to create OpenTelemetry consumer")
 				os.Exit(1)
 			}
-			// Start the consumer with its own context
 			if err := otelConsumer.Start(ctx); err != nil {
 				setupLog.Error(err, "unable to start OpenTelemetry consumer")
 				os.Exit(1)
 			}
-			// Register OpenTelemetry consumer
 			if err := router.RegisterConsumer(otelConsumer); err != nil {
 				setupLog.Error(err, "unable to register OpenTelemetry consumer")
 				os.Exit(1)
@@ -300,7 +297,6 @@ func main() {
 				setupLog.Error(err, "unable to create debug consumer")
 				os.Exit(1)
 			}
-			// Start the consumer with its own context
 			if err := debugConsumer.Start(ctx); err != nil {
 				setupLog.Error(err, "unable to start debug consumer")
 				os.Exit(1)

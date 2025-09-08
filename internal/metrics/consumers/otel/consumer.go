@@ -49,7 +49,6 @@ type Consumer struct {
 
 	// Internal buffering
 	buffer chan metrics.MetricEvent
-	ctx    context.Context // Store context for lifecycle
 
 	// Runtime state
 	wg        sync.WaitGroup
@@ -58,7 +57,7 @@ type Consumer struct {
 
 	// Metrics
 	eventsProcessed atomic.Uint64
-	eventsDropped   atomic.Uint64 // Track dropped events
+	eventsDropped   atomic.Uint64
 	errorsCount     atomic.Uint64
 	startTime       time.Time
 }
@@ -232,11 +231,8 @@ func (c *Consumer) Start(ctx context.Context) error {
 		return err
 	}
 
-	// Store context for lifecycle management
-	c.ctx = ctx
-
 	c.wg.Add(1)
-	go c.processEvents()
+	go c.processEvents(ctx)
 
 	return nil
 }
@@ -277,9 +273,9 @@ func (c *Consumer) Health() metrics.ConsumerHealth {
 }
 
 // processEvents is the main event processing loop
-func (c *Consumer) processEvents() {
+func (c *Consumer) processEvents(ctx context.Context) {
 	defer c.wg.Done()
-	defer c.shutdown(c.ctx) // Cleanup when done
+	defer c.shutdown(ctx)
 
 	// Setup error recovery
 	defer func() {
@@ -318,7 +314,7 @@ func (c *Consumer) processEvents() {
 				batch = batch[:0]
 			}
 
-		case <-c.ctx.Done():
+		case <-ctx.Done():
 			// Process any remaining events
 			if len(batch) > 0 {
 				c.processBatch(batch)
@@ -332,7 +328,7 @@ func (c *Consumer) processEvents() {
 // processBatch processes a batch of metrics events
 func (c *Consumer) processBatch(batch []metrics.MetricEvent) {
 	for _, event := range batch {
-		if err := c.processEvent(c.ctx, event); err != nil {
+		if err := c.processEvent(event); err != nil {
 			c.logger.Error(err, "Failed to process metrics event",
 				"metric_type", event.MetricType,
 				"source", event.Source)
@@ -353,7 +349,7 @@ func (c *Consumer) processBatch(batch []metrics.MetricEvent) {
 }
 
 // processEvent processes a single metrics event
-func (c *Consumer) processEvent(ctx context.Context, event metrics.MetricEvent) error {
+func (c *Consumer) processEvent(event metrics.MetricEvent) error {
 	// Log detailed event information at debug level
 	c.logger.V(2).Info("Processing metrics event",
 		"metric_type", event.MetricType,
