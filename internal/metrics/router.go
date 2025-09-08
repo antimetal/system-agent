@@ -16,6 +16,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
+// Compile-time checks
+var _ manager.Runnable = (*MetricsRouter)(nil)
+var _ Router = (*MetricsRouter)(nil)
+
 var (
 	// ErrRouterClosed is returned when attempting to publish to a closed router
 	ErrRouterClosed = errors.New("metrics router is closed")
@@ -23,53 +27,96 @@ var (
 
 // MetricsRouter is a simple registry that routes metrics events to multiple consumers
 // It implements both Publisher and manager.Runnable interfaces
+//
+// Consumers can be registered before or after Start() is called. If registered before,
+// they will be started when the router's Start() method is called.
 type MetricsRouter struct {
-	logger    logr.Logger
-	mu        sync.RWMutex
-	consumers map[string]Consumer
-	closed    bool // Set when shutting down
+	logger           logr.Logger
+	mu               sync.RWMutex
+	consumers        map[string]Consumer
+	pendingConsumers []Consumer      // Consumers registered before Start()
+	ctx              context.Context // Set when Start() is called
+	closed           bool            // Set when shutting down
 }
 
 // NewMetricsRouter creates a new metrics router
 func NewMetricsRouter(logger logr.Logger) *MetricsRouter {
 	return &MetricsRouter{
-		logger:    logger.WithName("metrics-router"),
-		consumers: make(map[string]Consumer),
+		logger:           logger.WithName("metrics-router"),
+		consumers:        make(map[string]Consumer),
+		pendingConsumers: make([]Consumer, 0),
 	}
 }
 
-// Start implements manager.Runnable
-// Just marks the router as started. Consumers manage their own lifecycle.
+// Start initializes the router with the provided context.
+// Any consumers registered before Start() will be started now.
+// Consumers registered after Start() will be started immediately.
 func (r *MetricsRouter) Start(ctx context.Context) error {
-	r.logger.Info("Starting metrics router")
+	r.mu.Lock()
+	r.ctx = ctx
+
+	// Start any pending consumers
+	for _, consumer := range r.pendingConsumers {
+		name := consumer.Name()
+		if err := consumer.Start(ctx); err != nil {
+			r.mu.Unlock()
+			return fmt.Errorf("failed to start pending consumer %s: %w", name, err)
+		}
+		r.consumers[name] = consumer
+		r.logger.Info("Started pending consumer", "consumer", name)
+	}
+	r.pendingConsumers = nil // Clear pending list
+	r.mu.Unlock()
+
+	r.logger.Info("Starting metrics router", "consumers", len(r.consumers))
 
 	// When context is cancelled, mark as closed
 	go func() {
 		<-ctx.Done()
+		r.mu.Lock()
 		r.closed = true
+		r.mu.Unlock()
 		r.logger.Info("Metrics router shutdown")
 	}()
 
 	return nil
 }
 
-// RegisterConsumer adds a consumer to receive events
-func (r *MetricsRouter) RegisterConsumer(ctx context.Context, consumer Consumer) error {
+// RegisterConsumer adds a consumer to receive events.
+// If called before Start(), the consumer will be started when the router starts.
+// If called after Start(), the consumer will be started immediately.
+func (r *MetricsRouter) RegisterConsumer(consumer Consumer) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	name := consumer.Name()
+
+	// Check if already registered
 	if _, exists := r.consumers[name]; exists {
 		return fmt.Errorf("consumer %s already registered", name)
 	}
 
-	// Start the consumer (it may start background workers)
-	if err := consumer.Start(ctx); err != nil {
+	// Check if already in pending list
+	for _, pending := range r.pendingConsumers {
+		if pending.Name() == name {
+			return fmt.Errorf("consumer %s already registered (pending)", name)
+		}
+	}
+
+	// If Start() hasn't been called yet, add to pending list
+	if r.ctx == nil {
+		r.pendingConsumers = append(r.pendingConsumers, consumer)
+		r.logger.Info("Consumer registered (pending)", "consumer", name)
+		return nil
+	}
+
+	// Start() has been called, start the consumer immediately
+	if err := consumer.Start(r.ctx); err != nil {
 		return fmt.Errorf("failed to start consumer %s: %w", name, err)
 	}
 
 	r.consumers[name] = consumer
-	r.logger.Info("Consumer registered", "consumer", name)
+	r.logger.Info("Consumer registered and started", "consumer", name)
 	return nil
 }
 
@@ -145,9 +192,3 @@ type RouterStats struct {
 	ConsumerCount int
 	Consumers     map[string]ConsumerHealth
 }
-
-// Compile-time check that MetricsRouter implements manager.Runnable
-var _ manager.Runnable = (*MetricsRouter)(nil)
-
-// Compile-time check that MetricsRouter implements Router
-var _ Router = (*MetricsRouter)(nil)

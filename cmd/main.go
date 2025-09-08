@@ -280,7 +280,7 @@ func main() {
 				os.Exit(1)
 			}
 			// Register OpenTelemetry consumer
-			if err := router.RegisterConsumer(ctx, otelConsumer); err != nil {
+			if err := router.RegisterConsumer(otelConsumer); err != nil {
 				setupLog.Error(err, "unable to register OpenTelemetry consumer")
 				os.Exit(1)
 			}
@@ -295,7 +295,7 @@ func main() {
 				setupLog.Error(err, "unable to create debug consumer")
 				os.Exit(1)
 			}
-			if err := router.RegisterConsumer(ctx, debugConsumer); err != nil {
+			if err := router.RegisterConsumer(debugConsumer); err != nil {
 				setupLog.Error(err, "unable to register debug consumer")
 				os.Exit(1)
 			}

@@ -25,6 +25,9 @@ import (
 	"github.com/antimetal/agent/internal/metrics"
 )
 
+// Compile-time check
+var _ metrics.Consumer = (*Consumer)(nil)
+
 const (
 	consumerName = "opentelemetry"
 )
@@ -373,6 +376,3 @@ func (c *Consumer) processEvent(ctx context.Context, event metrics.MetricEvent) 
 
 	return nil
 }
-
-// Compile-time check that Consumer implements Consumer interface
-var _ metrics.Consumer = (*Consumer)(nil)

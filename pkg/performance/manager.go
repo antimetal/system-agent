@@ -21,9 +21,7 @@ type Manager struct {
 	logger      logr.Logger
 	nodeName    string
 	clusterName string
-
-	// Direct metrics router (no wrapper needed)
-	router metrics.Router
+	router      metrics.Router
 }
 
 type ManagerOptions struct {
@@ -74,7 +72,6 @@ func NewManager(opts ManagerOptions) (*Manager, error) {
 		clusterName: opts.ClusterName,
 	}
 
-	// Store the metrics router directly
 	if opts.MetricsRouter != nil {
 		m.router = opts.MetricsRouter
 		m.logger.Info("Metrics router enabled for performance manager")
@@ -104,7 +101,6 @@ func (m *Manager) PublishCollectorData(metricType metrics.MetricType, data any) 
 		return nil // Silently ignore if no router
 	}
 
-	// Create the event directly - no need for a wrapper
 	event := metrics.MetricEvent{
 		Timestamp:   time.Now(),
 		Source:      "performance-collector",
