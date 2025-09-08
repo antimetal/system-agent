@@ -9,7 +9,7 @@ metadata:
   name: antimetal-system
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 metadata:
   name: agent
   labels:
@@ -60,6 +60,9 @@ spec:
         - /agent
         args:
         - --leader-elect
+        - --zap-log-level=debug
+        - --data-directory
+        - ''
         image: agent
         ports: []
         env:
