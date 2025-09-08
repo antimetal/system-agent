@@ -271,7 +271,7 @@ func main() {
 
 		// Register OpenTelemetry consumer if enabled
 		if otel.IsEnabled() {
-			otelConfig := otel.GetConfigFromFlags()
+			otelConfig := otel.GetConfigFromEnvironment()
 			otelConfig.ServiceVersion = runtime.Version()
 			otelConsumer, err := otel.NewConsumer(otelConfig, mgr.GetLogger())
 			if err != nil {

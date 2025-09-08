@@ -29,24 +29,13 @@ const (
 
 // Command-line flag variables (populated by init())
 var (
-	flagEnabled        *bool
-	flagEndpoint       *string
-	flagInsecure       *bool
-	flagCompression    *string
-	flagTimeout        *time.Duration
-	flagServiceName    *string
-	flagServiceVersion *string
+	flagEnabled *bool
 )
 
 func init() {
-	// Define OpenTelemetry flags that will be parsed in main()
-	flagEnabled = flag.Bool("enable-otel", false, "Enable OpenTelemetry metrics consumer")
-	flagEndpoint = flag.String("otel-endpoint", "localhost:4317", "OpenTelemetry OTLP gRPC endpoint")
-	flagInsecure = flag.Bool("otel-insecure", false, "Disable TLS for OpenTelemetry connection")
-	flagCompression = flag.String("otel-compression", "gzip", "OpenTelemetry compression: gzip or none")
-	flagTimeout = flag.Duration("otel-timeout", 30*time.Second, "OpenTelemetry export timeout")
-	flagServiceName = flag.String("otel-service-name", "antimetal-agent", "OpenTelemetry service name")
-	flagServiceVersion = flag.String("otel-service-version", "", "OpenTelemetry service version")
+	// Define OpenTelemetry enable flag that will be parsed in main()
+	// All other configuration comes from standard OTEL environment variables
+	flagEnabled = flag.Bool("enable-otel", false, "Enable OpenTelemetry metrics consumer (configure via OTEL_* environment variables)")
 }
 
 // String returns the string representation of the compression type
@@ -152,6 +141,13 @@ func (c *Config) ApplyEnvironmentVariables() {
 		}
 	}
 
+	// OTEL_EXPORTER_OTLP_METRICS_TIMEOUT or OTEL_EXPORTER_OTLP_TIMEOUT
+	if timeout := getEnvVar("OTEL_EXPORTER_OTLP_METRICS_TIMEOUT", "OTEL_EXPORTER_OTLP_TIMEOUT"); timeout != "" {
+		if duration, err := time.ParseDuration(timeout); err == nil {
+			c.Timeout = duration
+		}
+	}
+
 	// OTEL_SERVICE_NAME
 	if serviceName := os.Getenv("OTEL_SERVICE_NAME"); serviceName != "" {
 		c.ServiceName = serviceName
@@ -252,47 +248,16 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// GetConfigFromFlags builds a Config from the package's command-line flags
-func GetConfigFromFlags() Config {
-	return buildFromFlags(
-		*flagEndpoint,
-		*flagInsecure,
-		*flagCompression,
-		*flagTimeout,
-		*flagServiceName,
-		*flagServiceVersion,
-	)
+// GetConfigFromEnvironment builds a Config from environment variables
+func GetConfigFromEnvironment() Config {
+	config := DefaultConfig()
+	config.ApplyEnvironmentVariables()
+	return config
 }
 
 // IsEnabled returns whether OpenTelemetry is enabled via flags
 func IsEnabled() bool {
 	return flagEnabled != nil && *flagEnabled
-}
-
-// buildFromFlags builds an OTEL configuration from command-line flags and environment variables.
-// Precedence order (highest to lowest): command-line flags → environment variables → defaults.
-// This follows the standard convention where explicit command-line arguments override env vars.
-func buildFromFlags(endpoint string, insecure bool, compression string,
-	timeout time.Duration, serviceName, serviceVersion string) Config {
-
-	config := DefaultConfig()
-
-	// Apply environment variables first (lower priority)
-	config.ApplyEnvironmentVariables()
-
-	// Then apply flag values which override env vars (higher priority)
-	// Flag values always override env vars when explicitly provided
-	config.Endpoint = endpoint
-	config.Insecure = insecure
-	config.Compression = CompressionType(compression)
-	config.Timeout = timeout
-	config.ServiceName = serviceName
-	config.ServiceVersion = serviceVersion
-
-	// Note: Runtime values like nodeName, clusterName, and version should be
-	// added as attributes in the transformer, not as global config tags
-
-	return config
 }
 
 // Common errors

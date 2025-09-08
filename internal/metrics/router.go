@@ -18,6 +18,7 @@ import (
 
 // Compile-time checks
 var _ manager.Runnable = (*MetricsRouter)(nil)
+var _ manager.LeaderElectionRunnable = (*MetricsRouter)(nil)
 var _ Router = (*MetricsRouter)(nil)
 
 var (
@@ -57,6 +58,11 @@ func (r *MetricsRouter) Start(ctx context.Context) error {
 	}()
 
 	return nil
+}
+
+// NeedLeaderElection returns false since metrics collection should run on all nodes
+func (r *MetricsRouter) NeedLeaderElection() bool {
+	return false
 }
 
 // RegisterConsumer adds a consumer to receive events.
