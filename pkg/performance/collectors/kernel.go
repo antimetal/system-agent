@@ -19,8 +19,8 @@ import (
 
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/antimetal/agent/pkg/performance/capabilities"
-	"github.com/antimetal/agent/pkg/ringbuffer"
 	"github.com/antimetal/agent/pkg/proc"
+	"github.com/antimetal/agent/pkg/ringbuffer"
 	"github.com/go-logr/logr"
 )
 
