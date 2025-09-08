@@ -79,9 +79,15 @@ type Store interface {
 	// the event type (add, update delete) etc. and a list of Objects. The Object values are protobuf
 	// clones of the original so they can be modified without modifiying the underlying resource.
 	//
+	// typeDef can filter for object kinds and types. both typeDef.Kind and typeDef.Type filters
+	// for longest dot delimitted package name match. e.g. typeDef.Type == antimetal.foo.v1 will
+	// match any object in the antimetal.foo.v1 package; antimetal.v1 matches resources in any
+	// package in the antimetal.v1 package hierarchy; antimetal.foo.v1.Bar filters for only the
+	// Bar resource. Empty strings match any kind or type.
+	//
 	// The returned channel will be closed when Close() is called. If Close()
 	// has already been called, then it will return a closed channel.
-	Subscribe(typeDef *resourcev1.TypeDescriptor) <-chan Event
+	Subscribe(typeDefs ...*resourcev1.TypeDescriptor) <-chan Event
 
 	// Close closes the inventory store.
 	// It should be idempotent - calling Close multiple times will close only once.
