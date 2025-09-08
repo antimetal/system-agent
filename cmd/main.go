@@ -35,6 +35,8 @@ import (
 	"github.com/antimetal/agent/internal/kubernetes/scheme"
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"github.com/antimetal/agent/pkg/performance"
+	// Add all collectors to registry
+	_ "github.com/antimetal/agent/pkg/performance/collectors"
 	"github.com/antimetal/agent/pkg/resource/store"
 )
 
