@@ -83,8 +83,7 @@ type worker struct {
 	// configurable options
 	maxBatchSize        int
 	flushPeriod         time.Duration
-	resourceFilter      *resourcev1.TypeDescriptor
-	providerFilter      map[resourcev1.Provider]bool // For provider-based filtering
+	resourceFilters     []*resourcev1.TypeDescriptor
 	needsLeaderElection bool
 
 	// runtime fields
@@ -133,22 +132,13 @@ func WithFlushPeriod(period time.Duration) WorkerOpts {
 
 func WithResourceFilter(typeDef *resourcev1.TypeDescriptor) WorkerOpts {
 	return func(w *worker) {
-		w.resourceFilter = typeDef
+		w.resourceFilters = append(w.resourceFilters, typeDef)
 	}
 }
 
 func WithLeaderElection(needed bool) WorkerOpts {
 	return func(w *worker) {
 		w.needsLeaderElection = needed
-	}
-}
-
-func WithProviderFilter(providers ...resourcev1.Provider) WorkerOpts {
-	return func(w *worker) {
-		w.providerFilter = make(map[resourcev1.Provider]bool, len(providers))
-		for _, p := range providers {
-			w.providerFilter[p] = true
-		}
 	}
 }
 
@@ -167,12 +157,13 @@ func NewWorker(store resource.Store, opts ...WorkerOpts) (*worker, error) {
 	batch := newDeltasBatch([]*intakev1.Delta{})
 
 	w := &worker{
-		store:        store,
-		queue:        queue,
-		maxStreamAge: 10 * time.Minute,
-		batch:        batch,
-		maxBatchSize: defaultMaxBatchSize,
-		flushPeriod:  defaultFlushPeriod,
+		store:           store,
+		queue:           queue,
+		maxStreamAge:    10 * time.Minute,
+		batch:           batch,
+		maxBatchSize:    defaultMaxBatchSize,
+		flushPeriod:     defaultFlushPeriod,
+		resourceFilters: make([]*resourcev1.TypeDescriptor, 0),
 	}
 	for _, opt := range opts {
 		opt(w)
@@ -216,35 +207,7 @@ func (w *worker) Start(ctx context.Context) error {
 		w.batchFlusher(ctx)
 	}()
 
-	for event := range w.store.Subscribe(w.resourceFilter) {
-		if len(w.providerFilter) > 0 && len(event.Objs) > 0 {
-			// Check if any object matches the provider filter
-			matches := false
-			for _, obj := range event.Objs {
-				// Try to get the provider from the object
-				// Objects can contain either Resources or Relationships
-				objProvider := resourcev1.Provider_PROVIDER_OTHER
-
-				if obj.GetObject() != nil {
-					// Try to unmarshal as a Resource
-					var rsrc resourcev1.Resource
-					if err := obj.GetObject().UnmarshalTo(&rsrc); err == nil {
-						if rsrc.GetMetadata() != nil {
-							objProvider = rsrc.GetMetadata().GetProvider()
-						}
-					}
-				}
-
-				if w.providerFilter[objProvider] {
-					matches = true
-					break
-				}
-			}
-			if !matches {
-				continue // Skip this event if no objects match the provider filter
-			}
-		}
-
+	for event := range w.store.Subscribe(w.resourceFilters...) {
 		for _, obj := range event.Objs {
 			obj.Ttl = durationpb.New(defaultDeltaTTL)
 			obj.DeltaVersion = deltaVersion
