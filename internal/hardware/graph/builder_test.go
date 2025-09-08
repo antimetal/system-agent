@@ -54,6 +54,7 @@ func (ts *testStore) AddRelationships(rels ...*resourcev1.Relationship) error {
 }
 
 func (ts *testStore) UpdateResource(r *resourcev1.Resource) error {
+	ts.resources = append(ts.resources, r)
 	return ts.realStore.UpdateResource(r)
 }
 
