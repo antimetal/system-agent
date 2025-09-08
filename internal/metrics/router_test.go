@@ -295,8 +295,13 @@ func TestMetricsRouter_LifecycleManagement(t *testing.T) {
 	routerCtx, routerCancel := context.WithCancel(context.Background())
 	defer routerCancel()
 
-	err = router.Start(routerCtx)
-	require.NoError(t, err)
+	// Start router in a goroutine since it blocks until context is cancelled
+	go func() {
+		err := router.Start(routerCtx)
+		require.NoError(t, err)
+	}()
+	// Give router time to start
+	time.Sleep(10 * time.Millisecond)
 
 	// Verify consumers can receive events
 	event := MetricEvent{
