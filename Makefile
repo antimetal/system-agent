@@ -305,12 +305,12 @@ preview-deploy: manifests kustomize ## Generate a consolidated YAML for deployme
 	@rm -r $(ROOT)/tmp
 
 .PHONY: cluster
-cluster: ktf kustomize ## Build a KIND cluster which can be used for testing and development.
-	PATH="$(LOCALBIN):${PATH}" $(KTF) env create --name $(KIND_CLUSTER) --addon metallb
+cluster: kind kustomize ## Build a KIND cluster which can be used for testing and development.
+	PATH="$(LOCALBIN):${PATH}" $(KIND) create cluster --name $(KIND_CLUSTER) --config config/cluster.yaml
 
 .PHONY: delete-cluster
-destroy-cluster: ktf ## Delete the KIND cluster.
-	PATH="$(LOCALBIN):${PATH}" $(KTF) env delete --name $(KIND_CLUSTER)
+destroy-cluster: kind ## Delete the KIND cluster.
+	PATH="$(LOCALBIN):${PATH}" $(KIND) delete cluster --name $(KIND_CLUSTER)
 
 .PHONY: load.image
 load-image: kind ## Loads Docker image into KIND cluster and restarts agent for new image if it exists.
@@ -383,7 +383,6 @@ CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 GORELEASER ?= $(LOCALBIN)/goreleaser
 KIND ?= $(LOCALBIN)/kind
-KTF ?= $(LOCALBIN)/ktf
 KUBECTL ?= kubectl
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 LICENSE_CHECK ?= tools/license_check/license_check.py
@@ -415,7 +414,7 @@ endef
 
 .PHONY: tools
 tools: ## Download all tool dependencies if neccessary.
-tools: controller-gen golangci-lint kind ktf kustomize goreleaser buf
+tools: controller-gen golangci-lint kind kustomize goreleaser buf
 
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
@@ -437,13 +436,6 @@ $(KIND): $(KIND)@$(KIND_VERSION) FORCE
 	@ln -sf $< $@
 $(KIND)@$(KIND_VERSION):
 	$(call go-install-tool,$(KIND),sigs.k8s.io/kind,$(KIND_VERSION))
-
-.PHONY: ktf
-ktf: $(KTF) kind ## Download kubernetes-testing-framework locally if necessary.
-$(KTF): $(KTF)@$(KTF_VERSION) FORCE
-	@ln -sf $< $@
-$(KTF)@$(KTF_VERSION):
-	$(call go-install-tool,$(KTF),github.com/kong/kubernetes-testing-framework/cmd/ktf,$(KTF_VERSION))
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
