@@ -19,7 +19,9 @@ const (
 	DropPolicyBlock  DropPolicy = "block"  // Block until space available
 )
 
-// MetricType represents the type of performance metric
+// MetricType represents the type of performance metric.
+// These constants mirror those in pkg/performance/types.go to avoid import cycles.
+// Any updates here should be synchronized with the performance package.
 type MetricType string
 
 const (

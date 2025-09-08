@@ -75,28 +75,29 @@ func NewTransformer(meter metric.Meter, logger logr.Logger, serviceVersion strin
 func (t *Transformer) TransformAndRecord(event metrics.MetricEvent) error {
 	ctx := context.Background()
 	switch event.MetricType {
-	case "load":
+	case metrics.MetricTypeLoad:
 		return t.transformLoadStats(ctx, event.Data, t.buildAttributes(event))
-	case "memory":
+	case metrics.MetricTypeMemory:
 		return t.transformMemoryStats(ctx, event.Data, t.buildAttributes(event))
-	case "cpu":
+	case metrics.MetricTypeCPU:
 		return t.transformCPUStats(ctx, event.Data, t.buildAttributes(event))
-	case "process":
+	case metrics.MetricTypeProcess:
 		return t.transformProcessStats(ctx, event.Data, t.buildAttributes(event))
-	case "disk":
+	case metrics.MetricTypeDisk:
 		return t.transformDiskStats(ctx, event.Data, t.buildAttributes(event))
-	case "network":
+	case metrics.MetricTypeNetwork:
 		return t.transformNetworkStats(ctx, event.Data, t.buildAttributes(event))
-	case "tcp":
+	case metrics.MetricTypeTCP:
 		return t.transformTCPStats(ctx, event.Data, t.buildAttributes(event))
-	case "system":
+	case metrics.MetricTypeSystem:
 		return t.transformSystemStats(ctx, event.Data, t.buildAttributes(event))
-	case "kernel":
+	case metrics.MetricTypeKernel:
 		return t.transformKernelMessages(ctx, event.Data, t.buildAttributes(event))
-	case "cpu_info", "memory_info", "disk_info", "network_info":
+	case metrics.MetricTypeCPUInfo, metrics.MetricTypeMemoryInfo, 
+		metrics.MetricTypeDiskInfo, metrics.MetricTypeNetworkInfo:
 		// Info metrics are typically handled as resource attributes, not time-series metrics
 		return nil
-	case "numa_stats":
+	case metrics.MetricTypeNUMAStats:
 		return t.transformNUMAStats(ctx, event.Data, t.buildAttributes(event))
 	default:
 		t.logger.V(1).Info("Unknown metric type", "type", event.MetricType)

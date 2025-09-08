@@ -96,7 +96,7 @@ func (m *Manager) GetClusterName() string {
 }
 
 // PublishCollectorData publishes data from a specific collector
-func (m *Manager) PublishCollectorData(metricType metrics.MetricType, data any) error {
+func (m *Manager) PublishCollectorData(metricType MetricType, data any) error {
 	if m.router == nil {
 		return nil // Silently ignore if no router
 	}
@@ -106,7 +106,7 @@ func (m *Manager) PublishCollectorData(metricType metrics.MetricType, data any) 
 		Source:      "performance-collector",
 		NodeName:    m.nodeName,
 		ClusterName: m.clusterName,
-		MetricType:  metricType,
+		MetricType:  metrics.MetricType(metricType), // Convert to metrics.MetricType
 		EventType:   determineEventType(metricType),
 		Data:        data,
 	}
@@ -126,14 +126,14 @@ func (m *Manager) HasMetricsRouter() bool {
 }
 
 // determineEventType maps metric types to appropriate event types
-func determineEventType(metricType metrics.MetricType) metrics.EventType {
+func determineEventType(metricType MetricType) metrics.EventType {
 	switch metricType {
-	case metrics.MetricTypeLoad, metrics.MetricTypeMemory, metrics.MetricTypeCPU,
-		metrics.MetricTypeDisk, metrics.MetricTypeNetwork, metrics.MetricTypeProcess,
-		metrics.MetricTypeCPUInfo, metrics.MetricTypeMemoryInfo, metrics.MetricTypeDiskInfo,
-		metrics.MetricTypeNetworkInfo, metrics.MetricTypeNUMAStats:
+	case MetricTypeLoad, MetricTypeMemory, MetricTypeCPU,
+		MetricTypeDisk, MetricTypeNetwork, MetricTypeProcess,
+		MetricTypeCPUInfo, MetricTypeMemoryInfo, MetricTypeDiskInfo,
+		MetricTypeNetworkInfo, MetricTypeNUMAStats:
 		return metrics.EventTypeGauge
-	case metrics.MetricTypeSystem, metrics.MetricTypeTCP, metrics.MetricTypeKernel:
+	case MetricTypeSystem, MetricTypeTCP, MetricTypeKernel:
 		return metrics.EventTypeCounter
 	default:
 		return metrics.EventTypeGauge

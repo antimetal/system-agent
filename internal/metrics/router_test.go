@@ -111,7 +111,7 @@ func TestMetricsRouter_ConcurrentPublish(t *testing.T) {
 				event := MetricEvent{
 					Timestamp:  time.Now(),
 					Source:     "test",
-					MetricType: MetricType("test"),
+					MetricType: MetricTypeSystem,
 					Data:       id*eventsPerGoroutine + j,
 				}
 				err := router.Publish(event)
@@ -149,7 +149,7 @@ func TestMetricsRouter_PublishAfterClose(t *testing.T) {
 	event := MetricEvent{
 		Timestamp:  time.Now(),
 		Source:     "test",
-		MetricType: MetricType("test"),
+		MetricType: MetricTypeSystem,
 		Data:       "test data",
 	}
 	err := router.Publish(event)
@@ -247,9 +247,9 @@ func TestMetricsRouter_EventDelivery(t *testing.T) {
 
 	// Publish events
 	events := []MetricEvent{
-		{Timestamp: time.Now(), Source: "test", MetricType: "test", Data: "event1"},
-		{Timestamp: time.Now(), Source: "test", MetricType: "test", Data: "event2"},
-		{Timestamp: time.Now(), Source: "test", MetricType: "test", Data: "event3"},
+		{Timestamp: time.Now(), Source: "test", MetricType: MetricTypeSystem, Data: "event1"},
+		{Timestamp: time.Now(), Source: "test", MetricType: MetricTypeSystem, Data: "event2"},
+		{Timestamp: time.Now(), Source: "test", MetricType: MetricTypeSystem, Data: "event3"},
 	}
 
 	for _, event := range events {
@@ -302,7 +302,7 @@ func TestMetricsRouter_LifecycleManagement(t *testing.T) {
 	event := MetricEvent{
 		Timestamp:  time.Now(),
 		Source:     "test",
-		MetricType: MetricType("test"),
+		MetricType: MetricTypeSystem,
 		Data:       "test data",
 	}
 	err = router.Publish(event)
@@ -323,7 +323,7 @@ func TestMetricsRouter_LifecycleManagement(t *testing.T) {
 	event2 := MetricEvent{
 		Timestamp:  time.Now(),
 		Source:     "test",
-		MetricType: MetricType("test"),
+		MetricType: MetricTypeSystem,
 		Data:       "test data 2",
 	}
 	err = router.Publish(event2)
