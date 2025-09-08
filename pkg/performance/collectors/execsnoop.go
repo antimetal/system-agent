@@ -58,7 +58,6 @@ type ExecSnoopCollector struct {
 	enterLink     link.Link
 	exitLink      link.Link
 	reader        *ringbuf.Reader
-	outputChan    chan any
 }
 
 func NewExecSnoopCollector(logger logr.Logger, config performance.CollectionConfig, bpfObjectPath string) (*ExecSnoopCollector, error) {
@@ -91,24 +90,24 @@ func NewExecSnoopCollector(logger logr.Logger, config performance.CollectionConf
 	return collector, nil
 }
 
-func (c *ExecSnoopCollector) Start(ctx context.Context) (<-chan any, error) {
+func (c *ExecSnoopCollector) Start(ctx context.Context, receiver performance.Receiver) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if c.Status() == performance.CollectorStatusActive {
-		return nil, errors.New("collector already running")
+		return errors.New("collector already running")
 	}
 
 	// Remove memory limit for BPF operations
 	if err := rlimit.RemoveMemlock(); err != nil {
-		return nil, fmt.Errorf("removing memlock: %w", err)
+		return fmt.Errorf("removing memlock: %w", err)
 	}
 
 	// Create CO-RE manager if not already created
 	if c.coreManager == nil {
 		manager, err := core.NewManager(c.Logger())
 		if err != nil {
-			return nil, fmt.Errorf("creating CO-RE manager: %w", err)
+			return fmt.Errorf("creating CO-RE manager: %w", err)
 		}
 		c.coreManager = manager
 
@@ -124,7 +123,7 @@ func (c *ExecSnoopCollector) Start(ctx context.Context) (<-chan any, error) {
 	// Load pre-compiled BPF program with CO-RE support
 	coll, err := c.coreManager.LoadCollection(c.bpfObjectPath)
 	if err != nil {
-		return nil, fmt.Errorf("loading BPF collection with CO-RE: %w", err)
+		return fmt.Errorf("loading BPF collection with CO-RE: %w", err)
 	}
 	c.objs = coll
 
@@ -132,48 +131,45 @@ func (c *ExecSnoopCollector) Start(ctx context.Context) (<-chan any, error) {
 	enterProg, ok := c.objs.Programs["tracepoint__syscalls__sys_enter_execve"]
 	if !ok {
 		c.cleanup()
-		return nil, errors.New("sys_enter_execve program not found")
+		return errors.New("sys_enter_execve program not found")
 	}
 
 	exitProg, ok := c.objs.Programs["tracepoint__syscalls__sys_exit_execve"]
 	if !ok {
 		c.cleanup()
-		return nil, errors.New("sys_exit_execve program not found")
+		return errors.New("sys_exit_execve program not found")
 	}
 
 	c.enterLink, err = link.Tracepoint("syscalls", "sys_enter_execve", enterProg, nil)
 	if err != nil {
 		c.cleanup()
-		return nil, fmt.Errorf("attaching enter tracepoint: %w", err)
+		return fmt.Errorf("attaching enter tracepoint: %w", err)
 	}
 
 	c.exitLink, err = link.Tracepoint("syscalls", "sys_exit_execve", exitProg, nil)
 	if err != nil {
 		c.cleanup()
-		return nil, fmt.Errorf("attaching exit tracepoint: %w", err)
+		return fmt.Errorf("attaching exit tracepoint: %w", err)
 	}
 
 	// Open ring buffer
 	eventsMap, ok := c.objs.Maps["events"]
 	if !ok {
 		c.cleanup()
-		return nil, errors.New("events map not found")
+		return errors.New("events map not found")
 	}
 
 	c.reader, err = ringbuf.NewReader(eventsMap)
 	if err != nil {
 		c.cleanup()
-		return nil, fmt.Errorf("opening ring buffer: %w", err)
+		return fmt.Errorf("opening ring buffer: %w", err)
 	}
 
-	// Create output channel
-	c.outputChan = make(chan any, 100)
-
 	// Start reading events
-	go c.readEvents(ctx)
+	go c.readEvents(ctx, receiver)
 
 	c.SetStatus(performance.CollectorStatusActive)
-	return c.outputChan, nil
+	return nil
 }
 
 func (c *ExecSnoopCollector) cleanup() {
@@ -198,16 +194,12 @@ func (c *ExecSnoopCollector) cleanup() {
 	}
 }
 
-func (c *ExecSnoopCollector) readEvents(ctx context.Context) {
+func (c *ExecSnoopCollector) readEvents(ctx context.Context, receiver performance.Receiver) {
 	// Cleanup on exit
 	defer func() {
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		c.cleanup()
-		if c.outputChan != nil {
-			close(c.outputChan)
-			c.outputChan = nil
-		}
 		c.SetStatus(performance.CollectorStatusDisabled)
 	}()
 
@@ -231,13 +223,9 @@ func (c *ExecSnoopCollector) readEvents(ctx context.Context) {
 				continue
 			}
 
-			select {
-			case c.outputChan <- event:
-			case <-ctx.Done():
-				return
-			default:
-				// Channel full, drop event
-				c.Logger().V(1).Info("dropping event, channel full")
+			// Send to receiver
+			if err := receiver.Accept(event); err != nil {
+				c.Logger().Error(err, "Failed to send exec event to receiver")
 			}
 		}
 	}

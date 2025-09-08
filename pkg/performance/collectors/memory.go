@@ -95,13 +95,13 @@ func NewMemoryCollector(logger logr.Logger, config performance.CollectionConfig)
 }
 
 // Collect performs a one-shot collection of memory statistics
-func (c *MemoryCollector) Collect(ctx context.Context) (any, error) {
+func (c *MemoryCollector) Collect(ctx context.Context, receiver performance.Receiver) error {
 	currentTime := time.Now()
 
 	// Collect current statistics
 	currentStats, err := c.collectMemoryStats()
 	if err != nil {
-		return nil, fmt.Errorf("failed to collect memory stats: %w", err)
+		return fmt.Errorf("failed to collect memory stats: %w", err)
 	}
 
 	shouldCalc, reason := c.ShouldCalculateDeltas(currentTime)
@@ -111,21 +111,21 @@ func (c *MemoryCollector) Collect(ctx context.Context) (any, error) {
 			c.UpdateDeltaState(currentStats, currentTime)
 		}
 		c.Logger().V(1).Info("Collected memory statistics")
-		return currentStats, nil
+		return receiver.Accept(currentStats)
 	}
 
 	previousStats, ok := c.LastSnapshot.(*performance.MemoryStats)
 	if !ok || previousStats == nil {
 		c.UpdateDeltaState(currentStats, currentTime)
 		c.Logger().V(1).Info("Collected memory statistics")
-		return currentStats, nil
+		return receiver.Accept(currentStats)
 	}
 
 	c.calculateMemoryDeltas(currentStats, previousStats, currentTime, c.Config)
 	c.UpdateDeltaState(currentStats, currentTime)
 
 	c.Logger().V(1).Info("Collected memory statistics with delta support")
-	return currentStats, nil
+	return receiver.Accept(currentStats)
 }
 
 // collectMemoryStats reads and parses runtime memory statistics from /proc/meminfo and /proc/vmstat

@@ -69,13 +69,13 @@ func NewCPUCollector(logger logr.Logger, config performance.CollectionConfig) (*
 }
 
 // Collect performs a one-shot collection of CPU statistics
-func (c *CPUCollector) Collect(ctx context.Context) (any, error) {
+func (c *CPUCollector) Collect(ctx context.Context, receiver performance.Receiver) error {
 	currentTime := time.Now()
 
 	// Collect current statistics
 	currentStats, err := c.collectCPUStats()
 	if err != nil {
-		return nil, fmt.Errorf("failed to collect CPU stats: %w", err)
+		return fmt.Errorf("failed to collect CPU stats: %w", err)
 	}
 
 	shouldCalc, reason := c.ShouldCalculateDeltas(currentTime)
@@ -84,20 +84,20 @@ func (c *CPUCollector) Collect(ctx context.Context) (any, error) {
 		if c.IsFirst {
 			c.UpdateDeltaState(currentStats, currentTime)
 		}
-		return currentStats, nil
+		return receiver.Accept(currentStats)
 	}
 
 	previousStats, ok := c.LastSnapshot.([]*performance.CPUStats)
 	if !ok || previousStats == nil {
 		c.UpdateDeltaState(currentStats, currentTime)
-		return currentStats, nil
+		return receiver.Accept(currentStats)
 	}
 
 	c.calculateCPUDeltas(currentStats, previousStats, currentTime, c.Config)
 	c.UpdateDeltaState(currentStats, currentTime)
 
 	c.Logger().V(1).Info("Collected CPU statistics with delta support", "cpus", len(currentStats))
-	return currentStats, nil
+	return receiver.Accept(currentStats)
 }
 
 // collectCPUStats reads and parses /proc/stat for CPU statistics

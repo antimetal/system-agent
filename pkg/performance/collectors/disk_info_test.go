@@ -287,7 +287,8 @@ func TestDiskInfoCollector_Collect(t *testing.T) {
 				tt.setupSys(t, filepath.Join(tmpDir, "sys"))
 			}
 
-			result, err := collector.Collect(context.Background())
+			receiver := performance.NewMockReceiver("test-receiver")
+			err := collector.Collect(context.Background(), receiver)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -295,8 +296,10 @@ func TestDiskInfoCollector_Collect(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			disks, ok := result.([]performance.DiskInfo)
-			require.True(t, ok, "Expected []performance.DiskInfo, got %T", result)
+			calls := receiver.GetAcceptCalls()
+			require.Len(t, calls, 1, "Expected exactly one Accept call")
+			disks, ok := calls[0].Data.([]performance.DiskInfo)
+			require.True(t, ok, "Expected []performance.DiskInfo, got %T", calls[0].Data)
 
 			if tt.wantInfo != nil {
 				tt.wantInfo(t, disks)
@@ -325,10 +328,13 @@ func TestDiskInfoCollector_PartitionDetectionWithSoftwareRAID(t *testing.T) {
 		"size": "2000000",
 	})
 
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+	err := collector.Collect(context.Background(), receiver)
 	require.NoError(t, err)
 
-	disks, ok := result.([]performance.DiskInfo)
+	calls := receiver.GetAcceptCalls()
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+	disks, ok := calls[0].Data.([]performance.DiskInfo)
 	require.True(t, ok)
 
 	// Should include: sda (whole disk) and md0 (software RAID device)

@@ -67,17 +67,21 @@ func setupDiskstatsFile(t *testing.T, content string) string {
 
 func collectDiskStats(t *testing.T, collector *collectors.DiskCollector) []*performance.DiskStats {
 	ctx := context.Background()
-	result, err := collector.Collect(ctx)
+	receiver := performance.NewMockReceiver("test-receiver")
+	err := collector.Collect(ctx, receiver)
 	require.NoError(t, err)
 
-	stats, ok := result.([]*performance.DiskStats)
-	require.True(t, ok, "expected []*performance.DiskStats, got %T", result)
+	calls := receiver.GetAcceptCalls()
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+	stats, ok := calls[0].Data.([]*performance.DiskStats)
+	require.True(t, ok, "expected []*performance.DiskStats, got %T", calls[0].Data)
 	return stats
 }
 
 func collectDiskStatsWithError(collector *collectors.DiskCollector) error {
 	ctx := context.Background()
-	_, err := collector.Collect(ctx)
+	receiver := performance.NewMockReceiver("test-receiver")
+	err := collector.Collect(ctx, receiver)
 	return err
 }
 

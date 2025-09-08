@@ -45,9 +45,6 @@ const (
 	// Buffer size for reading from /dev/kmsg
 	kmsgBufferSize = 8192
 
-	// Channel buffer size for continuous collection
-	continuousChannelBuffer = 100
-
 	// maxPrefixLength is the maximum allowed length for a prefix to be considered valid
 	// when extracting subsystem from "subsystem:" format
 	maxPrefixLength = 50
@@ -63,10 +60,9 @@ type KernelCollector struct {
 	procPath     string
 
 	// Continuous collection state
-	continuousMu   sync.Mutex
-	continuousChan chan any
-	isRunning      bool
-	lastError      error
+	continuousMu sync.Mutex
+	isRunning    bool
+	lastError    error
 }
 
 // Compile-time interface check
@@ -115,16 +111,16 @@ func NewKernelCollector(logger logr.Logger, config performance.CollectionConfig,
 	return collector, nil
 }
 
-func (c *KernelCollector) Collect(ctx context.Context) (any, error) {
+func (c *KernelCollector) Collect(ctx context.Context, receiver performance.Receiver) error {
 	messages, err := c.collectKernelMessages(ctx)
 	if err != nil {
 		if os.IsPermission(err) {
 			c.logger.V(1).Info("Permission denied reading kernel messages", "path", c.kmsgPath)
-			return []*performance.KernelMessage{}, nil
+			return receiver.Accept([]*performance.KernelMessage{})
 		}
-		return nil, err
+		return err
 	}
-	return messages, nil
+	return receiver.Accept(messages)
 }
 
 func (c *KernelCollector) collectKernelMessages(ctx context.Context) ([]*performance.KernelMessage, error) {
@@ -333,26 +329,25 @@ func parseMessageContent(message string) (subsystem, device string) {
 	return subsystem, device
 }
 
-func (c *KernelCollector) Start(ctx context.Context) (<-chan any, error) {
+func (c *KernelCollector) Start(ctx context.Context, receiver performance.Receiver) error {
 	c.continuousMu.Lock()
 	defer c.continuousMu.Unlock()
 
 	if c.isRunning {
-		return nil, fmt.Errorf("collector is already running")
+		return fmt.Errorf("collector is already running")
 	}
 
 	bootTime, err := proc.BootTime(c.procPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get boot time: %w", err)
+		return fmt.Errorf("failed to get boot time: %w", err)
 	}
 
-	c.continuousChan = make(chan any, continuousChannelBuffer)
 	c.isRunning = true
 	c.lastError = nil
 
-	go c.continuousCollectionLoop(ctx, bootTime)
+	go c.continuousCollectionLoop(ctx, bootTime, receiver)
 
-	return c.continuousChan, nil
+	return nil
 }
 
 func (c *KernelCollector) Status() performance.CollectorStatus {
@@ -374,14 +369,10 @@ func (c *KernelCollector) LastError() error {
 	return c.lastError
 }
 
-func (c *KernelCollector) continuousCollectionLoop(ctx context.Context, bootTime time.Time) {
+func (c *KernelCollector) continuousCollectionLoop(ctx context.Context, bootTime time.Time, receiver performance.Receiver) {
 	defer func() {
 		// Cleanup on exit
 		c.continuousMu.Lock()
-		if c.continuousChan != nil {
-			close(c.continuousChan)
-			c.continuousChan = nil
-		}
 		c.isRunning = false
 		c.lastError = nil // Clear error on cleanup to reset to disabled status
 		c.continuousMu.Unlock()
@@ -440,10 +431,8 @@ func (c *KernelCollector) continuousCollectionLoop(ctx context.Context, bootTime
 			continue
 		}
 
-		select {
-		case c.continuousChan <- msg:
-		default:
-			c.logger.V(1).Info("Channel full, dropping kernel message")
+		if err := receiver.Accept(msg); err != nil {
+			c.logger.V(1).Info("Failed to send kernel message to receiver", "error", err)
 		}
 	}
 }

@@ -69,9 +69,6 @@ type ProcessCollector struct {
 	mu             sync.RWMutex
 	lastCPUTimes   map[int32]*ProcessCPUTime
 	lastUpdateTime time.Time
-
-	// Channel management
-	ch chan any
 }
 
 // ProcessCPUTime tracks CPU usage for a process over time
@@ -122,9 +119,9 @@ func NewProcessCollector(logger logr.Logger, config performance.CollectionConfig
 	}, nil
 }
 
-func (c *ProcessCollector) Start(ctx context.Context) (<-chan any, error) {
+func (c *ProcessCollector) Start(ctx context.Context, receiver performance.Receiver) error {
 	if c.Status() != performance.CollectorStatusDisabled {
-		return nil, fmt.Errorf("collector already running")
+		return fmt.Errorf("collector already running")
 	}
 
 	c.SetStatus(performance.CollectorStatusActive)
@@ -133,7 +130,7 @@ func (c *ProcessCollector) Start(ctx context.Context) (<-chan any, error) {
 	initial, err := c.collectMinimalStats(ctx)
 	if err != nil {
 		c.SetStatus(performance.CollectorStatusFailed)
-		return nil, fmt.Errorf("failed to collect initial process stats: %w", err)
+		return fmt.Errorf("failed to collect initial process stats: %w", err)
 	}
 
 	c.mu.Lock()
@@ -141,17 +138,12 @@ func (c *ProcessCollector) Start(ctx context.Context) (<-chan any, error) {
 	c.lastUpdateTime = time.Now()
 	c.mu.Unlock()
 
-	c.ch = make(chan any)
-	go c.runCollection(ctx)
-	return c.ch, nil
+	go c.runCollection(ctx, receiver)
+	return nil
 }
 
-func (c *ProcessCollector) runCollection(ctx context.Context) {
+func (c *ProcessCollector) runCollection(ctx context.Context, receiver performance.Receiver) {
 	defer func() {
-		if c.ch != nil {
-			close(c.ch)
-			c.ch = nil
-		}
 		c.SetStatus(performance.CollectorStatusDisabled)
 	}()
 
@@ -170,10 +162,9 @@ func (c *ProcessCollector) runCollection(ctx context.Context) {
 				continue
 			}
 
-			select {
-			case c.ch <- processes:
-			case <-ctx.Done():
-				return
+			// Send data to receiver
+			if err := receiver.Accept(processes); err != nil {
+				c.Logger().Error(err, "Failed to send process stats to receiver")
 			}
 		}
 	}

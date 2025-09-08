@@ -97,13 +97,13 @@ func NewTCPCollector(logger logr.Logger, config performance.CollectionConfig) (*
 	}, nil
 }
 
-func (c *TCPCollector) Collect(ctx context.Context) (any, error) {
+func (c *TCPCollector) Collect(ctx context.Context, receiver performance.Receiver) error {
 	currentTime := time.Now()
 
 	// Collect current statistics
 	currentStats, err := c.collectTCPStats()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	shouldCalc, reason := c.ShouldCalculateDeltas(currentTime)
@@ -112,19 +112,19 @@ func (c *TCPCollector) Collect(ctx context.Context) (any, error) {
 		if c.IsFirst {
 			c.UpdateDeltaState(currentStats, currentTime)
 		}
-		return currentStats, nil
+		return receiver.Accept(currentStats)
 	}
 
 	previousStats, ok := c.LastSnapshot.(*performance.TCPStats)
 	if !ok || previousStats == nil {
 		c.UpdateDeltaState(currentStats, currentTime)
-		return currentStats, nil
+		return receiver.Accept(currentStats)
 	}
 
 	c.calculateTCPDeltas(currentStats, previousStats, currentTime, c.Config)
 	c.UpdateDeltaState(currentStats, currentTime)
 
-	return currentStats, nil
+	return receiver.Accept(currentStats)
 }
 
 // collectTCPStats gathers TCP statistics from multiple proc files

@@ -66,8 +66,12 @@ func NewLoadCollector(logger logr.Logger, config performance.CollectionConfig) (
 	}, nil
 }
 
-func (c *LoadCollector) Collect(ctx context.Context) (any, error) {
-	return c.collectLoadStats()
+func (c *LoadCollector) Collect(ctx context.Context, receiver performance.Receiver) error {
+	stats, err := c.collectLoadStats()
+	if err != nil {
+		return err
+	}
+	return receiver.Accept(stats)
 }
 
 // collectLoadStats reads and parses /proc/loadavg and /proc/uptime

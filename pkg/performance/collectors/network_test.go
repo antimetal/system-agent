@@ -116,7 +116,9 @@ func createTestNetworkCollector(t *testing.T, procNetDev string, sysFiles map[st
 }
 
 func collectAndValidateNetwork(t *testing.T, collector *collectors.NetworkCollector, expectError bool, validate func(t *testing.T, stats []performance.NetworkStats)) {
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+
+	err := collector.Collect(context.Background(), receiver)
 
 	if expectError {
 		assert.Error(t, err)
@@ -124,7 +126,11 @@ func collectAndValidateNetwork(t *testing.T, collector *collectors.NetworkCollec
 	}
 
 	require.NoError(t, err)
-	stats, ok := result.([]performance.NetworkStats)
+
+	calls := receiver.GetAcceptCalls()
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+
+	stats, ok := calls[0].Data.([]performance.NetworkStats)
 	require.True(t, ok, "result should be []performance.NetworkStats")
 
 	if validate != nil {
@@ -301,7 +307,8 @@ func TestNetworkCollector_Collect(t *testing.T) {
 				collector, err := collectors.NewNetworkCollector(logr.Discard(), config)
 				require.NoError(t, err)
 
-				_, err = collector.Collect(context.Background())
+				receiver := performance.NewMockReceiver("test-receiver")
+				err = collector.Collect(context.Background(), receiver)
 				assert.Error(t, err)
 				return
 			}

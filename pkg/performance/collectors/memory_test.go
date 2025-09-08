@@ -351,7 +351,8 @@ func validateMemoryStats(t *testing.T, stats *performance.MemoryStats, expected 
 }
 
 func collectAndValidateMemory(t *testing.T, collector *MemoryCollector, wantErr bool) *performance.MemoryStats {
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+	err := collector.Collect(context.Background(), receiver)
 
 	if wantErr {
 		assert.Error(t, err)
@@ -359,8 +360,13 @@ func collectAndValidateMemory(t *testing.T, collector *MemoryCollector, wantErr 
 	}
 
 	require.NoError(t, err)
-	stats, ok := result.(*performance.MemoryStats)
-	require.True(t, ok)
+
+	// Get the data from the mock receiver
+	calls := receiver.GetAcceptCalls()
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+
+	stats, ok := calls[0].Data.(*performance.MemoryStats)
+	require.True(t, ok, "Expected data to be *performance.MemoryStats")
 	return stats
 }
 

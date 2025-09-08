@@ -47,23 +47,31 @@ func TestProcessCollector(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	dataChan, err := collector.Start(ctx)
+	receiver := performance.NewMockReceiver("test-receiver")
+	err = collector.Start(ctx, receiver)
 	require.NoError(t, err)
-	require.NotNil(t, dataChan)
 	assert.Equal(t, performance.CollectorStatusActive, collector.Status())
 
 	// Wait for at least 2 collections to test CPU percentage calculation
 	var collections [][]*performance.ProcessStats
 	timeout := time.After(1 * time.Second)
 
+	// Poll the receiver for data
 	for len(collections) < 2 {
 		select {
-		case data := <-dataChan:
-			processes, ok := data.([]*performance.ProcessStats)
-			require.True(t, ok, "expected []*performance.ProcessStats, got %T", data)
-			collections = append(collections, processes)
 		case <-timeout:
 			t.Fatal("Timeout waiting for process data")
+		default:
+			calls := receiver.GetAcceptCalls()
+			if len(calls) > len(collections) {
+				// New data received
+				for i := len(collections); i < len(calls); i++ {
+					processes, ok := calls[i].Data.([]*performance.ProcessStats)
+					require.True(t, ok, "expected []*performance.ProcessStats, got %T", calls[i].Data)
+					collections = append(collections, processes)
+				}
+			}
+			time.Sleep(10 * time.Millisecond) // Small delay to avoid busy waiting
 		}
 	}
 
@@ -354,22 +362,32 @@ nonvoluntary_ctxt_switches: 5`
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	dataChan, err := collector.Start(ctx)
+	receiver := performance.NewMockReceiver("test-receiver")
+	err = collector.Start(ctx, receiver)
 	require.NoError(t, err)
-	require.NotNil(t, dataChan)
 
 	// Wait for first collection
 	timeout := time.After(2 * time.Second)
 	var processes []*performance.ProcessStats
-	select {
-	case data := <-dataChan:
-		var ok bool
-		processes, ok = data.([]*performance.ProcessStats)
-		require.True(t, ok)
-		require.Len(t, processes, 1)
-	case <-timeout:
-		t.Fatal("Timeout waiting for process data")
+
+	// Poll the receiver for data
+	for {
+		select {
+		case <-timeout:
+			t.Fatal("Timeout waiting for process data")
+		default:
+			calls := receiver.GetAcceptCalls()
+			if len(calls) > 0 {
+				var ok bool
+				processes, ok = calls[0].Data.([]*performance.ProcessStats)
+				require.True(t, ok)
+				require.Len(t, processes, 1)
+				goto done
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
 	}
+done:
 
 	proc := processes[0]
 	assert.Equal(t, int32(1234), proc.PID)

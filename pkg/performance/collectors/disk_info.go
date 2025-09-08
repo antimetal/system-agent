@@ -99,8 +99,12 @@ func NewDiskInfoCollector(logger logr.Logger, config performance.CollectionConfi
 	}, nil
 }
 
-func (c *DiskInfoCollector) Collect(ctx context.Context) (any, error) {
-	return c.collectDiskInfo()
+func (c *DiskInfoCollector) Collect(ctx context.Context, receiver performance.Receiver) error {
+	data, err := c.collectDiskInfo()
+	if err != nil {
+		return err
+	}
+	return receiver.Accept(data)
 }
 
 // collectDiskInfo discovers and collects hardware information for all block devices.

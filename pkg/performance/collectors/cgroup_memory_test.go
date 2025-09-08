@@ -82,10 +82,14 @@ func TestCgroupMemoryCollector_CgroupV1(t *testing.T) {
 	collector, err := collectors.NewCgroupMemoryCollector(logr.Discard(), config)
 	require.NoError(t, err)
 
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+	err = collector.Collect(context.Background(), receiver)
 	require.NoError(t, err)
 
-	stats, ok := result.([]performance.CgroupMemoryStats)
+	calls := receiver.GetAcceptCalls()
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+
+	stats, ok := calls[0].Data.([]performance.CgroupMemoryStats)
 	require.True(t, ok, "result should be []performance.CgroupMemoryStats")
 	require.Len(t, stats, 2, "should find 2 containers")
 
@@ -120,10 +124,14 @@ func TestCgroupMemoryCollector_CgroupV2(t *testing.T) {
 	collector, err := collectors.NewCgroupMemoryCollector(logr.Discard(), config)
 	require.NoError(t, err)
 
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+	err = collector.Collect(context.Background(), receiver)
 	require.NoError(t, err)
 
-	stats, ok := result.([]performance.CgroupMemoryStats)
+	calls := receiver.GetAcceptCalls()
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+
+	stats, ok := calls[0].Data.([]performance.CgroupMemoryStats)
 	require.True(t, ok, "result should be []performance.CgroupMemoryStats")
 	require.Len(t, stats, 2, "should find 2 containers")
 
@@ -157,7 +165,8 @@ func TestCgroupMemoryCollector_MissingCgroup(t *testing.T) {
 	collector, err := collectors.NewCgroupMemoryCollector(logr.Discard(), config)
 	require.NoError(t, err)
 
-	_, err = collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+	err = collector.Collect(context.Background(), receiver)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to detect cgroup version")
 }
@@ -186,10 +195,14 @@ swap 0`)
 	collector, err := collectors.NewCgroupMemoryCollector(logr.Discard(), config)
 	require.NoError(t, err)
 
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+	err = collector.Collect(context.Background(), receiver)
 	require.NoError(t, err)
 
-	stats, ok := result.([]performance.CgroupMemoryStats)
+	calls := receiver.GetAcceptCalls()
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+
+	stats, ok := calls[0].Data.([]performance.CgroupMemoryStats)
 	require.True(t, ok)
 	require.Len(t, stats, 1)
 
@@ -226,10 +239,14 @@ oom_kill 10`)
 	collector, err := collectors.NewCgroupMemoryCollector(logr.Discard(), config)
 	require.NoError(t, err)
 
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+	err = collector.Collect(context.Background(), receiver)
 	require.NoError(t, err)
 
-	stats, ok := result.([]performance.CgroupMemoryStats)
+	calls := receiver.GetAcceptCalls()
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+
+	stats, ok := calls[0].Data.([]performance.CgroupMemoryStats)
 	require.True(t, ok)
 	require.Len(t, stats, 1)
 

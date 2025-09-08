@@ -234,7 +234,8 @@ func TestLoadCollector_MissingFiles(t *testing.T) {
 			}
 			collector := createTestLoadCollector(t, loadavgContent, uptimeContent)
 
-			result, err := collector.Collect(context.Background())
+			receiver := performance.NewMockReceiver("test-receiver")
+			err := collector.Collect(context.Background(), receiver)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -245,7 +246,11 @@ func TestLoadCollector_MissingFiles(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			stats, ok := result.(*performance.LoadStats)
+
+			calls := receiver.GetAcceptCalls()
+			require.Len(t, calls, 1, "Expected exactly one Accept call")
+
+			stats, ok := calls[0].Data.(*performance.LoadStats)
 			require.True(t, ok)
 
 			// For missing uptime case, should have zero uptime but valid load data
@@ -413,7 +418,9 @@ func TestLoadCollector_DataParsing(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			collector := createTestLoadCollector(t, tt.loadavgContent, tt.uptimeContent)
-			result, err := collector.Collect(context.Background())
+			receiver := performance.NewMockReceiver("test-receiver")
+
+			err := collector.Collect(context.Background(), receiver)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -424,7 +431,11 @@ func TestLoadCollector_DataParsing(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			stats, ok := result.(*performance.LoadStats)
+
+			calls := receiver.GetAcceptCalls()
+			require.Len(t, calls, 1, "Expected exactly one Accept call")
+
+			stats, ok := calls[0].Data.(*performance.LoadStats)
 			require.True(t, ok)
 			validateLoadStats(t, stats, tt.expected)
 		})
@@ -670,7 +681,8 @@ func TestLoadCollector_BlockedProcsIntegration(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			collector := createTestLoadCollectorWithStat(t, tt.loadavgContent, tt.uptimeContent, tt.statContent)
 
-			result, err := collector.Collect(context.Background())
+			receiver := performance.NewMockReceiver("test-receiver")
+			err := collector.Collect(context.Background(), receiver)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -678,7 +690,11 @@ func TestLoadCollector_BlockedProcsIntegration(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			stats, ok := result.(*performance.LoadStats)
+
+			calls := receiver.GetAcceptCalls()
+			require.Len(t, calls, 1, "Expected exactly one Accept call")
+
+			stats, ok := calls[0].Data.(*performance.LoadStats)
 			require.True(t, ok, "result should be *performance.LoadStats")
 
 			validateLoadStats(t, stats, tt.expected)
@@ -710,10 +726,16 @@ func TestLoadCollector_StatPermissions(t *testing.T) {
 	require.NoError(t, err)
 
 	// Collection should succeed (graceful degradation - stat is optional)
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+	err = collector.Collect(context.Background(), receiver)
+
 	require.NoError(t, err)
 
-	stats, ok := result.(*performance.LoadStats)
+	calls := receiver.GetAcceptCalls()
+
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+
+	stats, ok := calls[0].Data.(*performance.LoadStats)
 	require.True(t, ok)
 
 	// Load data should be present
@@ -749,10 +771,16 @@ func TestLoadCollector_StatAsDirectory(t *testing.T) {
 	require.NoError(t, err)
 
 	// Collection should succeed (graceful degradation)
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+	err = collector.Collect(context.Background(), receiver)
+
 	require.NoError(t, err)
 
-	stats, ok := result.(*performance.LoadStats)
+	calls := receiver.GetAcceptCalls()
+
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+
+	stats, ok := calls[0].Data.(*performance.LoadStats)
 	require.True(t, ok)
 
 	// Load data should be present
@@ -765,10 +793,17 @@ func TestLoadCollector_StatAsDirectory(t *testing.T) {
 func TestLoadCollector_AllFieldsWithStat(t *testing.T) {
 	collector := createTestLoadCollectorWithStat(t, validLoadavgContent, validUptimeContent, validStatWithBlockedContent)
 
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+
+	err := collector.Collect(context.Background(), receiver)
+
 	require.NoError(t, err)
 
-	stats, ok := result.(*performance.LoadStats)
+	calls := receiver.GetAcceptCalls()
+
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+
+	stats, ok := calls[0].Data.(*performance.LoadStats)
 	require.True(t, ok, "result should be *performance.LoadStats")
 
 	// Verify all fields including the new BlockedProcs

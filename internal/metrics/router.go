@@ -11,14 +11,15 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
+	"github.com/antimetal/agent/pkg/performance"
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 // Compile-time checks
 var _ manager.Runnable = (*MetricsRouter)(nil)
-var _ Router = (*MetricsRouter)(nil)
 
 var (
 	// ErrRouterClosed is returned when attempting to publish to a closed router
@@ -26,19 +27,25 @@ var (
 )
 
 // MetricsRouter is a simple registry that routes metrics events to multiple consumers
-// It implements both Publisher and manager.Runnable interfaces
+// It implements Publisher, Receiver, and manager.Runnable interfaces
 type MetricsRouter struct {
-	logger    logr.Logger
-	mu        sync.RWMutex
-	consumers map[string]Consumer
-	closed    bool // Set when shutting down
+	logger      logr.Logger
+	mu          sync.RWMutex
+	consumers   map[string]Consumer
+	closed      bool   // Set when shutting down
+	nodeName    string // Node name for metric events
+	clusterName string // Cluster name for metric events
+	source      string // Source identifier for metric events
 }
 
 // NewMetricsRouter creates a new metrics router
-func NewMetricsRouter(logger logr.Logger) *MetricsRouter {
+func NewMetricsRouter(logger logr.Logger, nodeName, clusterName, source string) *MetricsRouter {
 	return &MetricsRouter{
-		logger:    logger.WithName("metrics-router"),
-		consumers: make(map[string]Consumer),
+		logger:      logger.WithName("metrics-router"),
+		consumers:   make(map[string]Consumer),
+		nodeName:    nodeName,
+		clusterName: clusterName,
+		source:      source,
 	}
 }
 
@@ -92,8 +99,8 @@ func (r *MetricsRouter) UnregisterConsumer(name string) error {
 	return nil
 }
 
-// Publish emits a single metrics event to all registered consumers
-func (r *MetricsRouter) Publish(event MetricEvent) error {
+// publishEvent emits a single metrics event to all registered consumers
+func (r *MetricsRouter) publishEvent(event MetricEvent) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -116,16 +123,6 @@ func (r *MetricsRouter) Publish(event MetricEvent) error {
 	return lastErr
 }
 
-// PublishBatch emits multiple metrics events efficiently
-func (r *MetricsRouter) PublishBatch(events []MetricEvent) error {
-	for _, event := range events {
-		if err := r.Publish(event); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // GetStats returns router statistics
 func (r *MetricsRouter) GetStats() RouterStats {
 	r.mu.RLock()
@@ -142,6 +139,86 @@ func (r *MetricsRouter) GetStats() RouterStats {
 		ConsumerCount: len(r.consumers),
 		Consumers:     consumerStats,
 	}
+}
+
+// Accept processes metrics data from collectors and routes them to consumers
+// It implements a compatible interface with performance.Receiver
+func (r *MetricsRouter) Accept(data any) error {
+	// Determine the metric type from the data type
+	var metricsType MetricType
+
+	// Use type assertion to determine what kind of data we received
+	switch data.(type) {
+	case *performance.LoadStats:
+		metricsType = MetricTypeLoad
+	case *performance.MemoryStats:
+		metricsType = MetricTypeMemory
+	case *performance.CPUStats:
+		metricsType = MetricTypeCPU
+	case []*performance.ProcessStats:
+		metricsType = MetricTypeProcess
+	case []*performance.DiskStats:
+		metricsType = MetricTypeDisk
+	case []performance.NetworkStats:
+		metricsType = MetricTypeNetwork
+	case *performance.TCPStats:
+		metricsType = MetricTypeTCP
+	case []*performance.KernelMessage:
+		metricsType = MetricTypeKernel
+	case *performance.SystemStats:
+		metricsType = MetricTypeSystem
+	case *performance.CPUInfo:
+		metricsType = MetricTypeCPUInfo
+	case *performance.MemoryInfo:
+		metricsType = MetricTypeMemoryInfo
+	case []performance.DiskInfo:
+		metricsType = MetricTypeDiskInfo
+	case []performance.NetworkInfo:
+		metricsType = MetricTypeNetworkInfo
+	case *performance.NUMAStatistics:
+		metricsType = MetricTypeNUMAStats
+	default:
+		// For testing and unknown types, use a generic metric type
+		metricsType = MetricType("unknown")
+	}
+
+	// Determine event type based on the metric type
+	eventType := r.getEventType(metricsType)
+
+	// Create a MetricEvent
+	event := MetricEvent{
+		Timestamp:   time.Now(),
+		Source:      r.source,
+		NodeName:    r.nodeName,
+		ClusterName: r.clusterName,
+		MetricType:  metricsType,
+		EventType:   eventType,
+		Data:        data,
+	}
+
+	// Route the event to all consumers
+	return r.publishEvent(event)
+}
+
+// Name implements the performance.Receiver interface
+func (r *MetricsRouter) Name() string {
+	return "metrics-router"
+}
+
+// getEventType determines the appropriate event type for a metric
+func (r *MetricsRouter) getEventType(metricType MetricType) EventType {
+	// Hardware info types are snapshots (static configuration)
+	switch metricType {
+	case MetricTypeCPUInfo, MetricTypeMemoryInfo, MetricTypeDiskInfo, MetricTypeNetworkInfo:
+		return EventTypeSnapshot
+	case MetricTypeNUMAStats:
+		return EventTypeSnapshot
+	}
+
+	// Most performance metrics are gauges (point-in-time measurements)
+	// Some like network/disk bytes are counters but we'll handle that
+	// in the consumers that need to differentiate
+	return EventTypeGauge
 }
 
 // RouterStats contains metrics about the event router
