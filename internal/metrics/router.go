@@ -43,20 +43,20 @@ func NewMetricsRouter(logger logr.Logger) *MetricsRouter {
 	}
 }
 
-// Start initializes the router.
-// This just marks the router as started and sets up shutdown handling.
+// Start initializes the router and blocks until the context is cancelled.
+// This implements the manager.Runnable interface correctly by blocking.
 func (r *MetricsRouter) Start(ctx context.Context) error {
 	r.logger.Info("Starting metrics router")
 
-	// When context is cancelled, mark as closed
-	go func() {
-		<-ctx.Done()
-		r.mu.Lock()
-		r.closed = true
-		r.mu.Unlock()
-		r.logger.Info("Metrics router shutdown")
-	}()
+	// Block until context is cancelled
+	<-ctx.Done()
 
+	// Mark router as closed
+	r.mu.Lock()
+	r.closed = true
+	r.mu.Unlock()
+
+	r.logger.Info("Metrics router shutdown")
 	return nil
 }
 
