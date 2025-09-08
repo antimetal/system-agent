@@ -93,7 +93,7 @@ func (t *Transformer) TransformAndRecord(event metrics.MetricEvent) error {
 		return t.transformSystemStats(ctx, event.Data, t.buildAttributes(event))
 	case metrics.MetricTypeKernel:
 		return t.transformKernelMessages(ctx, event.Data, t.buildAttributes(event))
-	case metrics.MetricTypeCPUInfo, metrics.MetricTypeMemoryInfo, 
+	case metrics.MetricTypeCPUInfo, metrics.MetricTypeMemoryInfo,
 		metrics.MetricTypeDiskInfo, metrics.MetricTypeNetworkInfo:
 		// Info metrics are typically handled as resource attributes, not time-series metrics
 		return nil

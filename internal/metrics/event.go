@@ -16,7 +16,6 @@ type DropPolicy string
 const (
 	DropPolicyOldest DropPolicy = "oldest" // Drop oldest events (default)
 	DropPolicyNewest DropPolicy = "newest" // Drop newest events
-	DropPolicyBlock  DropPolicy = "block"  // Block until space available
 )
 
 // MetricType represents the type of performance metric.

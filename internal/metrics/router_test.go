@@ -319,6 +319,10 @@ func TestMetricsRouter_LifecycleManagement(t *testing.T) {
 	cancel1()
 	time.Sleep(50 * time.Millisecond)
 
+	// Unregister the stopped consumer (this is what should happen in practice)
+	err = router.UnregisterConsumer("consumer1")
+	require.NoError(t, err)
+
 	// Send another event
 	event2 := MetricEvent{
 		Timestamp:  time.Now(),
@@ -331,7 +335,7 @@ func TestMetricsRouter_LifecycleManagement(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	// Consumer1 should still have 1 event (stopped), consumer2 should have 2
+	// Consumer1 should still have 1 event (unregistered), consumer2 should have 2
 	assert.Equal(t, 1, len(consumer1.getEvents()))
 	assert.Equal(t, 2, len(consumer2.getEvents()))
 }

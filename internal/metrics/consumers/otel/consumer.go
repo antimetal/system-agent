@@ -192,11 +192,6 @@ func (c *Consumer) HandleEvent(event metrics.MetricEvent) error {
 			return ErrBufferFull
 		}
 
-	case metrics.DropPolicyBlock:
-		// Block until buffer has space
-		c.buffer <- event
-		return nil
-
 	case metrics.DropPolicyOldest:
 		fallthrough
 	default:
@@ -211,9 +206,15 @@ func (c *Consumer) HandleEvent(event metrics.MetricEvent) error {
 				c.eventsDropped.Add(1)
 			default:
 			}
-			// Now add the new event
-			c.buffer <- event
-			return nil
+			// Now add the new event (non-blocking)
+			select {
+			case c.buffer <- event:
+				return nil
+			default:
+				// Still full after dropping oldest (shouldn't happen but be safe)
+				c.eventsDropped.Add(1)
+				return ErrBufferFull
+			}
 		}
 	}
 }
