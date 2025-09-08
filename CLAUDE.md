@@ -101,6 +101,7 @@ Run `make help` for the full list. Key commands:
 | **Test** | `make test` | Run tests with coverage |
 | | `make lint` | Run golangci-lint |
 | | `make fmt` | Format Go code |
+| | `make fmt.clang` | Format C/C++/eBPF code |
 | **Generate** | `make generate` | Generate K8s manifests |
 | | `make gen-license-headers` | **ALWAYS run before committing** |
 | **KIND** | `make cluster` | Create local KIND cluster |
@@ -314,10 +315,21 @@ func TestEBPFFeature(t *testing.T) {
 ## Development Notes
 
 ### Code Style
+
+#### Go Code
 - **Early returns** to reduce nesting
 - **Functional patterns** where applicable
 - **Concise implementations** without unnecessary comments
 - **Error wrapping** with context
+- **Format with `make fmt`** before committing
+
+#### C/C++ and eBPF Code
+- **Google C++ Style** as base (via `.clang-format`)
+- **Pointer alignment**: `Type* variable` (pointer attached to type)
+- **Indent width**: 2 spaces
+- **Column limit**: 80 characters
+- **Format with `make fmt.clang`** before committing
+- **Include ordering**: vmlinux.h first, then system headers, then local headers
 
 ### Common Pitfalls
 - Always run `make generate` after annotation changes
