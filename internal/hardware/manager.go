@@ -81,6 +81,12 @@ func (m *Manager) Start(ctx context.Context) error {
 	return nil
 }
 
+// Implements sigs.k8s.io/controller-runtime/pkg/manager.LeaderElectionRunnable interface
+// This manager runs on every cluster node.
+func (m *Manager) NeedLeaderElection() bool {
+	return false
+}
+
 // runPeriodicUpdates runs periodic hardware graph updates
 func (m *Manager) runPeriodicUpdates(ctx context.Context) {
 	ticker := time.NewTicker(m.interval)
