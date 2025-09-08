@@ -279,12 +279,17 @@ func main() {
 				setupLog.Error(err, "unable to create OpenTelemetry consumer")
 				os.Exit(1)
 			}
+			// Start the consumer with its own context
+			if err := otelConsumer.Start(ctx); err != nil {
+				setupLog.Error(err, "unable to start OpenTelemetry consumer")
+				os.Exit(1)
+			}
 			// Register OpenTelemetry consumer
 			if err := router.RegisterConsumer(otelConsumer); err != nil {
 				setupLog.Error(err, "unable to register OpenTelemetry consumer")
 				os.Exit(1)
 			}
-			setupLog.Info("OpenTelemetry consumer registered")
+			setupLog.Info("OpenTelemetry consumer started and registered")
 		}
 
 		// Register Debug consumer if enabled
@@ -295,11 +300,16 @@ func main() {
 				setupLog.Error(err, "unable to create debug consumer")
 				os.Exit(1)
 			}
+			// Start the consumer with its own context
+			if err := debugConsumer.Start(ctx); err != nil {
+				setupLog.Error(err, "unable to start debug consumer")
+				os.Exit(1)
+			}
 			if err := router.RegisterConsumer(debugConsumer); err != nil {
 				setupLog.Error(err, "unable to register debug consumer")
 				os.Exit(1)
 			}
-			setupLog.Info("Debug consumer registered")
+			setupLog.Info("Debug consumer started and registered")
 		}
 
 		// Add bus to manager

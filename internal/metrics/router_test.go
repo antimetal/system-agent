@@ -89,9 +89,13 @@ func TestMetricsRouter_ConcurrentPublish(t *testing.T) {
 	// Give router time to start
 	time.Sleep(10 * time.Millisecond)
 
-	// Register a consumer
+	// Create and start a consumer
 	consumer := newMockConsumer("test-consumer")
-	err := router.RegisterConsumer(consumer)
+	err := consumer.Start(ctx)
+	require.NoError(t, err)
+
+	// Register the consumer
+	err = router.RegisterConsumer(consumer)
 	require.NoError(t, err)
 
 	// Publish events concurrently
@@ -175,19 +179,25 @@ func TestMetricsRouter_ConsumerRegistration(t *testing.T) {
 	// Give router time to start
 	time.Sleep(10 * time.Millisecond)
 
-	// Register first consumer
+	// Create and start first consumer
 	consumer1 := newMockConsumer("consumer1")
-	err := router.RegisterConsumer(consumer1)
+	err := consumer1.Start(ctx)
+	require.NoError(t, err)
+	err = router.RegisterConsumer(consumer1)
 	require.NoError(t, err)
 
 	// Try to register duplicate
 	consumer2 := newMockConsumer("consumer1")
+	err = consumer2.Start(ctx)
+	require.NoError(t, err)
 	err = router.RegisterConsumer(consumer2)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "already registered")
 
 	// Register different consumer
 	consumer3 := newMockConsumer("consumer2")
+	err = consumer3.Start(ctx)
+	require.NoError(t, err)
 	err = router.RegisterConsumer(consumer3)
 	require.NoError(t, err)
 
@@ -221,11 +231,16 @@ func TestMetricsRouter_EventDelivery(t *testing.T) {
 	// Give router time to start
 	time.Sleep(10 * time.Millisecond)
 
-	// Register consumers
+	// Create, start and register consumers
 	consumer1 := newMockConsumer("consumer1")
 	consumer2 := newMockConsumer("consumer2")
 
-	err := router.RegisterConsumer(consumer1)
+	err := consumer1.Start(ctx)
+	require.NoError(t, err)
+	err = router.RegisterConsumer(consumer1)
+	require.NoError(t, err)
+
+	err = consumer2.Start(ctx)
 	require.NoError(t, err)
 	err = router.RegisterConsumer(consumer2)
 	require.NoError(t, err)
@@ -251,27 +266,39 @@ func TestMetricsRouter_EventDelivery(t *testing.T) {
 	}, 100*time.Millisecond, 10*time.Millisecond)
 }
 
-// TestMetricsRouter_RegisterBeforeStart tests that RegisterConsumer works when called before Start
-func TestMetricsRouter_RegisterBeforeStart(t *testing.T) {
+// TestMetricsRouter_LifecycleManagement tests that consumers manage their own lifecycle
+func TestMetricsRouter_LifecycleManagement(t *testing.T) {
 	router := NewMetricsRouter(logr.Discard())
 
-	// Register consumers before Start
+	// Create consumers
 	consumer1 := newMockConsumer("consumer1")
 	consumer2 := newMockConsumer("consumer2")
 
-	err := router.RegisterConsumer(consumer1)
+	// Start consumers with their own contexts
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	defer cancel1()
+	err := consumer1.Start(ctx1)
+	require.NoError(t, err)
+
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	defer cancel2()
+	err = consumer2.Start(ctx2)
+	require.NoError(t, err)
+
+	// Register started consumers
+	err = router.RegisterConsumer(consumer1)
 	require.NoError(t, err)
 	err = router.RegisterConsumer(consumer2)
 	require.NoError(t, err)
 
-	// Now start the router - this should start the pending consumers
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	// Start the router with its own context
+	routerCtx, routerCancel := context.WithCancel(context.Background())
+	defer routerCancel()
 
-	err = router.Start(ctx)
+	err = router.Start(routerCtx)
 	require.NoError(t, err)
 
-	// Verify consumers are started and can receive events
+	// Verify consumers can receive events
 	event := MetricEvent{
 		Timestamp:  time.Now(),
 		Source:     "test",
@@ -288,12 +315,11 @@ func TestMetricsRouter_RegisterBeforeStart(t *testing.T) {
 	assert.Equal(t, 1, len(consumer1.getEvents()))
 	assert.Equal(t, 1, len(consumer2.getEvents()))
 
-	// Register another consumer after Start
-	consumer3 := newMockConsumer("consumer3")
-	err = router.RegisterConsumer(consumer3)
-	require.NoError(t, err)
+	// Cancel one consumer's context
+	cancel1()
+	time.Sleep(50 * time.Millisecond)
 
-	// Verify new consumer also works
+	// Send another event
 	event2 := MetricEvent{
 		Timestamp:  time.Now(),
 		Source:     "test",
@@ -305,8 +331,7 @@ func TestMetricsRouter_RegisterBeforeStart(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	// All three consumers should have the second event
-	assert.Equal(t, 2, len(consumer1.getEvents()))
+	// Consumer1 should still have 1 event (stopped), consumer2 should have 2
+	assert.Equal(t, 1, len(consumer1.getEvents()))
 	assert.Equal(t, 2, len(consumer2.getEvents()))
-	assert.Equal(t, 1, len(consumer3.getEvents()))
 }

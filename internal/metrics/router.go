@@ -27,48 +27,25 @@ var (
 
 // MetricsRouter is a simple registry that routes metrics events to multiple consumers
 // It implements both Publisher and manager.Runnable interfaces
-//
-// Consumers can be registered before or after Start() is called. If registered before,
-// they will be started when the router's Start() method is called.
 type MetricsRouter struct {
-	logger           logr.Logger
-	mu               sync.RWMutex
-	consumers        map[string]Consumer
-	pendingConsumers []Consumer      // Consumers registered before Start()
-	ctx              context.Context // Set when Start() is called
-	closed           bool            // Set when shutting down
+	logger    logr.Logger
+	mu        sync.RWMutex
+	consumers map[string]Consumer
+	closed    bool // Set when shutting down
 }
 
 // NewMetricsRouter creates a new metrics router
 func NewMetricsRouter(logger logr.Logger) *MetricsRouter {
 	return &MetricsRouter{
-		logger:           logger.WithName("metrics-router"),
-		consumers:        make(map[string]Consumer),
-		pendingConsumers: make([]Consumer, 0),
+		logger:    logger.WithName("metrics-router"),
+		consumers: make(map[string]Consumer),
 	}
 }
 
-// Start initializes the router with the provided context.
-// Any consumers registered before Start() will be started now.
-// Consumers registered after Start() will be started immediately.
+// Start initializes the router.
+// This just marks the router as started and sets up shutdown handling.
 func (r *MetricsRouter) Start(ctx context.Context) error {
-	r.mu.Lock()
-	r.ctx = ctx
-
-	// Start any pending consumers
-	for _, consumer := range r.pendingConsumers {
-		name := consumer.Name()
-		if err := consumer.Start(ctx); err != nil {
-			r.mu.Unlock()
-			return fmt.Errorf("failed to start pending consumer %s: %w", name, err)
-		}
-		r.consumers[name] = consumer
-		r.logger.Info("Started pending consumer", "consumer", name)
-	}
-	r.pendingConsumers = nil // Clear pending list
-	r.mu.Unlock()
-
-	r.logger.Info("Starting metrics router", "consumers", len(r.consumers))
+	r.logger.Info("Starting metrics router")
 
 	// When context is cancelled, mark as closed
 	go func() {
@@ -83,8 +60,7 @@ func (r *MetricsRouter) Start(ctx context.Context) error {
 }
 
 // RegisterConsumer adds a consumer to receive events.
-// If called before Start(), the consumer will be started when the router starts.
-// If called after Start(), the consumer will be started immediately.
+// The consumer must already be started by the caller before registration.
 func (r *MetricsRouter) RegisterConsumer(consumer Consumer) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -96,27 +72,8 @@ func (r *MetricsRouter) RegisterConsumer(consumer Consumer) error {
 		return fmt.Errorf("consumer %s already registered", name)
 	}
 
-	// Check if already in pending list
-	for _, pending := range r.pendingConsumers {
-		if pending.Name() == name {
-			return fmt.Errorf("consumer %s already registered (pending)", name)
-		}
-	}
-
-	// If Start() hasn't been called yet, add to pending list
-	if r.ctx == nil {
-		r.pendingConsumers = append(r.pendingConsumers, consumer)
-		r.logger.Info("Consumer registered (pending)", "consumer", name)
-		return nil
-	}
-
-	// Start() has been called, start the consumer immediately
-	if err := consumer.Start(r.ctx); err != nil {
-		return fmt.Errorf("failed to start consumer %s: %w", name, err)
-	}
-
 	r.consumers[name] = consumer
-	r.logger.Info("Consumer registered and started", "consumer", name)
+	r.logger.Info("Consumer registered", "consumer", name)
 	return nil
 }
 
