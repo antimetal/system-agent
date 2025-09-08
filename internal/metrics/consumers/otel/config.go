@@ -84,9 +84,9 @@ type Config struct {
 	GlobalTags []string
 
 	// Advanced options
-	BatchTimeout time.Duration // Max time between batches
-	MaxBatchSize int           // Maximum metrics per batch
-	MaxQueueSize int           // Maximum queued metrics
+	BatchTimeout    time.Duration // Max time between batches
+	ExportBatchSize int           // Number of metrics to accumulate before export
+	MaxQueueSize    int           // Maximum queued metrics
 }
 
 // RetryConfig configures retry behavior for failed exports
@@ -118,9 +118,9 @@ func DefaultConfig() Config {
 		GlobalTags: []string{
 			"service:antimetal-agent",
 		},
-		BatchTimeout: 10 * time.Second,
-		MaxBatchSize: 500,
-		MaxQueueSize: 10000,
+		BatchTimeout:    10 * time.Second,
+		ExportBatchSize: 500,
+		MaxQueueSize:    10000,
 	}
 }
 
@@ -217,9 +217,9 @@ func (c *Config) Validate() error {
 		c.BatchTimeout = 10 * time.Second
 	}
 
-	if c.MaxBatchSize <= 0 {
-		c.MaxBatchSize = 500
-	} else if c.MaxBatchSize > MaxSafeBatchSize {
+	if c.ExportBatchSize <= 0 {
+		c.ExportBatchSize = 500
+	} else if c.ExportBatchSize > MaxSafeBatchSize {
 		return ErrBatchSizeTooLarge
 	}
 

@@ -19,20 +19,21 @@ type MetricsBuffer struct {
 	rb *ringbuffer.RingBuffer[metrics.MetricEvent]
 	mu sync.Mutex
 
-	// Notification channel for new events
-	notify chan struct{}
+	notifyThreshold int
+	notify          chan struct{}
 }
 
 // NewMetricsBuffer creates a new thread-safe metrics buffer
-func NewMetricsBuffer(capacity int) (*MetricsBuffer, error) {
+func NewMetricsBuffer(capacity, notifyThreshold int) (*MetricsBuffer, error) {
 	rb, err := ringbuffer.New[metrics.MetricEvent](capacity)
 	if err != nil {
 		return nil, err
 	}
 
 	return &MetricsBuffer{
-		rb:     rb,
-		notify: make(chan struct{}, 1), // Buffered to avoid blocking
+		rb:              rb,
+		notifyThreshold: notifyThreshold,
+		notify:          make(chan struct{}, 1), // Buffered to avoid blocking
 	}, nil
 }
 
@@ -41,19 +42,22 @@ func NewMetricsBuffer(capacity int) (*MetricsBuffer, error) {
 func (b *MetricsBuffer) Push(event metrics.MetricEvent) {
 	b.mu.Lock()
 	b.rb.Push(event)
+	currentLen := b.rb.Len()
 	b.mu.Unlock()
 
-	// Non-blocking notification
-	select {
-	case b.notify <- struct{}{}:
-	default:
-		// Channel already has a notification pending
+	if currentLen >= b.notifyThreshold {
+		// Non-blocking notification
+		select {
+		case b.notify <- struct{}{}:
+		default:
+			// Channel already has a notification pending
+		}
 	}
 }
 
-// Drain removes and returns up to maxItems from the buffer.
+// Drain removes and returns all of the buffered items.
 // Returns nil if the buffer is empty.
-func (b *MetricsBuffer) Drain(maxItems int) []metrics.MetricEvent {
+func (b *MetricsBuffer) Drain() []metrics.MetricEvent {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -61,26 +65,9 @@ func (b *MetricsBuffer) Drain(maxItems int) []metrics.MetricEvent {
 		return nil
 	}
 
-	// Get all items from the ring buffer
 	all := b.rb.GetAll()
-
-	// Determine how many to return
-	count := len(all)
-	if maxItems > 0 && maxItems < count {
-		count = maxItems
-	}
-
-	// Clear the buffer and return the drained items
 	b.rb.Clear()
-
-	// If we're only returning some items, push the rest back
-	if count < len(all) {
-		for i := count; i < len(all); i++ {
-			b.rb.Push(all[i])
-		}
-	}
-
-	return all[:count]
+	return all
 }
 
 // NotifyChannel returns a channel that receives notifications when new events are added
@@ -101,4 +88,3 @@ func (b *MetricsBuffer) Cap() int {
 	defer b.mu.Unlock()
 	return b.rb.Cap()
 }
-

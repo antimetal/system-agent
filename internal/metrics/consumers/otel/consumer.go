@@ -69,8 +69,9 @@ func NewConsumer(config Config, logger logr.Logger) (*Consumer, error) {
 		return nil, err
 	}
 
-	// Create ring buffer
-	buffer, err := NewMetricsBuffer(config.MaxQueueSize)
+	// Create ring buffer with notification threshold set to export batch size
+	// This ensures we get notified when there's enough data for export
+	buffer, err := NewMetricsBuffer(config.MaxQueueSize, config.ExportBatchSize)
 	if err != nil {
 		return nil, err
 	}
@@ -273,22 +274,29 @@ func (c *Consumer) processEvents(ctx context.Context) {
 	for {
 		select {
 		case <-notify:
-			// Drain up to MaxBatchSize events from the buffer
-			events := c.buffer.Drain(c.config.MaxBatchSize)
+			// Drain all events when threshold is reached
+			events := c.buffer.Drain()
 			if len(events) > 0 {
-				c.processBatch(events)
+				// Process in batches if we have too many events
+				for i := 0; i < len(events); i += c.config.ExportBatchSize {
+					end := i + c.config.ExportBatchSize
+					if end > len(events) {
+						end = len(events)
+					}
+					c.processBatch(events[i:end])
+				}
 			}
 
 		case <-ticker.C:
 			// Periodic flush - drain all available events
-			events := c.buffer.Drain(c.config.MaxBatchSize)
+			events := c.buffer.Drain()
 			if len(events) > 0 {
 				c.processBatch(events)
 			}
 
 		case <-ctx.Done():
 			// Process any remaining events
-			events := c.buffer.Drain(0) // Drain all
+			events := c.buffer.Drain()
 			if len(events) > 0 {
 				c.processBatch(events)
 			}
