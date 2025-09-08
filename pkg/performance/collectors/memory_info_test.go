@@ -309,7 +309,8 @@ func TestMemoryInfoCollector_Collect(t *testing.T) {
 				tt.setupSysfs(t, filepath.Join(tmpDir, "sys"))
 			}
 
-			result, err := collector.Collect(context.Background())
+			receiver := performance.NewMockReceiver("test-receiver")
+			err := collector.Collect(context.Background(), receiver)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -317,8 +318,12 @@ func TestMemoryInfoCollector_Collect(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			info, ok := result.(*performance.MemoryInfo)
-			require.True(t, ok, "Expected *performance.MemoryInfo, got %T", result)
+
+			calls := receiver.GetAcceptCalls()
+			require.Len(t, calls, 1, "Expected exactly one Accept call")
+
+			info, ok := calls[0].Data.(*performance.MemoryInfo)
+			require.True(t, ok, "Expected *performance.MemoryInfo, got %T", calls[0].Data)
 
 			if tt.wantInfo != nil {
 				tt.wantInfo(t, info)
@@ -345,10 +350,17 @@ func TestMemoryInfoCollector_ComplexCPUList(t *testing.T) {
 		0644,
 	))
 
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+
+	err := collector.Collect(context.Background(), receiver)
+
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.MemoryInfo)
+	calls := receiver.GetAcceptCalls()
+
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+
+	info, ok := calls[0].Data.(*performance.MemoryInfo)
 	require.True(t, ok)
 
 	assert.Len(t, info.NUMANodes, 1)
@@ -380,10 +392,17 @@ func TestMemoryInfoCollector_EmptyCPUList(t *testing.T) {
 		0644,
 	))
 
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+
+	err := collector.Collect(context.Background(), receiver)
+
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.MemoryInfo)
+	calls := receiver.GetAcceptCalls()
+
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+
+	info, ok := calls[0].Data.(*performance.MemoryInfo)
 	require.True(t, ok)
 
 	assert.Len(t, info.NUMANodes, 1)

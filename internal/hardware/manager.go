@@ -103,18 +103,28 @@ func (m *Manager) runPeriodicUpdates(ctx context.Context) {
 func (m *Manager) updateHardwareGraph(ctx context.Context) error {
 	m.logger.V(1).Info("Updating hardware graph")
 
-	// Collect a snapshot of all hardware information
-	snapshot, err := m.collectHardwareSnapshot(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to collect hardware snapshot: %w", err)
+	// Create a hardware graph receiver for this collection session
+	nodeName := m.perfManager.GetNodeName()
+	clusterName := m.perfManager.GetClusterName()
+	receiver := graph.NewHardwareGraphReceiver(m.logger, m.builder, nodeName, clusterName)
+
+	// Collect hardware information directly to the receiver
+	if err := m.collectHardwareWithReceiver(ctx, receiver); err != nil {
+		return fmt.Errorf("failed to collect hardware: %w", err)
 	}
 
-	// Build the hardware graph from the snapshot
+	// Build the graph from the collected data
 	buildCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	if err := m.builder.BuildFromSnapshot(buildCtx, snapshot); err != nil {
-		return fmt.Errorf("failed to build hardware graph: %w", err)
+	snapshot, err := receiver.GetSnapshot(buildCtx)
+	if err != nil {
+		return fmt.Errorf("failed to get snapshot: %w", err)
+	}
+	if snapshot != nil {
+		if err := m.builder.BuildFromSnapshot(buildCtx, snapshot); err != nil {
+			return fmt.Errorf("failed to build hardware graph: %w", err)
+		}
 	}
 
 	// Update last update time
@@ -126,21 +136,10 @@ func (m *Manager) updateHardwareGraph(ctx context.Context) error {
 	return nil
 }
 
-// collectHardwareSnapshot collects all hardware information into a snapshot
-func (m *Manager) collectHardwareSnapshot(ctx context.Context) (*performance.Snapshot, error) {
+// collectHardwareWithReceiver collects hardware information using the receiver pattern
+func (m *Manager) collectHardwareWithReceiver(ctx context.Context, receiver *graph.HardwareGraphReceiver) error {
 	// Create collectors with the config from performance manager
 	config := m.perfManager.GetConfig()
-
-	// Initialize the snapshot
-	snapshot := &performance.Snapshot{
-		Timestamp:   time.Now(),
-		NodeName:    m.perfManager.GetNodeName(),
-		ClusterName: m.perfManager.GetClusterName(),
-		Metrics:     performance.Metrics{},
-		CollectorRun: performance.CollectorRunInfo{
-			CollectorStats: make(map[performance.MetricType]performance.CollectorStat),
-		},
-	}
 
 	startTime := time.Now()
 
@@ -178,57 +177,26 @@ func (m *Manager) collectHardwareSnapshot(ctx context.Context) (*performance.Sna
 		if err != nil {
 			m.logger.Error(err, "Failed to create collector",
 				"metric_type", metricType)
-			snapshot.CollectorRun.CollectorStats[metricType] = performance.CollectorStat{
-				Status:   performance.CollectorStatusFailed,
-				Duration: time.Since(collectorStartTime),
-				Error:    err,
-			}
 			continue
 		}
 
-		// Start the collector - for OnceContinuousCollector this does a one-shot collection
-		dataChan, err := collector.Start(ctx)
-		if err != nil {
+		// Start the collector with the receiver
+		if err := collector.Start(ctx, receiver); err != nil {
 			m.logger.Error(err, "Failed to start collector",
 				"metric_type", metricType)
-			snapshot.CollectorRun.CollectorStats[metricType] = performance.CollectorStat{
-				Status:   performance.CollectorStatusFailed,
-				Duration: time.Since(collectorStartTime),
-				Error:    err,
-			}
 			continue
 		}
 
-		// Read the one-shot data from the channel
-		data := <-dataChan
-
-		// Store the collected data in the snapshot based on type
-		switch metricType {
-		case performance.MetricTypeCPUInfo:
-			snapshot.Metrics.CPUInfo = data.(*performance.CPUInfo)
-		case performance.MetricTypeMemoryInfo:
-			snapshot.Metrics.MemoryInfo = data.(*performance.MemoryInfo)
-		case performance.MetricTypeDiskInfo:
-			snapshot.Metrics.DiskInfo = data.([]performance.DiskInfo)
-		case performance.MetricTypeNetworkInfo:
-			snapshot.Metrics.NetworkInfo = data.([]performance.NetworkInfo)
-		case performance.MetricTypeNUMAStats:
-			snapshot.Metrics.NUMAStats = data.(*performance.NUMAStatistics)
-		}
-
-		snapshot.CollectorRun.CollectorStats[metricType] = performance.CollectorStat{
-			Status:   performance.CollectorStatusActive,
-			Duration: time.Since(collectorStartTime),
-			Data:     data,
-		}
+		m.logger.V(2).Info("Collected hardware metric",
+			"metric_type", metricType,
+			"duration", time.Since(collectorStartTime))
 	}
 
-	snapshot.CollectorRun.Duration = time.Since(startTime)
-	m.logger.V(1).Info("Hardware snapshot collected successfully",
-		"duration", snapshot.CollectorRun.Duration,
-		"collectors", len(snapshot.CollectorRun.CollectorStats))
+	m.logger.V(1).Info("Hardware collection completed",
+		"duration", time.Since(startTime),
+		"collectors", len(hardwareMetrics))
 
-	return snapshot, nil
+	return nil
 }
 
 // GetLastUpdateTime returns the last time the hardware graph was updated

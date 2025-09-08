@@ -28,17 +28,17 @@ type Collector interface {
 type PointCollector interface {
 	Collector
 
-	// Collect performs a single collection and returns the metrics
-	Collect(ctx context.Context) (any, error)
+	// Collect performs a single collection and sends the metrics to the receiver
+	Collect(ctx context.Context, receiver Receiver) error
 }
 
 // ContinuousCollector performs ongoing data collection with streaming output
 type ContinuousCollector interface {
 	Collector
 
-	// Start begins continuous collection and returns a channel for streaming results
+	// Start begins continuous collection and sends results to the receiver
 	// The collector must clean up when the context is cancelled
-	Start(ctx context.Context) (<-chan any, error)
+	Start(ctx context.Context, receiver Receiver) error
 
 	Status() CollectorStatus
 	LastError() error
@@ -161,7 +161,6 @@ func (b *BaseContinuousCollector) ClearError() {
 type ContinuousPointCollector struct {
 	BaseContinuousCollector
 	pointCollector PointCollector
-	ch             chan any
 }
 
 // NewContinuousPointCollector creates a new ContinuousPointCollector
@@ -201,23 +200,18 @@ func PartialNewContinuousPointCollector(collector NewPointCollector) NewContinuo
 }
 
 // Start begins the continuous point collection
-func (c *ContinuousPointCollector) Start(ctx context.Context) (<-chan any, error) {
+func (c *ContinuousPointCollector) Start(ctx context.Context, receiver Receiver) error {
 	if c.Status() != CollectorStatusDisabled {
-		return nil, fmt.Errorf("collector already running, possibly in another goroutine")
+		return fmt.Errorf("collector already running, possibly in another goroutine")
 	}
 
-	c.ch = make(chan any, 10000)
-	go c.start(ctx)
+	go c.start(ctx, receiver)
 	c.SetStatus(CollectorStatusActive)
-	return c.ch, nil
+	return nil
 }
 
-func (c *ContinuousPointCollector) start(ctx context.Context) {
+func (c *ContinuousPointCollector) start(ctx context.Context, receiver Receiver) {
 	defer func() {
-		if c.ch != nil {
-			close(c.ch)
-			c.ch = nil
-		}
 		c.SetStatus(CollectorStatusDisabled)
 	}()
 
@@ -227,13 +221,12 @@ func (c *ContinuousPointCollector) start(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
-			data, err := c.pointCollector.Collect(ctx)
+			err := c.pointCollector.Collect(ctx, receiver)
 			c.SetError(err)
 			if err != nil {
 				c.SetStatus(CollectorStatusDegraded)
 				continue
 			}
-			c.ch <- data
 		case <-ctx.Done():
 			return
 		}
@@ -243,15 +236,14 @@ func (c *ContinuousPointCollector) start(ctx context.Context) {
 // OnceContinuousCollector is a ContinuousCollector that wraps a PointCollector and
 // performs a one-shot collection.
 //
-// Start() will call Collect() once and return the result in a channel with a buffer size of 1
-// and then close it. This is useful for collectors that only need to run once because the
+// Start() will call Collect() once and send the result to the receiver.
+// This is useful for collectors that only need to run once because the
 // information collected doesn't change (e.g. hardware info).
 //
 // Note: This is NOT goroutine-safe
 type OnceContinuousCollector struct {
 	BaseContinuousCollector
 	pointCollector PointCollector
-	result         any
 	once           sync.Once
 }
 
@@ -289,38 +281,27 @@ func PartialNewOnceContinuousCollector(collector NewPointCollector) NewContinuou
 	}
 }
 
-// Start performs an exactly once collection and returns the result in a channel
-// The channel will be closed after the data is sent. This means the returned channel
-// will always be closed with at most 1 item in the channel.
+// Start performs an exactly once collection and sends the result to the receiver.
 //
-// Calling Start() subsequently after the first call will return a closed channel
-// containing the previous result and the last recorded error status
-//
-// WARNING: Call Start() multiple times will return separate channel instances.
-func (c *OnceContinuousCollector) Start(ctx context.Context) (<-chan any, error) {
+// Calling Start() subsequently after the first call will do nothing except
+// return the last recorded error status.
+func (c *OnceContinuousCollector) Start(ctx context.Context, receiver Receiver) error {
 	if c.Status() != CollectorStatusDisabled {
-		return nil, fmt.Errorf("collector already running, possibly in another goroutine")
+		return fmt.Errorf("collector already running, possibly in another goroutine")
 	}
 	c.SetStatus(CollectorStatusActive)
 
-	var data any
 	var err error
 	c.once.Do(func() {
-		data, err = c.pointCollector.Collect(ctx)
-		c.result = data
+		err = c.pointCollector.Collect(ctx, receiver)
 		c.SetError(err)
 		if err != nil {
 			c.SetStatus(CollectorStatusFailed)
 			return
 		}
 	})
-	ch := make(chan any, 1)
-	if c.result != nil {
-		ch <- c.result
-	}
-	close(ch)
 	c.SetStatus(CollectorStatusDisabled) // Reset status after completion
-	return ch, c.LastError()
+	return c.LastError()
 }
 
 // MetricsStore provides thread-safe storage for collected metrics

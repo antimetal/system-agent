@@ -67,7 +67,7 @@ const (
 //   - *performance.DiskStatsList for MetricTypeDisk
 //   - *performance.NetworkStatsList for MetricTypeNetwork
 //   - *performance.TCPStats for MetricTypeTCP
-//   - *performance.KernelStats for MetricTypeKernel
+//   - []*performance.KernelMessage for MetricTypeKernel
 //   - *performance.SystemStats for MetricTypeSystem
 //   - *performance.CPUInfo for MetricTypeCPUInfo
 //   - *performance.MemoryInfo for MetricTypeMemoryInfo
@@ -100,12 +100,3 @@ const (
 	EventTypeSet       EventType = "set"       // Unique value counting
 	EventTypeSnapshot  EventType = "snapshot"  // Complete snapshot of data
 )
-
-// Router defines the interface for routing metrics events to consumers
-type Router interface {
-	// Publish emits a metrics event to all registered consumers
-	Publish(event MetricEvent) error
-
-	// PublishBatch emits multiple metrics events efficiently
-	PublishBatch(events []MetricEvent) error
-}

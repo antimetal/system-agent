@@ -123,7 +123,9 @@ func createTestNUMAStatsCollector(t *testing.T, nodeSetup map[string]map[string]
 
 // Helper function to collect and validate NUMA stats
 func collectAndValidateNUMAStats(t *testing.T, collector *collectors.NUMAStatsCollector, expectError bool, validate func(t *testing.T, result *performance.NUMAStatistics)) {
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+
+	err := collector.Collect(context.Background(), receiver)
 
 	if expectError {
 		assert.Error(t, err)
@@ -131,7 +133,11 @@ func collectAndValidateNUMAStats(t *testing.T, collector *collectors.NUMAStatsCo
 	}
 
 	require.NoError(t, err)
-	numaStats, ok := result.(*performance.NUMAStatistics)
+
+	calls := receiver.GetAcceptCalls()
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+
+	numaStats, ok := calls[0].Data.(*performance.NUMAStatistics)
 	require.True(t, ok, "result should be *performance.NUMAStatistics")
 
 	if validate != nil {

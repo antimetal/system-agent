@@ -298,7 +298,8 @@ func TestExecSnoopCollector_StartStop(t *testing.T) {
 	defer cancel()
 
 	// Start should fail due to missing BPF object or CO-RE not supported on non-Linux
-	_, err = collector.Start(ctx)
+	receiver := performance.NewMockReceiver("test-receiver")
+	err = collector.Start(ctx, receiver)
 	assert.Error(t, err, "Start should fail with missing BPF object or unsupported platform")
 
 	// Context cancellation should clean up gracefully even if start failed
@@ -318,7 +319,8 @@ func TestExecSnoopCollector_DoubleStart(t *testing.T) {
 	collector.SetStatus(performance.CollectorStatusActive)
 
 	ctx := context.Background()
-	_, err = collector.Start(ctx)
+	receiver := performance.NewMockReceiver("test-receiver")
+	err = collector.Start(ctx, receiver)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "already running")
 }

@@ -20,6 +20,29 @@ import (
 	"github.com/go-logr/logr"
 )
 
+// printReceiver implements performance.Receiver and prints exec events
+type printReceiver struct {
+	count *int
+}
+
+func (p *printReceiver) Accept(data any) error {
+	if execEvent, ok := data.(*collectors.ExecEvent); ok {
+		*p.count++
+		fmt.Printf("[%d] PID=%d PPID=%d UID=%d CMD=%s ARGS=%v RetVal=%d\n",
+			*p.count, execEvent.PID, execEvent.PPID, execEvent.UID,
+			execEvent.Command, execEvent.Args, execEvent.RetVal)
+		// Debug: show raw command
+		if len(execEvent.Command) > 0 {
+			fmt.Printf("    Debug: Raw command bytes: %q\n", execEvent.Command)
+		}
+	}
+	return nil
+}
+
+func (p *printReceiver) Name() string {
+	return "print-receiver"
+}
+
 func main() {
 	// Parse command line flags
 	bpfPath := flag.String("bpf-path", "", "Path to execsnoop.bpf.o file (defaults to /usr/local/lib/antimetal/ebpf/execsnoop.bpf.o)")
@@ -48,34 +71,17 @@ func main() {
 		cancel()
 	}()
 
-	// Start collector
-	eventChan, err := collector.Start(ctx)
+	// Create a receiver that prints events
+	eventCount := 0
+	receiver := &printReceiver{count: &eventCount}
+
+	// Start collector with receiver
+	err = collector.Start(ctx, receiver)
 	if err != nil {
 		log.Fatalf("Failed to start collector: %v", err)
 	}
 
-	// Process events
-	eventCount := 0
-	for {
-		select {
-		case <-ctx.Done():
-			fmt.Printf("\nProcessed %d events\n", eventCount)
-			return
-		case event, ok := <-eventChan:
-			if !ok {
-				fmt.Printf("\nProcessed %d events\n", eventCount)
-				return
-			}
-			if execEvent, ok := event.(*collectors.ExecEvent); ok {
-				eventCount++
-				fmt.Printf("[%d] PID=%d PPID=%d UID=%d CMD=%s ARGS=%v RetVal=%d\n",
-					eventCount, execEvent.PID, execEvent.PPID, execEvent.UID,
-					execEvent.Command, execEvent.Args, execEvent.RetVal)
-				// Debug: show raw command
-				if len(execEvent.Command) > 0 {
-					fmt.Printf("    Debug: Raw command bytes: %q\n", execEvent.Command)
-				}
-			}
-		}
-	}
+	// Wait for context to be done
+	<-ctx.Done()
+	fmt.Printf("\nProcessed %d events\n", eventCount)
 }

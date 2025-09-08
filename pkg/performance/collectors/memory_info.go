@@ -129,8 +129,12 @@ func NewMemoryInfoCollector(logger logr.Logger, config performance.CollectionCon
 	}, nil
 }
 
-func (c *MemoryInfoCollector) Collect(ctx context.Context) (any, error) {
-	return c.collectMemoryInfo()
+func (c *MemoryInfoCollector) Collect(ctx context.Context, receiver performance.Receiver) error {
+	data, err := c.collectMemoryInfo()
+	if err != nil {
+		return err
+	}
+	return receiver.Accept(data)
 }
 
 // collectMemoryInfo discovers and collects memory hardware configuration.

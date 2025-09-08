@@ -63,11 +63,15 @@ func setupTestFiles(t *testing.T, files map[string]string) string {
 
 func collectAndValidate(t *testing.T, collector *collectors.TCPCollector) *performance.TCPStats {
 	ctx := context.Background()
-	result, err := collector.Collect(ctx)
+	receiver := performance.NewMockReceiver("test-receiver")
+	err := collector.Collect(ctx, receiver)
 	require.NoError(t, err)
 
-	stats, ok := result.(*performance.TCPStats)
-	require.True(t, ok, "expected *performance.TCPStats, got %T", result)
+	calls := receiver.GetAcceptCalls()
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+
+	stats, ok := calls[0].Data.(*performance.TCPStats)
+	require.True(t, ok, "expected *performance.TCPStats, got %T", calls[0].Data)
 	require.NotNil(t, stats.ConnectionsByState)
 
 	return stats
@@ -248,7 +252,8 @@ Ip: 1 64`,
 			collector := createTestTCPCollector(t, procPath)
 
 			ctx := context.Background()
-			_, err := collector.Collect(ctx)
+			receiver := performance.NewMockReceiver("test-receiver")
+			err := collector.Collect(ctx, receiver)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -681,10 +686,14 @@ TcpExt: 5 3 2 8 12 25 40 30 100
 		require.NoError(t, err)
 
 		// First collection - should have no deltas
-		result1, err := collector.Collect(context.Background())
+		receiver1 := performance.NewMockReceiver("test-receiver-1")
+		err = collector.Collect(context.Background(), receiver1)
 		require.NoError(t, err)
 
-		stats1, ok := result1.(*performance.TCPStats)
+		calls1 := receiver1.GetAcceptCalls()
+		require.Len(t, calls1, 1)
+
+		stats1, ok := calls1[0].Data.(*performance.TCPStats)
 		require.True(t, ok)
 
 		// Verify basic stats are collected
@@ -714,10 +723,14 @@ TcpExt: 7 4 3 10 15 30 45 35 110
 		require.NoError(t, os.WriteFile(netstatPath, []byte(netstatContent2), 0644))
 
 		// Second collection - should have deltas
-		result2, err := collector.Collect(context.Background())
+		receiver2 := performance.NewMockReceiver("test-receiver-2")
+		err = collector.Collect(context.Background(), receiver2)
 		require.NoError(t, err)
 
-		stats2, ok := result2.(*performance.TCPStats)
+		calls2 := receiver2.GetAcceptCalls()
+		require.Len(t, calls2, 1)
+
+		stats2, ok := calls2[0].Data.(*performance.TCPStats)
 		require.True(t, ok)
 
 		// Verify updated stats
@@ -780,10 +793,17 @@ Tcp: 1 200 120000 -1 1000 500 10 5 50 100000 95000 200 0 15 0
 
 		// Multiple collections should never have deltas
 		for i := 0; i < 3; i++ {
-			result, err := collector.Collect(context.Background())
+			receiver := performance.NewMockReceiver("test-receiver")
+
+			err := collector.Collect(context.Background(), receiver)
+
 			require.NoError(t, err)
 
-			stats, ok := result.(*performance.TCPStats)
+			calls := receiver.GetAcceptCalls()
+
+			require.Len(t, calls, 1, "Expected exactly one Accept call")
+
+			stats, ok := calls[0].Data.(*performance.TCPStats)
 			require.True(t, ok)
 
 			// Basic stats should be present
@@ -822,7 +842,8 @@ Tcp: 1 200 120000 -1 10000 5000 100 50 50 1000000 950000 2000 0 150 0
 		require.NoError(t, err)
 
 		// First collection
-		_, err = collector.Collect(context.Background())
+		receiver1 := performance.NewMockReceiver("test-receiver-1")
+		err = collector.Collect(context.Background(), receiver1)
 		require.NoError(t, err)
 
 		time.Sleep(60 * time.Millisecond)
@@ -833,10 +854,16 @@ Tcp: 1 200 120000 -1 100 50 5 2 25 5000 4500 10 0 8 0
 `
 		require.NoError(t, os.WriteFile(snmpPath, []byte(snmpContent2), 0644))
 
-		result, err := collector.Collect(context.Background())
+		receiver := performance.NewMockReceiver("test-receiver")
+		err = collector.Collect(context.Background(), receiver)
+
 		require.NoError(t, err)
 
-		stats, ok := result.(*performance.TCPStats)
+		calls := receiver.GetAcceptCalls()
+
+		require.Len(t, calls, 1, "Expected exactly one Accept call")
+
+		stats, ok := calls[0].Data.(*performance.TCPStats)
 		require.True(t, ok)
 		require.NotNil(t, stats.Delta)
 
@@ -863,9 +890,12 @@ Tcp: 1 200 120000 -1 100 50 5 2 25 5000 4500 10 0 8 0
 		require.NoError(t, err)
 
 		// Collection should fail gracefully
-		result, err := collector.Collect(context.Background())
+		receiver := performance.NewMockReceiver("test-receiver")
+		err = collector.Collect(context.Background(), receiver)
 		assert.Error(t, err)
-		assert.Nil(t, result)
+
+		calls := receiver.GetAcceptCalls()
+		assert.Len(t, calls, 0, "Should not accept any data on error")
 		assert.Contains(t, err.Error(), "no such file or directory")
 	})
 
@@ -893,23 +923,35 @@ Tcp: 1 200 120000 -1 1000 500 10 5 50 100000 95000 200 0 15 0
 		require.NoError(t, err)
 
 		// First collection
-		result1, err := collector.Collect(context.Background())
+		receiver1 := performance.NewMockReceiver("test-receiver-1")
+		err = collector.Collect(context.Background(), receiver1)
 		require.NoError(t, err)
-		stats1 := result1.(*performance.TCPStats)
+
+		calls1 := receiver1.GetAcceptCalls()
+		require.Len(t, calls1, 1)
+		stats1 := calls1[0].Data.(*performance.TCPStats)
 		assert.Nil(t, stats1.Delta) // No delta on first collection
 
 		// Second collection too soon (under MinInterval)
 		time.Sleep(100 * time.Millisecond) // Less than MinInterval
-		result2, err := collector.Collect(context.Background())
+		receiver2 := performance.NewMockReceiver("test-receiver-2")
+		err = collector.Collect(context.Background(), receiver2)
 		require.NoError(t, err)
-		stats2 := result2.(*performance.TCPStats)
+
+		calls2 := receiver2.GetAcceptCalls()
+		require.Len(t, calls2, 1)
+		stats2 := calls2[0].Data.(*performance.TCPStats)
 		assert.Nil(t, stats2.Delta) // Should skip delta calculation
 
 		// Third collection after too long (over MaxInterval)
 		time.Sleep(1200 * time.Millisecond) // More than MaxInterval
-		result3, err := collector.Collect(context.Background())
+		receiver3 := performance.NewMockReceiver("test-receiver-3")
+		err = collector.Collect(context.Background(), receiver3)
 		require.NoError(t, err)
-		stats3 := result3.(*performance.TCPStats)
+
+		calls3 := receiver3.GetAcceptCalls()
+		require.Len(t, calls3, 1)
+		stats3 := calls3[0].Data.(*performance.TCPStats)
 		assert.Nil(t, stats3.Delta) // Should skip delta calculation due to large interval
 	})
 }

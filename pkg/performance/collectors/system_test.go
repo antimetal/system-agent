@@ -147,7 +147,9 @@ func createTestSystemStatsCollectorWithOptions(t *testing.T, statContent string,
 
 // Helper function to collect and validate SystemStats
 func collectAndValidateSystemStats(t *testing.T, collector *collectors.SystemStatsCollector, expectError bool, validate func(t *testing.T, stats *performance.SystemStats)) {
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+
+	err := collector.Collect(context.Background(), receiver)
 
 	if expectError {
 		assert.Error(t, err)
@@ -155,7 +157,11 @@ func collectAndValidateSystemStats(t *testing.T, collector *collectors.SystemSta
 	}
 
 	require.NoError(t, err)
-	stats, ok := result.(*performance.SystemStats)
+
+	calls := receiver.GetAcceptCalls()
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+
+	stats, ok := calls[0].Data.(*performance.SystemStats)
 	require.True(t, ok, "result should be *performance.SystemStats")
 
 	if validate != nil {
@@ -409,10 +415,13 @@ func TestSystemStatsCollector_FilePermissions(t *testing.T) {
 	collector, err := collectors.NewSystemStatsCollector(logr.Discard(), config)
 	require.NoError(t, err)
 
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+	err = collector.Collect(context.Background(), receiver)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "permission denied")
-	assert.Nil(t, result)
+
+	calls := receiver.GetAcceptCalls()
+	assert.Len(t, calls, 0, "Should not accept any data on error")
 }
 
 func TestSystemStatsCollector_DirectoryAsStatFile(t *testing.T) {
@@ -430,9 +439,12 @@ func TestSystemStatsCollector_DirectoryAsStatFile(t *testing.T) {
 	collector, err := collectors.NewSystemStatsCollector(logr.Discard(), config)
 	require.NoError(t, err)
 
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+	err = collector.Collect(context.Background(), receiver)
 	assert.Error(t, err)
-	assert.Nil(t, result)
+
+	calls := receiver.GetAcceptCalls()
+	assert.Len(t, calls, 0, "Should not accept any data on error")
 }
 
 func TestSystemStatsCollector_InterfaceCompliance(t *testing.T) {
@@ -458,7 +470,8 @@ func TestSystemStatsCollector_ConcurrentCollection(t *testing.T) {
 
 	for i := 0; i < numGoroutines; i++ {
 		go func() {
-			_, err := collector.Collect(context.Background())
+			receiver := performance.NewMockReceiver("test-receiver")
+			err := collector.Collect(context.Background(), receiver)
 			results <- err
 		}()
 	}
@@ -478,7 +491,10 @@ func TestSystemStatsCollector_ContextCancellation(t *testing.T) {
 	cancel()
 
 	// Collection should still work since we don't check context during file read
-	result, err := collector.Collect(ctx)
+	receiver := performance.NewMockReceiver("test-receiver")
+	err := collector.Collect(ctx, receiver)
 	assert.NoError(t, err)
-	assert.NotNil(t, result)
+
+	calls := receiver.GetAcceptCalls()
+	assert.Len(t, calls, 1, "Should have accepted data")
 }

@@ -9,9 +9,7 @@ package performance
 import (
 	"fmt"
 	"os"
-	"time"
 
-	"github.com/antimetal/agent/internal/metrics"
 	"github.com/go-logr/logr"
 )
 
@@ -21,15 +19,15 @@ type Manager struct {
 	logger      logr.Logger
 	nodeName    string
 	clusterName string
-	router      metrics.Router
+	receiver    Receiver // Optional receiver for metrics
 }
 
 type ManagerOptions struct {
-	Config        CollectionConfig
-	Logger        logr.Logger
-	NodeName      string
-	ClusterName   string
-	MetricsRouter metrics.Router // Optional metrics router
+	Config          CollectionConfig
+	Logger          logr.Logger
+	NodeName        string
+	ClusterName     string
+	MetricsReceiver Receiver // Optional metrics receiver
 }
 
 func NewManager(opts ManagerOptions) (*Manager, error) {
@@ -72,9 +70,9 @@ func NewManager(opts ManagerOptions) (*Manager, error) {
 		clusterName: opts.ClusterName,
 	}
 
-	if opts.MetricsRouter != nil {
-		m.router = opts.MetricsRouter
-		m.logger.Info("Metrics router enabled for performance manager")
+	if opts.MetricsReceiver != nil {
+		m.receiver = opts.MetricsReceiver
+		m.logger.Info("Metrics receiver enabled for performance manager")
 	}
 
 	return m, nil
@@ -97,21 +95,12 @@ func (m *Manager) GetClusterName() string {
 
 // PublishCollectorData publishes data from a specific collector
 func (m *Manager) PublishCollectorData(metricType MetricType, data any) error {
-	if m.router == nil {
-		return nil // Silently ignore if no router
+	if m.receiver == nil {
+		return nil // Silently ignore if no receiver
 	}
 
-	event := metrics.MetricEvent{
-		Timestamp:   time.Now(),
-		Source:      "performance-collector",
-		NodeName:    m.nodeName,
-		ClusterName: m.clusterName,
-		MetricType:  metrics.MetricType(metricType), // Convert to metrics.MetricType
-		EventType:   determineEventType(metricType),
-		Data:        data,
-	}
-
-	if err := m.router.Publish(event); err != nil {
+	// The receiver will handle creating the event and routing it
+	if err := m.receiver.Accept(data); err != nil {
 		m.logger.Error(err, "Failed to publish collector data", "metric_type", metricType)
 		return err
 	}
@@ -120,22 +109,7 @@ func (m *Manager) PublishCollectorData(metricType MetricType, data any) error {
 	return nil
 }
 
-// HasMetricsRouter returns true if the manager has a metrics router configured
-func (m *Manager) HasMetricsRouter() bool {
-	return m.router != nil
-}
-
-// determineEventType maps metric types to appropriate event types
-func determineEventType(metricType MetricType) metrics.EventType {
-	switch metricType {
-	case MetricTypeLoad, MetricTypeMemory, MetricTypeCPU,
-		MetricTypeDisk, MetricTypeNetwork, MetricTypeProcess,
-		MetricTypeCPUInfo, MetricTypeMemoryInfo, MetricTypeDiskInfo,
-		MetricTypeNetworkInfo, MetricTypeNUMAStats:
-		return metrics.EventTypeGauge
-	case MetricTypeSystem, MetricTypeTCP, MetricTypeKernel:
-		return metrics.EventTypeCounter
-	default:
-		return metrics.EventTypeGauge
-	}
+// HasMetricsReceiver returns true if the manager has a metrics receiver configured
+func (m *Manager) HasMetricsReceiver() bool {
+	return m.receiver != nil
 }

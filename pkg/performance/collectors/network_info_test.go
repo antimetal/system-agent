@@ -281,7 +281,9 @@ func TestNetworkInfoCollector_Collect(t *testing.T) {
 				tt.setupSys(t, filepath.Join(tmpDir, "sys"))
 			}
 
-			result, err := collector.Collect(context.Background())
+			receiver := performance.NewMockReceiver("test-receiver")
+
+			err := collector.Collect(context.Background(), receiver)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -289,8 +291,12 @@ func TestNetworkInfoCollector_Collect(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			interfaces, ok := result.([]performance.NetworkInfo)
-			require.True(t, ok, "Expected []performance.NetworkInfo, got %T", result)
+
+			calls := receiver.GetAcceptCalls()
+			require.Len(t, calls, 1, "Expected exactly one Accept call")
+
+			interfaces, ok := calls[0].Data.([]performance.NetworkInfo)
+			require.True(t, ok, "Expected []performance.NetworkInfo, got %T", calls[0].Data)
 
 			if tt.wantInfo != nil {
 				tt.wantInfo(t, interfaces)
@@ -376,10 +382,17 @@ func TestNetworkInfoCollector_InterfaceTypes(t *testing.T) {
 				require.NoError(t, os.MkdirAll(devicePath, 0755))
 			}
 
-			result, err := collector.Collect(context.Background())
+			receiver := performance.NewMockReceiver("test-receiver")
+
+			err := collector.Collect(context.Background(), receiver)
+
 			require.NoError(t, err)
 
-			interfaces, ok := result.([]performance.NetworkInfo)
+			calls := receiver.GetAcceptCalls()
+
+			require.Len(t, calls, 1, "Expected exactly one Accept call")
+
+			interfaces, ok := calls[0].Data.([]performance.NetworkInfo)
 			require.True(t, ok)
 			require.Len(t, interfaces, 1)
 

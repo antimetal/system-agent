@@ -485,7 +485,8 @@ func TestCPUInfoCollector_Collect(t *testing.T) {
 				tt.setupSysfs(t, filepath.Join(tmpDir, "sys"))
 			}
 
-			result, err := collector.Collect(context.Background())
+			receiver := performance.NewMockReceiver("test-receiver")
+			err := collector.Collect(context.Background(), receiver)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -493,8 +494,10 @@ func TestCPUInfoCollector_Collect(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			info, ok := result.(*performance.CPUInfo)
-			require.True(t, ok, "Expected *performance.CPUInfo, got %T", result)
+			calls := receiver.GetAcceptCalls()
+			require.Len(t, calls, 1, "Expected exactly one Accept call")
+			info, ok := calls[0].Data.(*performance.CPUInfo)
+			require.True(t, ok, "Expected *performance.CPUInfo, got %T", calls[0].Data)
 
 			if tt.wantInfo != nil {
 				tt.wantInfo(t, info)
@@ -529,10 +532,13 @@ cpu cores	: 4
 	cpuinfoPath := filepath.Join(tmpDir, "proc", "cpuinfo")
 	require.NoError(t, os.WriteFile(cpuinfoPath, []byte(multiSocketCPUInfo), 0644))
 
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+	err := collector.Collect(context.Background(), receiver)
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.CPUInfo)
+	calls := receiver.GetAcceptCalls()
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+	info, ok := calls[0].Data.(*performance.CPUInfo)
 	require.True(t, ok)
 
 	assert.Equal(t, int32(4), info.LogicalCores)
@@ -555,10 +561,13 @@ vendor_id: Intel
 	cpuinfoPath := filepath.Join(tmpDir, "proc", "cpuinfo")
 	require.NoError(t, os.WriteFile(cpuinfoPath, []byte(malformedCPUInfo), 0644))
 
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+	err := collector.Collect(context.Background(), receiver)
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.CPUInfo)
+	calls := receiver.GetAcceptCalls()
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+	info, ok := calls[0].Data.(*performance.CPUInfo)
 	require.True(t, ok)
 
 	// Should handle parsing errors gracefully
@@ -632,10 +641,13 @@ power management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14]
 	cpuinfoPath := filepath.Join(tmpDir, "proc", "cpuinfo")
 	require.NoError(t, os.WriteFile(cpuinfoPath, []byte(amdEpyc7551CPUInfo), 0644))
 
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+	err := collector.Collect(context.Background(), receiver)
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.CPUInfo)
+	calls := receiver.GetAcceptCalls()
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+	info, ok := calls[0].Data.(*performance.CPUInfo)
 	require.True(t, ok)
 
 	assert.Equal(t, "AuthenticAMD", info.VendorID)
@@ -716,10 +728,13 @@ power management:
 	cpuinfoPath := filepath.Join(tmpDir, "proc", "cpuinfo")
 	require.NoError(t, os.WriteFile(cpuinfoPath, []byte(amdEpyc7R13CPUInfo), 0644))
 
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+	err := collector.Collect(context.Background(), receiver)
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.CPUInfo)
+	calls := receiver.GetAcceptCalls()
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+	info, ok := calls[0].Data.(*performance.CPUInfo)
 	require.True(t, ok)
 
 	assert.Equal(t, "AuthenticAMD", info.VendorID)
@@ -780,10 +795,13 @@ CPU revision	: 4
 	cpuinfoPath := filepath.Join(tmpDir, "proc", "cpuinfo")
 	require.NoError(t, os.WriteFile(cpuinfoPath, []byte(arm64CortexA53CPUInfo), 0644))
 
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+	err := collector.Collect(context.Background(), receiver)
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.CPUInfo)
+	calls := receiver.GetAcceptCalls()
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+	info, ok := calls[0].Data.(*performance.CPUInfo)
 	require.True(t, ok)
 
 	assert.Equal(t, float64(48.00), info.BogoMIPS)
@@ -821,10 +839,13 @@ Serial		: 304d19f36a02309e
 	cpuinfoPath := filepath.Join(tmpDir, "proc", "cpuinfo")
 	require.NoError(t, os.WriteFile(cpuinfoPath, []byte(armAndroidCPUInfo), 0644))
 
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+	err := collector.Collect(context.Background(), receiver)
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.CPUInfo)
+	calls := receiver.GetAcceptCalls()
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+	info, ok := calls[0].Data.(*performance.CPUInfo)
 	require.True(t, ok)
 
 	assert.Equal(t, float64(1592.52), info.BogoMIPS) // First processor's BogoMIPS
@@ -866,10 +887,13 @@ Serial		: 5400503583203c3c040e
 	cpuinfoPath := filepath.Join(tmpDir, "proc", "cpuinfo")
 	require.NoError(t, os.WriteFile(cpuinfoPath, []byte(armCortexA7CPUInfo), 0644))
 
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+	err := collector.Collect(context.Background(), receiver)
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.CPUInfo)
+	calls := receiver.GetAcceptCalls()
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+	info, ok := calls[0].Data.(*performance.CPUInfo)
 	require.True(t, ok)
 
 	assert.Equal(t, float64(2400.00), info.BogoMIPS)
@@ -943,10 +967,13 @@ power management:
 	cpuinfoPath := filepath.Join(tmpDir, "proc", "cpuinfo")
 	require.NoError(t, os.WriteFile(cpuinfoPath, []byte(intelCeleronG3900CPUInfo), 0644))
 
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+	err := collector.Collect(context.Background(), receiver)
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.CPUInfo)
+	calls := receiver.GetAcceptCalls()
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+	info, ok := calls[0].Data.(*performance.CPUInfo)
 	require.True(t, ok)
 
 	assert.Equal(t, "GenuineIntel", info.VendorID)
@@ -1075,10 +1102,13 @@ power management:
 	cpuinfoPath := filepath.Join(tmpDir, "proc", "cpuinfo")
 	require.NoError(t, os.WriteFile(cpuinfoPath, []byte(intelI74500UCPUInfo), 0644))
 
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+	err := collector.Collect(context.Background(), receiver)
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.CPUInfo)
+	calls := receiver.GetAcceptCalls()
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+	info, ok := calls[0].Data.(*performance.CPUInfo)
 	require.True(t, ok)
 
 	assert.Equal(t, "GenuineIntel", info.VendorID)
@@ -1157,10 +1187,13 @@ power management:
 	cpuinfoPath := filepath.Join(tmpDir, "proc", "cpuinfo")
 	require.NoError(t, os.WriteFile(cpuinfoPath, []byte(intelPentium4CPUInfo), 0644))
 
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+	err := collector.Collect(context.Background(), receiver)
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.CPUInfo)
+	calls := receiver.GetAcceptCalls()
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+	info, ok := calls[0].Data.(*performance.CPUInfo)
 	require.True(t, ok)
 
 	assert.Equal(t, "GenuineIntel", info.VendorID)
@@ -1238,10 +1271,13 @@ power management:
 	cpuinfoPath := filepath.Join(tmpDir, "proc", "cpuinfo")
 	require.NoError(t, os.WriteFile(cpuinfoPath, []byte(intelXeon8259CLCPUInfo), 0644))
 
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+	err := collector.Collect(context.Background(), receiver)
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.CPUInfo)
+	calls := receiver.GetAcceptCalls()
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+	info, ok := calls[0].Data.(*performance.CPUInfo)
 	require.True(t, ok)
 
 	assert.Equal(t, "GenuineIntel", info.VendorID)
@@ -1281,10 +1317,13 @@ pmac-generation : NewWorld
 	cpuinfoPath := filepath.Join(tmpDir, "proc", "cpuinfo")
 	require.NoError(t, os.WriteFile(cpuinfoPath, []byte(powerPCCPUInfo), 0644))
 
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+	err := collector.Collect(context.Background(), receiver)
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.CPUInfo)
+	calls := receiver.GetAcceptCalls()
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+	info, ok := calls[0].Data.(*performance.CPUInfo)
 	require.True(t, ok)
 
 	// PowerPC doesn't have vendor_id, model name, or numeric CPU identification

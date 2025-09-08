@@ -263,11 +263,15 @@ func main() {
 	}
 
 	// Setup Metrics Router (if any consumer is enabled)
-	var metricsRouter metrics.Router
+	var metricsRouter *metrics.MetricsRouter
 	enableMetricsPipeline := otel.IsEnabled() || debug.IsEnabled()
 
 	if enableMetricsPipeline {
-		router := metrics.NewMetricsRouter(mgr.GetLogger())
+		nodeName := os.Getenv("NODE_NAME")
+		if nodeName == "" {
+			nodeName = "unknown"
+		}
+		router := metrics.NewMetricsRouter(mgr.GetLogger(), nodeName, "", runtime.Version())
 
 		// Register OpenTelemetry consumer if enabled
 		if otel.IsEnabled() {
@@ -318,11 +322,18 @@ func main() {
 	}
 
 	// Setup Performance Manager (for hardware discovery)
+	var metricsReceiver performance.Receiver
+	if metricsRouter != nil {
+		// Create adapter to use MetricsRouter as a Receiver
+		metricsReceiver = performance.NewMetricsReceiverAdapter(metricsRouter)
+	}
+
 	perfManager, err := performance.NewManager(performance.ManagerOptions{
-		Logger:        mgr.GetLogger().WithName("performance-manager"),
-		NodeName:      os.Getenv("NODE_NAME"),
-		ClusterName:   "",
-		MetricsRouter: metricsRouter,
+		Logger:          mgr.GetLogger().WithName("performance-manager"),
+		NodeName:        os.Getenv("NODE_NAME"),
+		ClusterName:     "",
+		MetricsReceiver: metricsReceiver,
+		Config:          performance.DefaultCollectionConfig(),
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to create performance manager")

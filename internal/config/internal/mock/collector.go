@@ -35,10 +35,9 @@ func (m *Collector) Capabilities() performance.CollectorCapabilities {
 	}
 }
 
-func (m *Collector) Start(ctx context.Context) (<-chan any, error) {
-	ch := make(chan any, 1)
-	close(ch)
-	return ch, nil
+func (m *Collector) Start(ctx context.Context, receiver performance.Receiver) error {
+	// Mock implementation - just return success
+	return nil
 }
 
 func (m *Collector) Stop() error {

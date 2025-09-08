@@ -12,10 +12,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/antimetal/agent/pkg/performance"
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// mockMetricData is a simple test data type
+type mockMetricData struct {
+	value any
+}
 
 // mockConsumer implements the Consumer interface for testing
 type mockConsumer struct {
@@ -76,7 +82,7 @@ func (m *mockConsumer) getEvents() []MetricEvent {
 
 func TestMetricsRouter_ConcurrentPublish(t *testing.T) {
 	// Test that concurrent publishes don't cause race conditions
-	router := NewMetricsRouter(logr.Discard())
+	router := NewMetricsRouter(logr.Discard(), "test-node", "test-cluster", "test-source")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -108,13 +114,7 @@ func TestMetricsRouter_ConcurrentPublish(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			for j := 0; j < eventsPerGoroutine; j++ {
-				event := MetricEvent{
-					Timestamp:  time.Now(),
-					Source:     "test",
-					MetricType: MetricTypeSystem,
-					Data:       id*eventsPerGoroutine + j,
-				}
-				err := router.Publish(event)
+				err := router.Accept(id*eventsPerGoroutine + j)
 				assert.NoError(t, err)
 			}
 		}(i)
@@ -132,7 +132,7 @@ func TestMetricsRouter_ConcurrentPublish(t *testing.T) {
 
 // Test that publishing after close returns an error
 func TestMetricsRouter_PublishAfterClose(t *testing.T) {
-	router := NewMetricsRouter(logr.Discard())
+	router := NewMetricsRouter(logr.Discard(), "test-node", "test-cluster", "test-source")
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -146,13 +146,8 @@ func TestMetricsRouter_PublishAfterClose(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	// Publish an event successfully
-	event := MetricEvent{
-		Timestamp:  time.Now(),
-		Source:     "test",
-		MetricType: MetricTypeSystem,
-		Data:       "test data",
-	}
-	err := router.Publish(event)
+	data := &mockMetricData{value: "test data"}
+	err := router.Accept(data)
 	require.NoError(t, err)
 
 	// Stop the router
@@ -160,12 +155,13 @@ func TestMetricsRouter_PublishAfterClose(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Try to publish after close
-	err = router.Publish(event)
+	data2 := &mockMetricData{value: "test data after close"}
+	err = router.Accept(data2)
 	assert.Equal(t, ErrRouterClosed, err)
 }
 
 func TestMetricsRouter_ConsumerRegistration(t *testing.T) {
-	router := NewMetricsRouter(logr.Discard())
+	router := NewMetricsRouter(logr.Discard(), "test-node", "test-cluster", "test-source")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -218,7 +214,7 @@ func TestMetricsRouter_ConsumerRegistration(t *testing.T) {
 }
 
 func TestMetricsRouter_EventDelivery(t *testing.T) {
-	router := NewMetricsRouter(logr.Discard())
+	router := NewMetricsRouter(logr.Discard(), "test-node", "test-cluster", "test-source")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -245,16 +241,60 @@ func TestMetricsRouter_EventDelivery(t *testing.T) {
 	err = router.RegisterConsumer(consumer2)
 	require.NoError(t, err)
 
-	// Publish events
-	events := []MetricEvent{
-		{Timestamp: time.Now(), Source: "test", MetricType: MetricTypeSystem, Data: "event1"},
-		{Timestamp: time.Now(), Source: "test", MetricType: MetricTypeSystem, Data: "event2"},
-		{Timestamp: time.Now(), Source: "test", MetricType: MetricTypeSystem, Data: "event3"},
+	// Publish events with different real performance data types
+	// This tests that the router correctly identifies metric types from data
+	events := []struct {
+		name               string
+		data               any
+		expectedMetricType MetricType
+	}{
+		{
+			name: "system_stats",
+			data: &performance.SystemStats{
+				Interrupts:      1000,
+				ContextSwitches: 2000,
+			},
+			expectedMetricType: MetricTypeSystem,
+		},
+		{
+			name: "cpu_stats",
+			data: &performance.CPUStats{
+				User:   50.0,
+				System: 25.0,
+				Idle:   25.0,
+			},
+			expectedMetricType: MetricTypeCPU,
+		},
+		{
+			name: "memory_stats",
+			data: &performance.MemoryStats{
+				MemTotal:     8192,
+				MemFree:      4096,
+				MemAvailable: 4096,
+			},
+			expectedMetricType: MetricTypeMemory,
+		},
+		{
+			name: "network_stats_slice",
+			data: []performance.NetworkStats{
+				{
+					Interface: "eth0",
+					RxBytes:   1024,
+					TxBytes:   2048,
+				},
+			},
+			expectedMetricType: MetricTypeNetwork,
+		},
+		{
+			name:               "unknown_type",
+			data:               &mockMetricData{value: "test"},
+			expectedMetricType: MetricType("unknown"),
+		},
 	}
 
 	for _, event := range events {
-		err := router.Publish(event)
-		require.NoError(t, err)
+		err := router.Accept(event.data)
+		require.NoError(t, err, "Failed to accept event: %s", event.name)
 	}
 
 	// Wait for delivery
@@ -262,13 +302,29 @@ func TestMetricsRouter_EventDelivery(t *testing.T) {
 
 	// Check that both consumers received all events
 	assert.Eventually(t, func() bool {
-		return len(consumer1.getEvents()) == 3 && len(consumer2.getEvents()) == 3
+		return len(consumer1.getEvents()) == len(events) && len(consumer2.getEvents()) == len(events)
 	}, 100*time.Millisecond, 10*time.Millisecond)
+
+	// Verify that the correct metric types were identified
+	consumer1Events := consumer1.getEvents()
+	for i, event := range events {
+		assert.Equal(t, event.expectedMetricType, consumer1Events[i].MetricType,
+			"Incorrect metric type for event %s", event.name)
+		assert.Equal(t, event.data, consumer1Events[i].Data,
+			"Incorrect data for event %s", event.name)
+	}
+
+	// Also verify consumer2 got the same events
+	consumer2Events := consumer2.getEvents()
+	for i, event := range events {
+		assert.Equal(t, event.expectedMetricType, consumer2Events[i].MetricType,
+			"Incorrect metric type for event %s in consumer2", event.name)
+	}
 }
 
 // TestMetricsRouter_LifecycleManagement tests that consumers manage their own lifecycle
 func TestMetricsRouter_LifecycleManagement(t *testing.T) {
-	router := NewMetricsRouter(logr.Discard())
+	router := NewMetricsRouter(logr.Discard(), "test-node", "test-cluster", "test-source")
 
 	// Create consumers
 	consumer1 := newMockConsumer("consumer1")
@@ -299,13 +355,8 @@ func TestMetricsRouter_LifecycleManagement(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify consumers can receive events
-	event := MetricEvent{
-		Timestamp:  time.Now(),
-		Source:     "test",
-		MetricType: MetricTypeSystem,
-		Data:       "test data",
-	}
-	err = router.Publish(event)
+	data := &mockMetricData{value: "test data"}
+	err = router.Accept(data)
 	require.NoError(t, err)
 
 	// Give time for event processing
@@ -324,13 +375,8 @@ func TestMetricsRouter_LifecycleManagement(t *testing.T) {
 	require.NoError(t, err)
 
 	// Send another event
-	event2 := MetricEvent{
-		Timestamp:  time.Now(),
-		Source:     "test",
-		MetricType: MetricTypeSystem,
-		Data:       "test data 2",
-	}
-	err = router.Publish(event2)
+	data2 := &mockMetricData{value: "test data 2"}
+	err = router.Accept(data2)
 	require.NoError(t, err)
 
 	time.Sleep(50 * time.Millisecond)

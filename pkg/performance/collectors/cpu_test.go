@@ -203,7 +203,8 @@ cpu7 250 0 250 2000 0 0 0 0 0 0
 			assert.NoError(t, err)
 
 			// Collect CPU stats
-			result, err := collector.Collect(context.Background())
+			receiver := performance.NewMockReceiver("test-receiver")
+			err = collector.Collect(context.Background(), receiver)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -211,7 +212,9 @@ cpu7 250 0 250 2000 0 0 0 0 0 0
 			}
 
 			require.NoError(t, err)
-			stats, ok := result.([]*performance.CPUStats)
+			calls := receiver.GetAcceptCalls()
+			require.Len(t, calls, 1, "Expected exactly one Accept call")
+			stats, ok := calls[0].Data.([]*performance.CPUStats)
 			require.True(t, ok, "Expected []*performance.CPUStats")
 
 			if tt.validate != nil {
@@ -247,10 +250,13 @@ procs_blocked 0
 	assert.NoError(t, err)
 
 	// Collect CPU stats
-	result, err := collector.Collect(context.Background())
+	receiver := performance.NewMockReceiver("test-receiver")
+	err = collector.Collect(context.Background(), receiver)
 	require.NoError(t, err)
 
-	stats, ok := result.([]*performance.CPUStats)
+	calls := receiver.GetAcceptCalls()
+	require.Len(t, calls, 1, "Expected exactly one Accept call")
+	stats, ok := calls[0].Data.([]*performance.CPUStats)
 	require.True(t, ok, "Expected []*performance.CPUStats")
 	require.Len(t, stats, 3) // cpu, cpu0, cpu1
 

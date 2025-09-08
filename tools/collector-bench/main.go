@@ -140,18 +140,23 @@ func testCollector(collector performance.PointCollector) CollectorResult {
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
 
+	// Create a mock receiver to capture the data
+	receiver := performance.NewMockReceiver("bench-receiver")
+
 	start := time.Now()
-	data, err := collector.Collect(ctx)
+	err := collector.Collect(ctx, receiver)
 	duration := time.Since(start)
 
 	result.Duration = duration
 	result.Success = err == nil
 	result.Error = err
-	result.Data = data
 
-	if data != nil {
-		result.DataSize = estimateDataSize(data)
+	// Get the data from the mock receiver
+	if calls := receiver.GetAcceptCalls(); len(calls) > 0 {
+		result.Data = calls[0].Data
+		result.DataSize = estimateDataSize(calls[0].Data)
 	} else {
+		result.Data = nil
 		result.DataSize = 0
 	}
 
@@ -280,8 +285,9 @@ func runBenchmarks(collectors []performance.PointCollector, results []CollectorR
 
 		for j := 0; j < *iterations; j++ {
 			ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+			receiver := performance.NewMockReceiver("bench-receiver")
 			start := time.Now()
-			_, err := collector.Collect(ctx)
+			err := collector.Collect(ctx, receiver)
 			duration := time.Since(start)
 			cancel()
 
