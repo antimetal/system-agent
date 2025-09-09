@@ -114,7 +114,7 @@ func TestDiskInfoCollector_Collect(t *testing.T) {
 	tests := []struct {
 		name     string
 		setupSys func(t *testing.T, sysPath string)
-		wantInfo func(t *testing.T, disks []performance.DiskInfo)
+		wantInfo func(t *testing.T, disks []*performance.DiskInfo)
 		wantErr  bool
 	}{
 		{
@@ -134,7 +134,7 @@ func TestDiskInfoCollector_Collect(t *testing.T) {
 					"scheduler":           "noop deadline [cfq]",
 				})
 			},
-			wantInfo: func(t *testing.T, disks []performance.DiskInfo) {
+			wantInfo: func(t *testing.T, disks []*performance.DiskInfo) {
 				assert.Len(t, disks, 1)
 				assert.Equal(t, "sda", disks[0].Device)
 				assert.Equal(t, "Samsung SSD 860", disks[0].Model)
@@ -171,7 +171,7 @@ func TestDiskInfoCollector_Collect(t *testing.T) {
 					"start": "206848",
 				})
 			},
-			wantInfo: func(t *testing.T, disks []performance.DiskInfo) {
+			wantInfo: func(t *testing.T, disks []*performance.DiskInfo) {
 				assert.Len(t, disks, 1)
 				assert.Equal(t, "sdb", disks[0].Device)
 				assert.Equal(t, "WDC WD10EZEX", disks[0].Model)
@@ -206,7 +206,7 @@ func TestDiskInfoCollector_Collect(t *testing.T) {
 					"start": "2048",
 				})
 			},
-			wantInfo: func(t *testing.T, disks []performance.DiskInfo) {
+			wantInfo: func(t *testing.T, disks []*performance.DiskInfo) {
 				assert.Len(t, disks, 1)
 				assert.Equal(t, "nvme0n1", disks[0].Device)
 				assert.Contains(t, disks[0].Model, "Samsung SSD 970")
@@ -246,7 +246,7 @@ func TestDiskInfoCollector_Collect(t *testing.T) {
 					"size": "50000",
 				})
 			},
-			wantInfo: func(t *testing.T, disks []performance.DiskInfo) {
+			wantInfo: func(t *testing.T, disks []*performance.DiskInfo) {
 				assert.Len(t, disks, 2)
 
 				// Find disks by device name
@@ -254,9 +254,9 @@ func TestDiskInfoCollector_Collect(t *testing.T) {
 				for i := range disks {
 					switch disks[i].Device {
 					case "sda":
-						sda = &disks[i]
+						sda = disks[i]
 					case "sdb":
-						sdb = &disks[i]
+						sdb = disks[i]
 					}
 				}
 
@@ -295,8 +295,8 @@ func TestDiskInfoCollector_Collect(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			disks, ok := result.([]performance.DiskInfo)
-			require.True(t, ok, "Expected []performance.DiskInfo, got %T", result)
+			disks, ok := result.([]*performance.DiskInfo)
+			require.True(t, ok, "Expected []*performance.DiskInfo, got %T", result)
 
 			if tt.wantInfo != nil {
 				tt.wantInfo(t, disks)
@@ -328,7 +328,7 @@ func TestDiskInfoCollector_PartitionDetectionWithSoftwareRAID(t *testing.T) {
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	disks, ok := result.([]performance.DiskInfo)
+	disks, ok := result.([]*performance.DiskInfo)
 	require.True(t, ok)
 
 	// Should include: sda (whole disk) and md0 (software RAID device)

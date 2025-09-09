@@ -86,7 +86,7 @@ func (c *NetworkCollector) Collect(ctx context.Context) (any, error) {
 	// Calculate deltas if we have previous state
 	if c.HasDeltaState() {
 		if should, reason := c.ShouldCalculateDeltas(currentTime); should {
-			previous := c.LastSnapshot.([]performance.NetworkStats)
+			previous := c.LastSnapshot.([]*performance.NetworkStats)
 			c.calculateNetworkDeltas(stats, previous, currentTime, c.Config)
 		} else {
 			c.Logger().V(2).Info("Skipping delta calculation", "reason", reason)
@@ -120,7 +120,7 @@ func (c *NetworkCollector) Collect(ctx context.Context) (any, error) {
 // - Malformed lines in /proc/net/dev are skipped with logging
 //
 // Reference: https://www.kernel.org/doc/html/latest/networking/statistics.html
-func (c *NetworkCollector) collectNetworkStats() ([]performance.NetworkStats, error) {
+func (c *NetworkCollector) collectNetworkStats() ([]*performance.NetworkStats, error) {
 	// Read /proc/net/dev
 	file, err := os.Open(c.procNetDevPath)
 	if err != nil {
@@ -128,7 +128,7 @@ func (c *NetworkCollector) collectNetworkStats() ([]performance.NetworkStats, er
 	}
 	defer file.Close()
 
-	var stats []performance.NetworkStats
+	var stats []*performance.NetworkStats
 	scanner := bufio.NewScanner(file)
 	lineNum := 0
 
@@ -156,7 +156,7 @@ func (c *NetworkCollector) collectNetworkStats() ([]performance.NetworkStats, er
 		}
 
 		// Parse all the counters
-		stat := performance.NetworkStats{
+		stat := &performance.NetworkStats{
 			Interface: ifaceName,
 		}
 
@@ -194,7 +194,7 @@ func (c *NetworkCollector) collectNetworkStats() ([]performance.NetworkStats, er
 		stat.TxCompressed, _ = strconv.ParseUint(fields[15], 10, 64)
 
 		// Read interface metadata from /sys/class/net/[interface]/
-		c.readInterfaceMetadata(&stat)
+		c.readInterfaceMetadata(stat)
 
 		stats = append(stats, stat)
 	}
@@ -249,7 +249,7 @@ func (c *NetworkCollector) readInterfaceMetadata(stat *performance.NetworkStats)
 }
 
 func (c *NetworkCollector) calculateNetworkDeltas(
-	current, previous []performance.NetworkStats,
+	current, previous []*performance.NetworkStats,
 	currentTime time.Time,
 	config performance.DeltaConfig,
 ) {
@@ -257,21 +257,21 @@ func (c *NetworkCollector) calculateNetworkDeltas(
 
 	// Create a map of previous stats by interface name for efficient lookup
 	prevStatsMap := make(map[string]*performance.NetworkStats)
-	for i := range previous {
-		prevStatsMap[previous[i].Interface] = &previous[i]
+	for _, prevStat := range previous {
+		prevStatsMap[prevStat.Interface] = prevStat
 	}
 
 	// Calculate deltas for each current interface
-	for i := range current {
-		prevStat, exists := prevStatsMap[current[i].Interface]
+	for _, currentStat := range current {
+		prevStat, exists := prevStatsMap[currentStat.Interface]
 		if !exists {
 			// New interface - skip delta calculation for this interface
 			c.Logger().V(2).Info("New interface detected, skipping delta calculation",
-				"interface", current[i].Interface)
+				"interface", currentStat.Interface)
 			continue
 		}
 
-		c.calculateInterfaceDeltas(&current[i], prevStat, interval, config)
+		c.calculateInterfaceDeltas(currentStat, prevStat, interval, config)
 	}
 }
 

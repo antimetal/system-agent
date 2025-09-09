@@ -115,7 +115,7 @@ func createTestNetworkCollector(t *testing.T, procNetDev string, sysFiles map[st
 	return collector, procPath, sysPath
 }
 
-func collectAndValidateNetwork(t *testing.T, collector *collectors.NetworkCollector, expectError bool, validate func(t *testing.T, stats []performance.NetworkStats)) {
+func collectAndValidateNetwork(t *testing.T, collector *collectors.NetworkCollector, expectError bool, validate func(t *testing.T, stats []*performance.NetworkStats)) {
 	result, err := collector.Collect(context.Background())
 
 	if expectError {
@@ -124,8 +124,8 @@ func collectAndValidateNetwork(t *testing.T, collector *collectors.NetworkCollec
 	}
 
 	require.NoError(t, err)
-	stats, ok := result.([]performance.NetworkStats)
-	require.True(t, ok, "result should be []performance.NetworkStats")
+	stats, ok := result.([]*performance.NetworkStats)
+	require.True(t, ok, "result should be []*performance.NetworkStats")
 
 	if validate != nil {
 		validate(t, stats)
@@ -155,7 +155,7 @@ func TestNetworkCollector_Collect(t *testing.T) {
 		procNetDev     string
 		sysFiles       map[string]string
 		expectError    bool
-		validateResult func(t *testing.T, stats []performance.NetworkStats)
+		validateResult func(t *testing.T, stats []*performance.NetworkStats)
 	}{
 		{
 			name:       "valid network stats with sysfs metadata",
@@ -171,7 +171,7 @@ func TestNetworkCollector_Collect(t *testing.T) {
 				"wlan0/carrier":   "0",
 			},
 			expectError: false,
-			validateResult: func(t *testing.T, stats []performance.NetworkStats) {
+			validateResult: func(t *testing.T, stats []*performance.NetworkStats) {
 				require.Len(t, stats, 3)
 
 				// Check lo interface
@@ -223,7 +223,7 @@ func TestNetworkCollector_Collect(t *testing.T) {
 			name:        "malformed line - skip bad line",
 			procNetDev:  malformedProcNetDev,
 			expectError: false,
-			validateResult: func(t *testing.T, stats []performance.NetworkStats) {
+			validateResult: func(t *testing.T, stats []*performance.NetworkStats) {
 				// Should still parse eth0
 				require.Len(t, stats, 1)
 				assert.Equal(t, "eth0", stats[0].Interface)
@@ -235,7 +235,7 @@ func TestNetworkCollector_Collect(t *testing.T) {
 			name:        "insufficient fields - skip bad line",
 			procNetDev:  insufficientFieldsProcNetDev,
 			expectError: false,
-			validateResult: func(t *testing.T, stats []performance.NetworkStats) {
+			validateResult: func(t *testing.T, stats []*performance.NetworkStats) {
 				// Should skip the line with insufficient fields
 				require.Len(t, stats, 0)
 			},
@@ -245,7 +245,7 @@ func TestNetworkCollector_Collect(t *testing.T) {
 			procNetDev:  validProcNetDev,
 			sysFiles:    nil, // No sysfs files
 			expectError: false,
-			validateResult: func(t *testing.T, stats []performance.NetworkStats) {
+			validateResult: func(t *testing.T, stats []*performance.NetworkStats) {
 				require.Len(t, stats, 3)
 
 				// Check that basic stats are still collected
@@ -267,7 +267,7 @@ func TestNetworkCollector_Collect(t *testing.T) {
  face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
   eth0: 0  0    0    0    0     0          0         0 0  0    0    0    0     0       0          0`,
 			expectError: false,
-			validateResult: func(t *testing.T, stats []performance.NetworkStats) {
+			validateResult: func(t *testing.T, stats []*performance.NetworkStats) {
 				require.Len(t, stats, 1)
 				eth0 := stats[0]
 				assert.Equal(t, uint64(0), eth0.RxBytes)
@@ -280,7 +280,7 @@ func TestNetworkCollector_Collect(t *testing.T) {
  face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
   eth0: 18446744073709551615  18446744073709551615    0    0    0     0          0         0 18446744073709551615  18446744073709551615    0    0    0     0       0          0`,
 			expectError: false,
-			validateResult: func(t *testing.T, stats []performance.NetworkStats) {
+			validateResult: func(t *testing.T, stats []*performance.NetworkStats) {
 				require.Len(t, stats, 1)
 				eth0 := stats[0]
 				assert.Equal(t, uint64(18446744073709551615), eth0.RxBytes) // Max uint64
@@ -312,10 +312,10 @@ func TestNetworkCollector_Collect(t *testing.T) {
 	}
 }
 
-func findInterface(stats []performance.NetworkStats, name string) *performance.NetworkStats {
-	for i := range stats {
-		if stats[i].Interface == name {
-			return &stats[i]
+func findInterface(stats []*performance.NetworkStats, name string) *performance.NetworkStats {
+	for _, stat := range stats {
+		if stat.Interface == name {
+			return stat
 		}
 	}
 	return nil

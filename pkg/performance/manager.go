@@ -106,7 +106,7 @@ func (m *Manager) PublishCollectorData(metricType MetricType, data any) error {
 		Source:      "performance-collector",
 		NodeName:    m.nodeName,
 		ClusterName: m.clusterName,
-		MetricType:  metrics.MetricType(metricType), // Convert to metrics.MetricType
+		MetricType:  metrics.MetricType(metricType), // Convert performance.MetricType to metrics.MetricType (duplicated to avoid import cycle)
 		EventType:   determineEventType(metricType),
 		Data:        data,
 	}

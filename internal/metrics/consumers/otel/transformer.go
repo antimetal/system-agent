@@ -325,9 +325,9 @@ func (t *Transformer) transformMemoryStats(ctx context.Context, data any, attrs 
 
 // transformCPUStats transforms CPU usage statistics
 func (t *Transformer) transformCPUStats(ctx context.Context, data any, attrs []attribute.KeyValue) error {
-	cpuStats, ok := data.([]performance.CPUStats)
+	cpuStats, ok := data.([]*performance.CPUStats)
 	if !ok {
-		return fmt.Errorf("invalid CPU stats data type")
+		return fmt.Errorf("invalid CPU stats data type: expected []*performance.CPUStats, got %T", data)
 	}
 
 	gauge, err := t.getOrCreateFloat64Gauge("system.cpu.utilization", "CPU utilization by state", "1")
@@ -346,7 +346,7 @@ func (t *Transformer) transformCPUStats(ctx context.Context, data any, attrs []a
 }
 
 // recordCPUUtilization records CPU utilization metrics for a single CPU
-func (t *Transformer) recordCPUUtilization(ctx context.Context, gauge metric.Float64Gauge, cpu performance.CPUStats, baseAttrs []attribute.KeyValue) error {
+func (t *Transformer) recordCPUUtilization(ctx context.Context, gauge metric.Float64Gauge, cpu *performance.CPUStats, baseAttrs []attribute.KeyValue) error {
 	cpuAttrs := append(baseAttrs, attribute.String("cpu", strconv.Itoa(int(cpu.CPUIndex))))
 
 	total := t.calculateCPUTotal(cpu)
@@ -364,12 +364,12 @@ func (t *Transformer) recordCPUUtilization(ctx context.Context, gauge metric.Flo
 }
 
 // calculateCPUTotal calculates the total CPU time across all states
-func (t *Transformer) calculateCPUTotal(cpu performance.CPUStats) uint64 {
+func (t *Transformer) calculateCPUTotal(cpu *performance.CPUStats) uint64 {
 	return cpu.User + cpu.Nice + cpu.System + cpu.Idle + cpu.IOWait + cpu.IRQ + cpu.SoftIRQ + cpu.Steal + cpu.Guest + cpu.GuestNice
 }
 
 // calculateCPUStates calculates CPU utilization percentages by state
-func (t *Transformer) calculateCPUStates(cpu performance.CPUStats, total uint64) map[string]float64 {
+func (t *Transformer) calculateCPUStates(cpu *performance.CPUStats, total uint64) map[string]float64 {
 	return map[string]float64{
 		"user":   float64(cpu.User) / float64(total),
 		"system": float64(cpu.System) / float64(total),
@@ -381,9 +381,9 @@ func (t *Transformer) calculateCPUStates(cpu performance.CPUStats, total uint64)
 
 // transformProcessStats transforms process statistics
 func (t *Transformer) transformProcessStats(ctx context.Context, data any, attrs []attribute.KeyValue) error {
-	processes, ok := data.([]performance.ProcessStats)
+	processes, ok := data.([]*performance.ProcessStats)
 	if !ok {
-		return fmt.Errorf("invalid process stats data type")
+		return fmt.Errorf("invalid process stats data type: expected []*performance.ProcessStats, got %T", data)
 	}
 
 	// Aggregate metrics
@@ -409,9 +409,9 @@ func (t *Transformer) transformProcessStats(ctx context.Context, data any, attrs
 
 // transformDiskStats transforms disk I/O statistics
 func (t *Transformer) transformDiskStats(ctx context.Context, data any, attrs []attribute.KeyValue) error {
-	disks, ok := data.([]performance.DiskStats)
+	disks, ok := data.([]*performance.DiskStats)
 	if !ok {
-		return fmt.Errorf("invalid disk stats data type")
+		return fmt.Errorf("invalid disk stats data type: expected []*performance.DiskStats, got %T", data)
 	}
 
 	for _, disk := range disks {
@@ -439,9 +439,9 @@ func (t *Transformer) transformDiskStats(ctx context.Context, data any, attrs []
 
 // transformNetworkStats transforms network interface statistics
 func (t *Transformer) transformNetworkStats(ctx context.Context, data any, attrs []attribute.KeyValue) error {
-	interfaces, ok := data.([]performance.NetworkStats)
+	interfaces, ok := data.([]*performance.NetworkStats)
 	if !ok {
-		return fmt.Errorf("invalid network stats data type")
+		return fmt.Errorf("invalid network stats data type: expected []*performance.NetworkStats, got %T", data)
 	}
 
 	for _, iface := range interfaces {
@@ -517,7 +517,7 @@ func (t *Transformer) transformSystemStats(ctx context.Context, data any, attrs 
 func (t *Transformer) transformKernelMessages(ctx context.Context, data any, attrs []attribute.KeyValue) error {
 	messages, ok := data.([]performance.KernelMessage)
 	if !ok {
-		return fmt.Errorf("invalid kernel messages data type")
+		return fmt.Errorf("invalid kernel messages data type: expected []performance.KernelMessage, got %T", data)
 	}
 
 	// Count messages by severity

@@ -112,7 +112,7 @@ func TestNetworkInfoCollector_Collect(t *testing.T) {
 	tests := []struct {
 		name     string
 		setupSys func(t *testing.T, sysPath string)
-		wantInfo func(t *testing.T, interfaces []performance.NetworkInfo)
+		wantInfo func(t *testing.T, interfaces []*performance.NetworkInfo)
 		wantErr  bool
 	}{
 		{
@@ -132,7 +132,7 @@ func TestNetworkInfoCollector_Collect(t *testing.T) {
 					"driver":    "e1000e",
 				})
 			},
-			wantInfo: func(t *testing.T, interfaces []performance.NetworkInfo) {
+			wantInfo: func(t *testing.T, interfaces []*performance.NetworkInfo) {
 				assert.Len(t, interfaces, 1)
 				assert.Equal(t, "eth0", interfaces[0].Interface)
 				assert.Equal(t, "ethernet", interfaces[0].Type)
@@ -162,7 +162,7 @@ func TestNetworkInfoCollector_Collect(t *testing.T) {
 				wirelessPath := filepath.Join(netPath, "wlan0", "wireless")
 				require.NoError(t, os.MkdirAll(wirelessPath, 0755))
 			},
-			wantInfo: func(t *testing.T, interfaces []performance.NetworkInfo) {
+			wantInfo: func(t *testing.T, interfaces []*performance.NetworkInfo) {
 				assert.Len(t, interfaces, 1)
 				assert.Equal(t, "wlan0", interfaces[0].Interface)
 				assert.Equal(t, "wireless", interfaces[0].Type)
@@ -183,7 +183,7 @@ func TestNetworkInfoCollector_Collect(t *testing.T) {
 					"type":      "772",
 				})
 			},
-			wantInfo: func(t *testing.T, interfaces []performance.NetworkInfo) {
+			wantInfo: func(t *testing.T, interfaces []*performance.NetworkInfo) {
 				assert.Len(t, interfaces, 1)
 				assert.Equal(t, "lo", interfaces[0].Interface)
 				assert.Equal(t, "loopback", interfaces[0].Type)
@@ -219,7 +219,7 @@ func TestNetworkInfoCollector_Collect(t *testing.T) {
 					"operstate": "up",
 				})
 			},
-			wantInfo: func(t *testing.T, interfaces []performance.NetworkInfo) {
+			wantInfo: func(t *testing.T, interfaces []*performance.NetworkInfo) {
 				assert.Len(t, interfaces, 3)
 
 				// Find interfaces by name
@@ -227,11 +227,11 @@ func TestNetworkInfoCollector_Collect(t *testing.T) {
 				for i := range interfaces {
 					switch interfaces[i].Interface {
 					case "eth0":
-						eth0 = &interfaces[i]
+						eth0 = interfaces[i]
 					case "docker0":
-						docker0 = &interfaces[i]
+						docker0 = interfaces[i]
 					case "veth1234":
-						veth = &interfaces[i]
+						veth = interfaces[i]
 					}
 				}
 
@@ -257,7 +257,7 @@ func TestNetworkInfoCollector_Collect(t *testing.T) {
 					"carrier":   "0",
 				})
 			},
-			wantInfo: func(t *testing.T, interfaces []performance.NetworkInfo) {
+			wantInfo: func(t *testing.T, interfaces []*performance.NetworkInfo) {
 				assert.Len(t, interfaces, 1)
 				assert.Equal(t, uint64(0), interfaces[0].Speed) // Should be 0, not -1
 				assert.Equal(t, "down", interfaces[0].OperState)
@@ -289,8 +289,8 @@ func TestNetworkInfoCollector_Collect(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			interfaces, ok := result.([]performance.NetworkInfo)
-			require.True(t, ok, "Expected []performance.NetworkInfo, got %T", result)
+			interfaces, ok := result.([]*performance.NetworkInfo)
+			require.True(t, ok, "Expected []*performance.NetworkInfo, got %T", result)
 
 			if tt.wantInfo != nil {
 				tt.wantInfo(t, interfaces)
@@ -379,7 +379,7 @@ func TestNetworkInfoCollector_InterfaceTypes(t *testing.T) {
 			result, err := collector.Collect(context.Background())
 			require.NoError(t, err)
 
-			interfaces, ok := result.([]performance.NetworkInfo)
+			interfaces, ok := result.([]*performance.NetworkInfo)
 			require.True(t, ok)
 			require.Len(t, interfaces, 1)
 

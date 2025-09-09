@@ -121,8 +121,8 @@ func (c *NetworkInfoCollector) Collect(ctx context.Context) (any, error) {
 // - Driver defaults
 //
 // See: https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-class-net
-func (c *NetworkInfoCollector) collectNetworkInfo() ([]performance.NetworkInfo, error) {
-	interfaces := make([]performance.NetworkInfo, 0)
+func (c *NetworkInfoCollector) collectNetworkInfo() ([]*performance.NetworkInfo, error) {
+	interfaces := make([]*performance.NetworkInfo, 0)
 
 	entries, err := os.ReadDir(c.netClassPath)
 	if err != nil {
@@ -136,11 +136,11 @@ func (c *NetworkInfoCollector) collectNetworkInfo() ([]performance.NetworkInfo, 
 		// Check if it's a valid interface directory or symlink
 		// Most entries are symlinks to actual device directories
 		if stat, err := os.Stat(interfacePath); err == nil && stat.IsDir() {
-			info := performance.NetworkInfo{
+			info := &performance.NetworkInfo{
 				Interface: interfaceName,
 			}
 			info.Type = c.getInterfaceType(interfaceName, interfacePath)
-			c.parseInterfaceProperties(&info, interfacePath)
+			c.parseInterfaceProperties(info, interfacePath)
 
 			interfaces = append(interfaces, info)
 		}
