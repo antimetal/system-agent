@@ -41,7 +41,7 @@ func (b *Builder) BuildFromSnapshot(ctx context.Context, snapshot *performance.S
 	}
 
 	// Add system node to store
-	if err := b.store.AddResource(systemNode); err != nil {
+	if err := b.store.UpdateResource(systemNode); err != nil {
 		return fmt.Errorf("failed to add system node: %w", err)
 	}
 
@@ -93,7 +93,7 @@ func (b *Builder) buildCPUTopology(ctx context.Context, cpuInfo *performance.CPU
 				return fmt.Errorf("failed to create CPU package: %w", err)
 			}
 
-			if err := b.store.AddResource(pkg); err != nil {
+			if err := b.store.UpdateResource(pkg); err != nil {
 				return fmt.Errorf("failed to add CPU package: %w", err)
 			}
 
@@ -113,7 +113,7 @@ func (b *Builder) buildCPUTopology(ctx context.Context, cpuInfo *performance.CPU
 			return fmt.Errorf("failed to create CPU core: %w", err)
 		}
 
-		if err := b.store.AddResource(coreNode); err != nil {
+		if err := b.store.UpdateResource(coreNode); err != nil {
 			return fmt.Errorf("failed to add CPU core: %w", err)
 		}
 
@@ -152,7 +152,7 @@ func (b *Builder) buildMemoryTopology(ctx context.Context, memInfo *performance.
 		return fmt.Errorf("failed to create memory node: %w", err)
 	}
 
-	if err := b.store.AddResource(memNode); err != nil {
+	if err := b.store.UpdateResource(memNode); err != nil {
 		return fmt.Errorf("failed to add memory node: %w", err)
 	}
 
@@ -174,7 +174,7 @@ func (b *Builder) buildMemoryTopology(ctx context.Context, memInfo *performance.
 				return fmt.Errorf("failed to create NUMA node: %w", err)
 			}
 
-			if err := b.store.AddResource(numa); err != nil {
+			if err := b.store.UpdateResource(numa); err != nil {
 				return fmt.Errorf("failed to add NUMA node: %w", err)
 			}
 
@@ -219,7 +219,7 @@ func (b *Builder) buildDiskTopology(ctx context.Context, diskInfo []performance.
 			return fmt.Errorf("failed to create disk node: %w", err)
 		}
 
-		if err := b.store.AddResource(diskNode); err != nil {
+		if err := b.store.UpdateResource(diskNode); err != nil {
 			return fmt.Errorf("failed to add disk node: %w", err)
 		}
 
@@ -241,7 +241,7 @@ func (b *Builder) buildDiskTopology(ctx context.Context, diskInfo []performance.
 				return fmt.Errorf("failed to create partition node: %w", err)
 			}
 
-			if err := b.store.AddResource(partNode); err != nil {
+			if err := b.store.UpdateResource(partNode); err != nil {
 				return fmt.Errorf("failed to add partition node: %w", err)
 			}
 
@@ -264,7 +264,7 @@ func (b *Builder) buildNetworkTopology(ctx context.Context, netInfo []performanc
 			return fmt.Errorf("failed to create network node: %w", err)
 		}
 
-		if err := b.store.AddResource(netNode); err != nil {
+		if err := b.store.UpdateResource(netNode); err != nil {
 			return fmt.Errorf("failed to add network node: %w", err)
 		}
 

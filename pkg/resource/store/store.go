@@ -47,8 +47,56 @@ var (
 )
 
 type subscriber struct {
-	typeDef *resourcev1.TypeDescriptor
-	ch      chan resource.Event
+	ch        chan resource.Event
+	kindMatch [][]string
+	typeMatch [][]string
+}
+
+func (s *subscriber) match(typeDef *resourcev1.TypeDescriptor) bool {
+	if len(s.kindMatch) == 0 && len(s.typeMatch) == 0 {
+		return true
+	}
+	if typeDef == nil {
+		return false
+	}
+
+	kindPath := strings.Split(typeDef.GetKind(), ".")
+	typePath := strings.Split(typeDef.GetType(), ".")
+
+	if len(s.kindMatch) > 0 {
+		kindMatched := false
+		for _, kindMatch := range s.kindMatch {
+			if hasPrefix(kindPath, kindMatch) {
+				kindMatched = true
+				break
+			}
+		}
+		if !kindMatched {
+			return false
+		}
+	}
+
+	if len(s.typeMatch) > 0 {
+		for _, typeMatch := range s.typeMatch {
+			if hasPrefix(typePath, typeMatch) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func hasPrefix(path, prefix []string) bool {
+	if len(prefix) > len(path) {
+		return false
+	}
+	for i, part := range prefix {
+		if path[i] != part {
+			return false
+		}
+	}
+	return true
 }
 
 // Store is a simple store for resources and their relationships.
@@ -565,7 +613,7 @@ func (s *store) GetRelationships(subject, object *resourcev1.ResourceRef, predic
 //
 // The returned channel will be closed when Close() is called. If Close() has already been called,
 // then it will return a closed channel.
-func (s *store) Subscribe(typeDef *resourcev1.TypeDescriptor) <-chan resource.Event {
+func (s *store) Subscribe(typeDefs ...*resourcev1.TypeDescriptor) <-chan resource.Event {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -574,9 +622,22 @@ func (s *store) Subscribe(typeDef *resourcev1.TypeDescriptor) <-chan resource.Ev
 		close(ch)
 		return ch
 	}
+
+	var typeMatch [][]string
+	var kindMatch [][]string
+	for _, typeDef := range typeDefs {
+		if typeDef != nil && typeDef.GetKind() != "" {
+			kindMatch = append(kindMatch, strings.Split(typeDef.GetKind(), "."))
+		}
+		if typeDef != nil && typeDef.GetType() != "" {
+			typeMatch = append(typeMatch, strings.Split(typeDef.GetType(), "."))
+		}
+	}
+
 	subscriber := &subscriber{
-		typeDef: typeDef,
-		ch:      ch,
+		ch:        ch,
+		typeMatch: typeMatch,
+		kindMatch: kindMatch,
 	}
 	s.subscribers = append(s.subscribers, subscriber)
 	go s.sendInitialObjects(subscriber)
@@ -596,13 +657,15 @@ func (s *store) sendInitialObjects(subscriber *subscriber) {
 				if err != nil {
 					return fmt.Errorf("failed to unmarshal resource: %w", err)
 				}
-				objs = append(objs, &resourcev1.Object{
-					Type: r.GetType(),
-					Object: &anypb.Any{
-						TypeUrl: fmt.Sprintf("%s/%s", "type.googleapis.com", r.GetType().GetType()),
-						Value:   val,
-					},
-				})
+				if subscriber.match(r.GetType()) {
+					objs = append(objs, &resourcev1.Object{
+						Type: r.GetType(),
+						Object: &anypb.Any{
+							TypeUrl: fmt.Sprintf("%s/%s", "type.googleapis.com", r.GetType().GetType()),
+							Value:   val,
+						},
+					})
+				}
 				return nil
 			})
 			if err != nil {
@@ -617,10 +680,12 @@ func (s *store) sendInitialObjects(subscriber *subscriber) {
 				if err != nil {
 					return fmt.Errorf("failed to unmarshal relationship: %w", err)
 				}
-				objs = append(objs, &resourcev1.Object{
-					Type:   rel.GetType(),
-					Object: &anypb.Any{Value: val},
-				})
+				if subscriber.match(rel.GetType()) {
+					objs = append(objs, &resourcev1.Object{
+						Type:   rel.GetType(),
+						Object: &anypb.Any{Value: val},
+					})
+				}
 				return nil
 			})
 			if err != nil {
@@ -671,12 +736,9 @@ func (s *store) startEventRouter() {
 				continue
 			}
 			for _, subscriber := range s.subscribers {
-				if subscriber.typeDef != nil &&
-					subscriber.typeDef.GetKind() != e.Objs[0].GetType().GetKind() &&
-					subscriber.typeDef.GetType() != e.Objs[0].GetType().GetType() {
-					continue
+				if subscriber.match(e.Objs[0].GetType()) {
+					subscriber.ch <- e
 				}
-				subscriber.ch <- e
 			}
 		case <-s.stopEventRouter:
 			for {

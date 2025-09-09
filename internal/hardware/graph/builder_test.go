@@ -54,6 +54,7 @@ func (ts *testStore) AddRelationships(rels ...*resourcev1.Relationship) error {
 }
 
 func (ts *testStore) UpdateResource(r *resourcev1.Resource) error {
+	ts.resources = append(ts.resources, r)
 	return ts.realStore.UpdateResource(r)
 }
 
@@ -69,8 +70,8 @@ func (ts *testStore) GetRelationships(subject, object *resourcev1.ResourceRef, p
 	return ts.realStore.GetRelationships(subject, object, predicate)
 }
 
-func (ts *testStore) Subscribe(typeDef *resourcev1.TypeDescriptor) <-chan resource.Event {
-	return ts.realStore.Subscribe(typeDef)
+func (ts *testStore) Subscribe(typeDefs ...*resourcev1.TypeDescriptor) <-chan resource.Event {
+	return ts.realStore.Subscribe(typeDefs...)
 }
 
 func (ts *testStore) Close() error {

@@ -239,8 +239,9 @@ func main() {
 		intake.WithGRPCConn(intakeConn),
 		intake.WithAPIKey(intakeAPIKey),
 		intake.WithMaxStreamAge(maxStreamAge),
-		intake.WithProviderFilter(resourcev1.Provider_PROVIDER_KUBERNETES),
-		intake.WithLeaderElection(true), // Only runs on leader
+		intake.WithResourceFilter(&resourcev1.TypeDescriptor{Type: "kubernetes"}),
+		intake.WithResourceFilter(&resourcev1.TypeDescriptor{Type: "k8s.io"}),
+		intake.WithLeaderElection(true),
 	)
 	if err != nil {
 		setupLog.Error(err, "unable to create K8S intake worker")
@@ -257,8 +258,8 @@ func main() {
 		intake.WithGRPCConn(intakeConn),
 		intake.WithAPIKey(intakeAPIKey),
 		intake.WithMaxStreamAge(maxStreamAge),
-		intake.WithProviderFilter(resourcev1.Provider_PROVIDER_ANTIMETAL),
-		intake.WithLeaderElection(false), // Runs on all instances
+		intake.WithResourceFilter(&resourcev1.TypeDescriptor{Type: "antimetal"}),
+		intake.WithLeaderElection(false),
 	)
 	if err != nil {
 		setupLog.Error(err, "unable to create instance intake worker")

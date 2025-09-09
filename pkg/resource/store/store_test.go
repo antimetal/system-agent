@@ -10,8 +10,8 @@ package store
 
 import (
 	"fmt"
-	"sync"
 	"testing"
+	"time"
 
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"github.com/antimetal/agent/pkg/errors"
@@ -510,102 +510,150 @@ func TestStore_DeleteResource_NoRelationships(t *testing.T) {
 	}
 }
 
-func TestStore_Subscribe(t *testing.T) {
-	s, err := New("", logr.Discard())
-	if err != nil {
-		t.Fatalf("failed to create inventory: %v", err)
+func TestStore_Subscribe_PackageLongestPathMatch(t *testing.T) {
+	testCases := []struct {
+		name               string
+		subscribeType      string
+		resourceTypes      []string
+		expectedMatches    []string
+		expectedNonMatches []string
+	}{
+		{
+			name:          "exact match",
+			subscribeType: "com.example.services.UserService",
+			resourceTypes: []string{
+				"com.example.services.UserService",
+				"com.example.services.AuthService",
+				"com.other.services.UserService",
+			},
+			expectedMatches:    []string{"com.example.services.UserService"},
+			expectedNonMatches: []string{"com.example.services.AuthService", "com.other.services.UserService"},
+		},
+		{
+			name:          "package prefix match",
+			subscribeType: "com.example.services",
+			resourceTypes: []string{
+				"com.example.services.UserService",
+				"com.example.services.AuthService",
+				"com.example.services.billing.PaymentService",
+				"com.example.models.User",
+				"com.other.services.SomeService",
+			},
+			expectedMatches: []string{
+				"com.example.services.UserService",
+				"com.example.services.AuthService",
+				"com.example.services.billing.PaymentService",
+			},
+			expectedNonMatches: []string{
+				"com.example.models.User",
+				"com.other.services.SomeService",
+			},
+		},
+		{
+			name:          "root package match",
+			subscribeType: "com.example",
+			resourceTypes: []string{
+				"com.example.services.UserService",
+				"com.example.models.User",
+				"com.example.utils.Helper",
+				"com.other.services.SomeService",
+				"org.example.Something",
+			},
+			expectedMatches: []string{
+				"com.example.services.UserService",
+				"com.example.models.User",
+				"com.example.utils.Helper",
+			},
+			expectedNonMatches: []string{
+				"com.other.services.SomeService",
+				"org.example.Something",
+			},
+		},
+		{
+			name:          "no package separator",
+			subscribeType: "SimpleType",
+			resourceTypes: []string{
+				"SimpleType",
+				"SimpleTypeExtended",
+				"AnotherType",
+			},
+			expectedMatches:    []string{"SimpleType"},
+			expectedNonMatches: []string{"SimpleTypeExtended", "AnotherType"},
+		},
+		{
+			name:          "empty subscription type matches all",
+			subscribeType: "",
+			resourceTypes: []string{
+				"com.example.services.UserService",
+				"SimpleType",
+				"org.other.Type",
+			},
+			expectedMatches:    []string{"com.example.services.UserService", "SimpleType", "org.other.Type"},
+			expectedNonMatches: []string{},
+		},
 	}
 
-	rsrc1 := &resourcev1.Resource{
-		Type: &resourcev1.TypeDescriptor{
-			Kind: "foo",
-			Type: "foo",
-		},
-		Metadata: &resourcev1.ResourceMeta{
-			Name: "rsrc1",
-		},
-	}
-	if err := s.AddResource(rsrc1); err != nil {
-		t.Fatalf("failed to add resource: %v", err)
-	}
-
-	rsrc2 := &resourcev1.Resource{
-		Type: &resourcev1.TypeDescriptor{
-			Kind: "foo",
-			Type: "bar",
-		},
-		Metadata: &resourcev1.ResourceMeta{
-			Name: "rscr2",
-		},
-	}
-	if err := s.AddResource(rsrc2); err != nil {
-		t.Fatalf("failed to add resource: %v", err)
-	}
-
-	rel := &resourcev1.Relationship{
-		Type: &resourcev1.TypeDescriptor{
-			Kind: "qux",
-			Type: "qux",
-		},
-		Subject: &resourcev1.ResourceRef{
-			TypeUrl: "foo",
-			Name:    "rscr1",
-		},
-		Object: &resourcev1.ResourceRef{
-			TypeUrl: "bar",
-			Name:    "rsrc2",
-		},
-		Predicate: &anypb.Any{
-			TypeUrl: "qux",
-		},
-	}
-	if err := s.AddRelationships(rel); err != nil {
-		t.Fatalf("failed to add relationship: %v", err)
-	}
-
-	err = s.UpdateResource(&resourcev1.Resource{
-		Type: &resourcev1.TypeDescriptor{
-			Kind: "foo",
-			Type: "foo",
-		},
-		Metadata: &resourcev1.ResourceMeta{
-			Name:   "bar",
-			Region: "us-east-1",
-		},
-	})
-	if err != nil {
-		t.Fatalf("failed to update resource: %v", err)
-	}
-
-	objs := make(map[string]struct{})
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for event := range s.Subscribe(nil) {
-			for _, obj := range event.Objs {
-				k := fmt.Sprintf("%s/%s", obj.GetType().GetKind(), obj.GetType().GetType())
-				objs[k] = struct{}{}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			store, err := New("", logr.Discard())
+			if err != nil {
+				t.Fatalf("failed to create store: %v", err)
 			}
-			if len(objs) == 3 {
-				return
+			defer store.Close()
+
+			resources := make([]*resourcev1.Resource, len(tc.resourceTypes))
+			for i, resourceType := range tc.resourceTypes {
+				resources[i] = &resourcev1.Resource{
+					Type: &resourcev1.TypeDescriptor{
+						Kind: "Resource",
+						Type: resourceType,
+					},
+					Metadata: &resourcev1.ResourceMeta{
+						Name: fmt.Sprintf("resource-%d", i),
+					},
+				}
+				if err := store.AddResource(resources[i]); err != nil {
+					t.Fatalf("failed to add resource %s: %v", resourceType, err)
+				}
 			}
-		}
-	}()
 
-	wg.Wait()
-	if err := s.Close(); err != nil {
-		t.Fatalf("failed to close inventory: %v", err)
-	}
+			var subscribeTypeDef *resourcev1.TypeDescriptor
+			if tc.subscribeType != "" {
+				subscribeTypeDef = &resourcev1.TypeDescriptor{
+					Kind: "Resource",
+					Type: tc.subscribeType,
+				}
+			}
 
-	if _, ok := objs["foo/foo"]; !ok {
-		t.Fatalf("expected resource %s to be in the event stream", "foo/foo")
-	}
-	if _, ok := objs["foo/bar"]; !ok {
-		t.Fatalf("expected resource %s to be in the event stream", "foo/bar")
-	}
-	if _, ok := objs["qux/qux"]; !ok {
-		t.Fatalf("expected relationship %s to be in the event stream", "qux/qux")
+			receivedTypes := make(map[string]struct{})
+			eventCh := store.Subscribe(subscribeTypeDef)
+
+			timeout := time.NewTimer(100 * time.Millisecond)
+			defer timeout.Stop()
+
+			done := false
+			for !done {
+				select {
+				case event := <-eventCh:
+					for _, obj := range event.Objs {
+						receivedTypes[obj.GetType().GetType()] = struct{}{}
+					}
+				case <-timeout.C:
+					done = true
+				}
+			}
+
+			for _, expectedType := range tc.expectedMatches {
+				if _, ok := receivedTypes[expectedType]; !ok {
+					t.Errorf("expected to receive event for type %s but didn't", expectedType)
+				}
+			}
+
+			for _, nonExpectedType := range tc.expectedNonMatches {
+				if _, ok := receivedTypes[nonExpectedType]; ok {
+					t.Errorf("did not expect to receive event for type %s but did", nonExpectedType)
+				}
+			}
+		})
 	}
 }
