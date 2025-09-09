@@ -39,6 +39,7 @@ import (
 	"github.com/antimetal/agent/internal/runtime"
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"github.com/antimetal/agent/pkg/performance"
+	_ "github.com/antimetal/agent/pkg/performance/collectors" // Register collectors
 	"github.com/antimetal/agent/pkg/resource/store"
 )
 
