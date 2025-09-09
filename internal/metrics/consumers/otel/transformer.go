@@ -35,8 +35,9 @@ const (
 
 // Transformer converts generic metrics events to OpenTelemetry metrics
 type Transformer struct {
-	meter  metric.Meter
-	logger logr.Logger
+	meter          metric.Meter
+	logger         logr.Logger
+	serviceVersion string // Service version to add as attribute
 
 	// Cached instruments for performance
 	instruments map[string]interface{}
@@ -45,11 +46,12 @@ type Transformer struct {
 }
 
 // NewTransformer creates a new OpenTelemetry metrics transformer
-func NewTransformer(meter metric.Meter, logger logr.Logger) *Transformer {
+func NewTransformer(meter metric.Meter, logger logr.Logger, serviceVersion string) *Transformer {
 	return &Transformer{
-		meter:       meter,
-		logger:      logger.WithName("otel-transformer"),
-		instruments: make(map[string]interface{}),
+		meter:          meter,
+		logger:         logger.WithName("otel-transformer"),
+		serviceVersion: serviceVersion,
+		instruments:    make(map[string]interface{}),
 	}
 }
 
@@ -73,28 +75,29 @@ func NewTransformer(meter metric.Meter, logger logr.Logger) *Transformer {
 func (t *Transformer) TransformAndRecord(event metrics.MetricEvent) error {
 	ctx := context.Background()
 	switch event.MetricType {
-	case "load":
+	case metrics.MetricTypeLoad:
 		return t.transformLoadStats(ctx, event.Data, t.buildAttributes(event))
-	case "memory":
+	case metrics.MetricTypeMemory:
 		return t.transformMemoryStats(ctx, event.Data, t.buildAttributes(event))
-	case "cpu":
+	case metrics.MetricTypeCPU:
 		return t.transformCPUStats(ctx, event.Data, t.buildAttributes(event))
-	case "process":
+	case metrics.MetricTypeProcess:
 		return t.transformProcessStats(ctx, event.Data, t.buildAttributes(event))
-	case "disk":
+	case metrics.MetricTypeDisk:
 		return t.transformDiskStats(ctx, event.Data, t.buildAttributes(event))
-	case "network":
+	case metrics.MetricTypeNetwork:
 		return t.transformNetworkStats(ctx, event.Data, t.buildAttributes(event))
-	case "tcp":
+	case metrics.MetricTypeTCP:
 		return t.transformTCPStats(ctx, event.Data, t.buildAttributes(event))
-	case "system":
+	case metrics.MetricTypeSystem:
 		return t.transformSystemStats(ctx, event.Data, t.buildAttributes(event))
-	case "kernel":
+	case metrics.MetricTypeKernel:
 		return t.transformKernelMessages(ctx, event.Data, t.buildAttributes(event))
-	case "cpu_info", "memory_info", "disk_info", "network_info":
+	case metrics.MetricTypeCPUInfo, metrics.MetricTypeMemoryInfo,
+		metrics.MetricTypeDiskInfo, metrics.MetricTypeNetworkInfo:
 		// Info metrics are typically handled as resource attributes, not time-series metrics
 		return nil
-	case "numa_stats":
+	case metrics.MetricTypeNUMAStats:
 		return t.transformNUMAStats(ctx, event.Data, t.buildAttributes(event))
 	default:
 		t.logger.V(1).Info("Unknown metric type", "type", event.MetricType)
@@ -102,13 +105,13 @@ func (t *Transformer) TransformAndRecord(event metrics.MetricEvent) error {
 	}
 }
 
-// buildAttributes constructs OpenTelemetry attributes from the event
 // buildAttributes constructs OpenTelemetry attributes from the event.
-// It extracts host.name, k8s.cluster.name, service.instance.id and custom tags,
-// with protection against excessive attributes to prevent OOM conditions.
+// It extracts host.name, k8s.cluster.name, service.instance.id, and service.version
+// attributes from the standard MetricEvent fields and transformer configuration.
 func (t *Transformer) buildAttributes(event metrics.MetricEvent) []attribute.KeyValue {
 	attrs := make([]attribute.KeyValue, 0, 10)
 
+	// Standard attributes from MetricEvent
 	if event.NodeName != "" {
 		attrs = append(attrs, attribute.String("host.name", event.NodeName))
 	}
@@ -119,9 +122,9 @@ func (t *Transformer) buildAttributes(event metrics.MetricEvent) []attribute.Key
 		attrs = append(attrs, attribute.String("service.instance.id", event.Source))
 	}
 
-	// Add custom tags
-	for k, v := range event.Tags {
-		attrs = append(attrs, attribute.String(k, v))
+	// Add service version if configured
+	if t.serviceVersion != "" {
+		attrs = append(attrs, attribute.String("service.version", t.serviceVersion))
 	}
 
 	return attrs

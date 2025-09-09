@@ -33,10 +33,13 @@ import (
 	k8sagent "github.com/antimetal/agent/internal/kubernetes/agent"
 	"github.com/antimetal/agent/internal/kubernetes/cluster"
 	"github.com/antimetal/agent/internal/kubernetes/scheme"
+	"github.com/antimetal/agent/internal/metrics"
+	"github.com/antimetal/agent/internal/metrics/consumers/debug"
+	"github.com/antimetal/agent/internal/metrics/consumers/otel"
+	"github.com/antimetal/agent/internal/runtime"
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"github.com/antimetal/agent/pkg/performance"
-	// Add all collectors to registry
-	_ "github.com/antimetal/agent/pkg/performance/collectors"
+	_ "github.com/antimetal/agent/pkg/performance/collectors" // Register collectors
 	"github.com/antimetal/agent/pkg/resource/store"
 )
 
@@ -65,6 +68,8 @@ var (
 	pprofAddr              string
 	dataDir                string
 	hardwareUpdateInterval time.Duration
+	enablePerfCollectors   bool
+	perfCollectorInterval  time.Duration
 )
 
 func init() {
@@ -116,6 +121,10 @@ func init() {
 		"The directory where the agent will place its persistent data files. Set to empty string for in-memory mode.")
 	flag.DurationVar(&hardwareUpdateInterval, "hardware-update-interval", 5*time.Minute,
 		"Interval for hardware topology discovery updates")
+	flag.BoolVar(&enablePerfCollectors, "enable-performance-collectors", false,
+		"Enable continuous performance collectors for testing (CPU, memory, disk, network, process)")
+	flag.DurationVar(&perfCollectorInterval, "performance-collector-interval", 10*time.Second,
+		"Interval for continuous performance data collection")
 
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
@@ -261,11 +270,67 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Setup Metrics Router (if any consumer is enabled)
+	var metricsRouter metrics.Router
+	enableMetricsPipeline := otel.IsEnabled() || debug.IsEnabled() || enablePerfCollectors
+
+	if enableMetricsPipeline {
+		router := metrics.NewMetricsRouter(mgr.GetLogger())
+
+		// Register OpenTelemetry consumer if enabled
+		if otel.IsEnabled() {
+			otelConfig := otel.GetConfigFromEnvironment()
+			otelConfig.ServiceVersion = runtime.Version()
+			otelConsumer, err := otel.NewConsumer(otelConfig, mgr.GetLogger())
+			if err != nil {
+				setupLog.Error(err, "unable to create OpenTelemetry consumer")
+				os.Exit(1)
+			}
+			if err := otelConsumer.Start(ctx); err != nil {
+				setupLog.Error(err, "unable to start OpenTelemetry consumer")
+				os.Exit(1)
+			}
+			if err := router.RegisterConsumer(otelConsumer); err != nil {
+				setupLog.Error(err, "unable to register OpenTelemetry consumer")
+				os.Exit(1)
+			}
+			setupLog.Info("OpenTelemetry consumer started and registered")
+		}
+
+		// Register Debug consumer if enabled
+		if debug.IsEnabled() {
+			debugConfig := debug.GetConfigFromFlags()
+			debugConsumer, err := debug.NewConsumer(debugConfig, mgr.GetLogger())
+			if err != nil {
+				setupLog.Error(err, "unable to create debug consumer")
+				os.Exit(1)
+			}
+			if err := debugConsumer.Start(ctx); err != nil {
+				setupLog.Error(err, "unable to start debug consumer")
+				os.Exit(1)
+			}
+			if err := router.RegisterConsumer(debugConsumer); err != nil {
+				setupLog.Error(err, "unable to register debug consumer")
+				os.Exit(1)
+			}
+			setupLog.Info("Debug consumer started and registered")
+		}
+
+		// Add bus to manager
+		if err := mgr.Add(router); err != nil {
+			setupLog.Error(err, "unable to register metrics router")
+			os.Exit(1)
+		}
+		metricsRouter = router
+		setupLog.Info("Metrics pipeline enabled")
+	}
+
 	// Setup Performance Manager (for hardware discovery)
 	perfManager, err := performance.NewManager(performance.ManagerOptions{
-		Logger:      mgr.GetLogger().WithName("performance-manager"),
-		NodeName:    os.Getenv("NODE_NAME"),
-		ClusterName: "",
+		Logger:        mgr.GetLogger().WithName("performance-manager"),
+		NodeName:      os.Getenv("NODE_NAME"),
+		ClusterName:   "",
+		MetricsRouter: metricsRouter,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to create performance manager")
@@ -288,6 +353,19 @@ func main() {
 	if err := mgr.Add(hwManager); err != nil {
 		setupLog.Error(err, "unable to register hardware manager")
 		os.Exit(1)
+	}
+
+	// Setup Performance Collectors (if enabled for testing)
+	if enablePerfCollectors && perfManager.HasMetricsRouter() {
+		collectionConfig := performance.ContinuousCollectionConfig{
+			Interval: perfCollectorInterval,
+			// MetricTypes will default to all available collectors
+		}
+		if err := perfManager.CollectAllMetrics(ctx, collectionConfig); err != nil {
+			setupLog.Error(err, "unable to start performance collectors")
+			os.Exit(1)
+		}
+		setupLog.Info("Performance collectors enabled", "interval", perfCollectorInterval)
 	}
 
 	// Setup Kubernetes Collector Controller

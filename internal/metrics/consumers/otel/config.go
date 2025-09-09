@@ -7,6 +7,7 @@
 package otel
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"strconv"
@@ -26,6 +27,17 @@ const (
 	MaxSafeQueueSize = 100000 // Maximum safe queue size
 )
 
+// Command-line flag variables (populated by init())
+var (
+	flagEnabled *bool
+)
+
+func init() {
+	// Define OpenTelemetry enable flag that will be parsed in main()
+	// All other configuration comes from standard OTEL environment variables
+	flagEnabled = flag.Bool("enable-otel", false, "Enable OpenTelemetry metrics consumer (configure via OTEL_* environment variables)")
+}
+
 // String returns the string representation of the compression type
 func (c CompressionType) String() string {
 	return string(c)
@@ -37,8 +49,6 @@ func (c CompressionType) IsValid() bool {
 }
 
 type Config struct {
-	Enabled bool
-
 	// OTLP gRPC configuration
 	Endpoint string // OTLP gRPC endpoint (default: localhost:4317)
 	Insecure bool   // Disable TLS (default: false)
@@ -63,9 +73,9 @@ type Config struct {
 	GlobalTags []string
 
 	// Advanced options
-	BatchTimeout time.Duration // Max time between batches
-	MaxBatchSize int           // Maximum metrics per batch
-	MaxQueueSize int           // Maximum queued metrics
+	BatchTimeout    time.Duration // Max time between batches
+	ExportBatchSize int           // Number of metrics to accumulate before export
+	MaxQueueSize    int           // Maximum queued metrics
 }
 
 // RetryConfig configures retry behavior for failed exports
@@ -80,7 +90,6 @@ type RetryConfig struct {
 // DefaultConfig returns a sensible default configuration
 func DefaultConfig() Config {
 	return Config{
-		Enabled:     false, // Disabled by default
 		Endpoint:    "localhost:4317",
 		Insecure:    false,
 		Headers:     make(map[string]string),
@@ -98,9 +107,9 @@ func DefaultConfig() Config {
 		GlobalTags: []string{
 			"service:antimetal-agent",
 		},
-		BatchTimeout: 10 * time.Second,
-		MaxBatchSize: 500,
-		MaxQueueSize: 10000,
+		BatchTimeout:    10 * time.Second,
+		ExportBatchSize: 500,
+		MaxQueueSize:    10000,
 	}
 }
 
@@ -129,6 +138,13 @@ func (c *Config) ApplyEnvironmentVariables() {
 		compressionType := CompressionType(compression)
 		if compressionType.IsValid() {
 			c.Compression = compressionType
+		}
+	}
+
+	// OTEL_EXPORTER_OTLP_METRICS_TIMEOUT or OTEL_EXPORTER_OTLP_TIMEOUT
+	if timeout := getEnvVar("OTEL_EXPORTER_OTLP_METRICS_TIMEOUT", "OTEL_EXPORTER_OTLP_TIMEOUT"); timeout != "" {
+		if duration, err := time.ParseDuration(timeout); err == nil {
+			c.Timeout = duration
 		}
 	}
 
@@ -175,7 +191,7 @@ func parseHeaders(headers string) map[string]string {
 // Validate ensures the configuration is valid and sets reasonable defaults.
 // It validates required fields, enforces safety limits, and normalizes values.
 func (c *Config) Validate() error {
-	if c.Enabled && c.Endpoint == "" {
+	if c.Endpoint == "" {
 		return ErrEndpointRequired
 	}
 
@@ -197,9 +213,9 @@ func (c *Config) Validate() error {
 		c.BatchTimeout = 10 * time.Second
 	}
 
-	if c.MaxBatchSize <= 0 {
-		c.MaxBatchSize = 500
-	} else if c.MaxBatchSize > MaxSafeBatchSize {
+	if c.ExportBatchSize <= 0 {
+		c.ExportBatchSize = 500
+	} else if c.ExportBatchSize > MaxSafeBatchSize {
 		return ErrBatchSizeTooLarge
 	}
 
@@ -230,6 +246,18 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+// GetConfigFromEnvironment builds a Config from environment variables
+func GetConfigFromEnvironment() Config {
+	config := DefaultConfig()
+	config.ApplyEnvironmentVariables()
+	return config
+}
+
+// IsEnabled returns whether OpenTelemetry is enabled via flags
+func IsEnabled() bool {
+	return flagEnabled != nil && *flagEnabled
 }
 
 // Common errors

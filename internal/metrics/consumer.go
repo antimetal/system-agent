@@ -6,40 +6,22 @@
 
 package metrics
 
-// MetricEvent represents a metrics event flowing through the pipeline
-//
-// MetricType examples:
-//   - "system.cpu": CPU utilization metrics
-//   - "system.memory": Memory usage metrics
-//   - "system.disk": Disk I/O metrics
-//   - "system.network": Network interface metrics
-//   - "system.process": Process-level metrics
-//   - "system.hardware": Hardware topology and capabilities
-//
-// EventType examples:
-//   - "snapshot": Point-in-time metric capture
-//   - "delta": Incremental change since last collection
-//   - "aggregate": Aggregated metrics over a time window
-//
-// The Data field contains the actual metric payload, typically one of the
-// performance collector types from pkg/performance (LoadStats, MemoryStats,
-// DiskStats, NetworkStats, ProcessStats, etc.)
-type MetricEvent struct {
-	Timestamp   any
-	Source      string
-	NodeName    string
-	ClusterName string
-	MetricType  string
-	EventType   string
-	Data        any // Contains performance types (LoadStats, MemoryStats, etc.)
-	Tags        map[string]string
-}
+import "context"
 
 // Consumer represents a metrics consumer that processes metric events.
-// Lifecycle is managed through the events channel - when it's closed, the consumer stops.
+// Each consumer receives events via direct method calls and decides how to handle them.
 type Consumer interface {
+	// Name returns the unique name of this consumer
 	Name() string
-	Start(events <-chan MetricEvent) error
+
+	// HandleEvent processes a single metric event (non-blocking)
+	// Consumers should handle buffering/batching internally if needed
+	HandleEvent(event MetricEvent) error
+
+	// Start initializes the consumer (e.g., start background workers)
+	Start(ctx context.Context) error
+
+	// Health returns the current health status
 	Health() ConsumerHealth
 }
 

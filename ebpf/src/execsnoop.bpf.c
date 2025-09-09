@@ -42,11 +42,11 @@ const volatile int max_args = DEFAULT_MAXARGS;
 
 SEC("tracepoint/syscalls/sys_enter_execve")
 int tracepoint__syscalls__sys_enter_execve(
-    struct trace_event_raw_sys_enter *ctx) {
-  struct task_struct *task;
-  struct event *event;
-  const char **args = (const char **)(ctx->args[1]);
-  const char *argp;
+    struct trace_event_raw_sys_enter* ctx) {
+  struct task_struct* task;
+  struct event* event;
+  const char** args = (const char**)(ctx->args[1]);
+  const char* argp;
   pid_t pid;
   uid_t uid;
   int i;
@@ -68,7 +68,7 @@ int tracepoint__syscalls__sys_enter_execve(
   event->base.args_count = 0;
   event->base.args_size = 0;
 
-  task = (struct task_struct *)bpf_get_current_task();
+  task = (struct task_struct*)bpf_get_current_task();
   event->base.ppid = BPF_CORE_READ(task, real_parent, tgid);
 
 #pragma unroll
@@ -107,10 +107,10 @@ int tracepoint__syscalls__sys_enter_execve(
 
 SEC("tracepoint/syscalls/sys_exit_execve")
 int tracepoint__syscalls__sys_exit_execve(
-    struct trace_event_raw_sys_exit *ctx) {
+    struct trace_event_raw_sys_exit* ctx) {
   pid_t pid;
-  struct event *event;
-  struct event *e;
+  struct event* event;
+  struct event* e;
 
   pid = bpf_get_current_pid_tgid() >> 32;
   event = bpf_map_lookup_elem(&execs, &pid);

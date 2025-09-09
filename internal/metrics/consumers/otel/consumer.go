@@ -8,6 +8,7 @@ package otel
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -24,12 +25,17 @@ import (
 	"github.com/antimetal/agent/internal/metrics"
 )
 
+// Compile-time check
+var _ metrics.Consumer = (*Consumer)(nil)
+
 const (
 	consumerName = "opentelemetry"
 )
 
-// Compile-time check that Consumer implements Consumer interface
-var _ metrics.Consumer = (*Consumer)(nil)
+var (
+	// ErrBufferFull is returned when the internal buffer is full
+	ErrBufferFull = errors.New("internal buffer is full")
+)
 
 type Consumer struct {
 	config Config
@@ -41,6 +47,9 @@ type Consumer struct {
 	meter       metric.Meter
 	transformer *Transformer
 
+	// Internal buffering
+	buffer *MetricsBuffer
+
 	// Runtime state
 	wg        sync.WaitGroup
 	healthy   atomic.Bool
@@ -48,18 +57,22 @@ type Consumer struct {
 
 	// Metrics
 	eventsProcessed atomic.Uint64
+	eventsDropped   atomic.Uint64
 	errorsCount     atomic.Uint64
 	startTime       time.Time
 }
 
 // NewConsumer creates a new OpenTelemetry metrics consumer
 func NewConsumer(config Config, logger logr.Logger) (*Consumer, error) {
-	if !config.Enabled {
-		return nil, nil // Return nil if disabled
-	}
-
 	// Validate configuration
 	if err := config.Validate(); err != nil {
+		return nil, err
+	}
+
+	// Create ring buffer with notification threshold set to export batch size
+	// This ensures we get notified when there's enough data for export
+	buffer, err := NewMetricsBuffer(config.MaxQueueSize, config.ExportBatchSize)
+	if err != nil {
 		return nil, err
 	}
 
@@ -67,11 +80,10 @@ func NewConsumer(config Config, logger logr.Logger) (*Consumer, error) {
 		config:    config,
 		logger:    logger.WithName("otel-consumer"),
 		startTime: time.Now(),
+		buffer:    buffer,
 	}
 
-	// OpenTelemetry components will be initialized when Start is called
-	// This ensures we have a proper context from the caller
-
+	// Note: OpenTelemetry components will be initialized in Start() when we have a context
 	consumer.healthy.Store(true)
 	return consumer, nil
 }
@@ -161,8 +173,8 @@ func (c *Consumer) initOpenTelemetry(ctx context.Context) error {
 		metric.WithInstrumentationVersion("1.0.0"),
 	)
 
-	// Create transformer
-	c.transformer = NewTransformer(c.meter, c.logger)
+	// Create transformer with service version for attributes
+	c.transformer = NewTransformer(c.meter, c.logger, c.config.ServiceVersion)
 
 	return nil
 }
@@ -172,25 +184,51 @@ func (c *Consumer) Name() string {
 	return consumerName
 }
 
-// Start begins processing metrics events from the provided channel.
-// It launches a background goroutine to handle events and returns immediately.
-// The consumer stops when the events channel is closed.
-func (c *Consumer) Start(events <-chan metrics.MetricEvent) error {
-	// Initialize OpenTelemetry components
-	ctx := context.Background()
-	if err := c.initOpenTelemetry(ctx); err != nil {
-		return err
-	}
+// HandleEvent processes a metric event by adding it to the internal buffer.
+// This method is non-blocking. The ring buffer automatically overwrites the
+// oldest event when full, implementing a natural drop-oldest policy.
+func (c *Consumer) HandleEvent(event metrics.MetricEvent) error {
+	// Push to ring buffer (never blocks, overwrites oldest if full)
+	c.buffer.Push(event)
+	return nil
+}
 
+// Start begins processing metrics events.
+// It launches a background goroutine to process buffered events and returns immediately.
+func (c *Consumer) Start(ctx context.Context) error {
 	c.logger.Info("Starting OpenTelemetry consumer",
 		"endpoint", c.config.Endpoint,
 		"service_name", c.config.ServiceName,
 		"compression", c.config.Compression)
 
+	// Initialize OpenTelemetry components now that we have a context
+	if err := c.initOpenTelemetry(ctx); err != nil {
+		return err
+	}
+
 	c.wg.Add(1)
-	go c.processEvents(events)
+	go c.processEvents(ctx)
 
 	return nil
+}
+
+// shutdown gracefully shuts down the meter provider.
+// This is called when the context is cancelled.
+func (c *Consumer) shutdown(ctx context.Context) {
+	// Shutdown the meter provider with a timeout
+	if c.provider != nil {
+		shutdownCtx, shutdownCancel := context.WithTimeout(ctx, 30*time.Second)
+		defer shutdownCancel()
+
+		if err := c.provider.Shutdown(shutdownCtx); err != nil {
+			c.logger.Error(err, "Error shutting down meter provider")
+		}
+	}
+
+	c.logger.Info("OpenTelemetry consumer stopped",
+		"events_processed", c.eventsProcessed.Load(),
+		"errors", c.errorsCount.Load(),
+		"uptime", time.Since(c.startTime))
 }
 
 // Health returns the current health status of the consumer.
@@ -205,13 +243,14 @@ func (c *Consumer) Health() metrics.ConsumerHealth {
 		Healthy:     c.healthy.Load(),
 		LastError:   lastErr,
 		EventsCount: c.eventsProcessed.Load(),
-		ErrorsCount: c.errorsCount.Load(),
+		ErrorsCount: c.errorsCount.Load() + c.eventsDropped.Load(),
 	}
 }
 
 // processEvents is the main event processing loop
-func (c *Consumer) processEvents(events <-chan metrics.MetricEvent) {
+func (c *Consumer) processEvents(ctx context.Context) {
 	defer c.wg.Done()
+	defer c.shutdown(ctx)
 
 	// Setup error recovery
 	defer func() {
@@ -226,7 +265,50 @@ func (c *Consumer) processEvents(events <-chan metrics.MetricEvent) {
 
 	c.logger.Info("OpenTelemetry consumer event processing started")
 
-	for event := range events {
+	// Batch timer for periodic flushes
+	ticker := time.NewTicker(c.config.BatchTimeout)
+	defer ticker.Stop()
+
+	notify := c.buffer.NotifyChannel()
+
+	for {
+		select {
+		case <-notify:
+			// Drain all events when threshold is reached
+			events := c.buffer.Drain()
+			if len(events) > 0 {
+				// Process in batches if we have too many events
+				for i := 0; i < len(events); i += c.config.ExportBatchSize {
+					end := i + c.config.ExportBatchSize
+					if end > len(events) {
+						end = len(events)
+					}
+					c.processBatch(events[i:end])
+				}
+			}
+
+		case <-ticker.C:
+			// Periodic flush - drain all available events
+			events := c.buffer.Drain()
+			if len(events) > 0 {
+				c.processBatch(events)
+			}
+
+		case <-ctx.Done():
+			// Process any remaining events
+			events := c.buffer.Drain()
+			if len(events) > 0 {
+				c.processBatch(events)
+			}
+			c.logger.Info("Context cancelled, stopping consumer")
+			return
+		}
+	}
+}
+
+// processBatch processes a batch of metrics events
+func (c *Consumer) processBatch(batch []metrics.MetricEvent) {
+	for _, event := range batch {
 		if err := c.processEvent(event); err != nil {
 			c.logger.Error(err, "Failed to process metrics event",
 				"metric_type", event.MetricType,
@@ -245,23 +327,6 @@ func (c *Consumer) processEvents(events <-chan metrics.MetricEvent) {
 			c.eventsProcessed.Add(1)
 		}
 	}
-
-	// Channel closed, perform cleanup
-	c.logger.Info("Events channel closed, stopping consumer")
-
-	// Shutdown the meter provider to ensure all metrics are flushed
-	if c.provider != nil {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := c.provider.Shutdown(shutdownCtx); err != nil {
-			c.logger.Error(err, "Failed to shutdown OpenTelemetry provider gracefully")
-		}
-	}
-
-	c.logger.Info("OpenTelemetry consumer stopped",
-		"events_processed", c.eventsProcessed.Load(),
-		"errors", c.errorsCount.Load(),
-		"uptime", time.Since(c.startTime))
 }
 
 // processEvent processes a single metrics event
@@ -287,21 +352,4 @@ func (c *Consumer) processEvent(event metrics.MetricEvent) error {
 	}
 
 	return nil
-}
-
-// NewConsumerFromConfig creates a consumer from configuration.
-// Returns nil if OpenTelemetry is disabled in config, allowing for conditional consumer creation.
-// This is the recommended way to create consumers in production environments.
-func NewConsumerFromConfig(config Config, logger logr.Logger) (*Consumer, error) {
-	if !config.Enabled {
-		logger.Info("OpenTelemetry consumer is disabled")
-		return nil, nil
-	}
-
-	consumer, err := NewConsumer(config, logger)
-	if err != nil {
-		return nil, err
-	}
-
-	return consumer, nil
 }

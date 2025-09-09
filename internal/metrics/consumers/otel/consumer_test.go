@@ -48,13 +48,12 @@ func testLogger() logr.Logger {
 
 // Test Consumer Creation & Configuration
 
-func TestNewConsumer_DisabledConfig(t *testing.T) {
-	config := Config{
-		Enabled: false,
-	}
+func TestNewConsumer_RequiresEndpoint(t *testing.T) {
+	config := Config{}
 
 	consumer, err := NewConsumer(config, testLogger())
-	require.NoError(t, err)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "endpoint is required")
 	assert.Nil(t, consumer)
 }
 
@@ -96,7 +95,6 @@ func TestConsumer_Health_WithError(t *testing.T) {
 
 func TestConfig_Validate_Valid(t *testing.T) {
 	config := Config{
-		Enabled:      true,
 		Endpoint:     "localhost:4317",
 		ServiceName:  "test-service",
 		BatchTimeout: 10 * time.Second,
@@ -108,7 +106,6 @@ func TestConfig_Validate_Valid(t *testing.T) {
 
 func TestConfig_Validate_InvalidEndpoint(t *testing.T) {
 	config := Config{
-		Enabled:  true,
 		Endpoint: "",
 	}
 
@@ -119,7 +116,6 @@ func TestConfig_Validate_InvalidEndpoint(t *testing.T) {
 
 func TestConfig_Validate_EmptyServiceNameSetsDefault(t *testing.T) {
 	config := Config{
-		Enabled:     true,
 		Endpoint:    "localhost:4317",
 		ServiceName: "",
 	}
@@ -131,7 +127,6 @@ func TestConfig_Validate_EmptyServiceNameSetsDefault(t *testing.T) {
 
 func TestConfig_Validate_SetsDefaults(t *testing.T) {
 	config := Config{
-		Enabled:  true,
 		Endpoint: "localhost:4317",
 	}
 
