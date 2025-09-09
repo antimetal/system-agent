@@ -67,6 +67,8 @@ var (
 	pprofAddr              string
 	dataDir                string
 	hardwareUpdateInterval time.Duration
+	enablePerfCollectors   bool
+	perfCollectorInterval  time.Duration
 )
 
 func init() {
@@ -118,6 +120,10 @@ func init() {
 		"The directory where the agent will place its persistent data files. Set to empty string for in-memory mode.")
 	flag.DurationVar(&hardwareUpdateInterval, "hardware-update-interval", 5*time.Minute,
 		"Interval for hardware topology discovery updates")
+	flag.BoolVar(&enablePerfCollectors, "enable-performance-collectors", false,
+		"Enable continuous performance collectors for testing (CPU, memory, disk, network, process)")
+	flag.DurationVar(&perfCollectorInterval, "performance-collector-interval", 10*time.Second,
+		"Interval for continuous performance data collection")
 
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
@@ -264,7 +270,7 @@ func main() {
 
 	// Setup Metrics Router (if any consumer is enabled)
 	var metricsRouter metrics.Router
-	enableMetricsPipeline := otel.IsEnabled() || debug.IsEnabled()
+	enableMetricsPipeline := otel.IsEnabled() || debug.IsEnabled() || enablePerfCollectors
 
 	if enableMetricsPipeline {
 		router := metrics.NewMetricsRouter(mgr.GetLogger())
@@ -345,6 +351,19 @@ func main() {
 	if err := mgr.Add(hwManager); err != nil {
 		setupLog.Error(err, "unable to register hardware manager")
 		os.Exit(1)
+	}
+
+	// Setup Performance Collectors (if enabled for testing)
+	if enablePerfCollectors && perfManager.HasMetricsRouter() {
+		collectionConfig := performance.ContinuousCollectionConfig{
+			Interval: perfCollectorInterval,
+			// MetricTypes will default to all available collectors
+		}
+		if err := perfManager.CollectAllMetrics(ctx, collectionConfig); err != nil {
+			setupLog.Error(err, "unable to start performance collectors")
+			os.Exit(1)
+		}
+		setupLog.Info("Performance collectors enabled", "interval", perfCollectorInterval)
 	}
 
 	// Setup Kubernetes Collector Controller
