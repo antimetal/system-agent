@@ -269,23 +269,55 @@ func (c *Consumer) truncateData(data interface{}) interface{} {
 		return data
 	}
 
-	truncated := string(dataBytes[:c.config.MaxDataLength])
-	return fmt.Sprintf("%s... (truncated from %d bytes)", truncated, len(dataBytes))
+	// Try to truncate at a JSON boundary for cleaner output
+	truncated := dataBytes[:c.config.MaxDataLength]
+	// Find the last complete field before truncation point
+	lastComma := -1
+	lastBrace := -1
+	for i := len(truncated) - 1; i >= 0; i-- {
+		if truncated[i] == ',' {
+			lastComma = i
+			break
+		}
+		if truncated[i] == '{' {
+			lastBrace = i
+			break
+		}
+	}
+	
+	// Truncate at a clean boundary if possible
+	if lastComma > 0 {
+		truncated = truncated[:lastComma]
+	} else if lastBrace > 0 {
+		truncated = truncated[:lastBrace+1]
+	}
+	
+	return fmt.Sprintf("%s... (truncated from %d bytes)", string(truncated), len(dataBytes))
 }
 
 // formatDataForText formats data for text logging
 func (c *Consumer) formatDataForText(data interface{}) string {
-	if c.config.MaxDataLength == 0 {
-		return fmt.Sprintf("%+v", data)
-	}
-
-	dataStr := fmt.Sprintf("%+v", data)
-	if len(dataStr) <= c.config.MaxDataLength {
+	// Use JSON marshaling for prettier output with proper field names
+	jsonBytes, err := json.Marshal(data)
+	if err != nil {
+		// Fall back to fmt.Sprintf if JSON marshaling fails
+		dataStr := fmt.Sprintf("%+v", data)
+		if c.config.MaxDataLength > 0 && len(dataStr) > c.config.MaxDataLength {
+			return fmt.Sprintf("%s... (truncated from %d chars)",
+				dataStr[:c.config.MaxDataLength], len(dataStr))
+		}
 		return dataStr
 	}
 
-	return fmt.Sprintf("%s... (truncated from %d chars)",
-		dataStr[:c.config.MaxDataLength], len(dataStr))
+	// Convert to string for display
+	dataStr := string(jsonBytes)
+	
+	if c.config.MaxDataLength > 0 && len(dataStr) > c.config.MaxDataLength {
+		return fmt.Sprintf("%s... (truncated from %d chars)",
+			dataStr[:c.config.MaxDataLength], len(dataStr))
+	}
+
+	return dataStr
 }
 
 // getStatsSnapshot returns current statistics for JSON logging
