@@ -118,36 +118,8 @@ func getOSInfo() string {
 	return "Linux" // Fallback
 }
 
-// getMachineID reads the OS-specific machine ID from /etc/machine-id
-// This is distinct from the hardware UUID and hostname
-func getMachineID() string {
-	// Try /etc/machine-id and /var/lib/dbus/machine-id
-
-	if data, err := os.ReadFile(path.Join(etcDir, "machine-id")); err == nil {
-		if id := strings.TrimSpace(string(data)); id != "" {
-			return id
-		}
-	}
-
-	if data, err := os.ReadFile(path.Join(varDir, "lib", "dbus", "machine-id")); err == nil {
-		if uuid := strings.TrimSpace(string(data)); uuid != "" {
-			return uuid
-		}
-	}
-
-	return ""
-}
-
-// getSystemUUID reads the hardware UUID from DMI
-func getSystemUUID() string {
-	// Try /sys/class/dmi/id/product_uuid (hardware-based, requires root)
-	if data, err := os.ReadFile(path.Join(sysDir, "class", "dmi", "id", "product_uuid")); err == nil {
-		if uuid := strings.TrimSpace(string(data)); uuid != "" {
-			return uuid
-		}
-	}
-	return ""
-}
+// Platform-specific implementations of getMachineID() and getSystemUUID()
+// are in system_linux.go and system_other.go files
 
 // createSystemNode creates the root system node representing the machine
 func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
@@ -191,10 +163,7 @@ func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.Resource
 	if name == "" {
 		name = systemUUID
 	}
-	if name == "" {
-		// Fallback for test environments or systems without machine-id
-		name = fmt.Sprintf("system-%s", hostname)
-	}
+	// The mock implementation in system_other.go ensures we always have a value
 
 	// Create resource with machine ID as the name (globally unique)
 	resource := &resourcev1.Resource{
