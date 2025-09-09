@@ -88,7 +88,7 @@ func (b *Builder) buildCPUTopology(ctx context.Context, cpuInfo *performance.CPU
 	// Create CPU package nodes
 	for _, core := range cpuInfo.Cores {
 		if _, exists := packages[core.PhysicalID]; !exists {
-			pkg, pkgRef, err := b.createCPUPackageNode(cpuInfo, core.PhysicalID)
+			pkg, pkgRef, err := b.createCPUPackageNode(cpuInfo, core.PhysicalID, systemRef)
 			if err != nil {
 				return fmt.Errorf("failed to create CPU package: %w", err)
 			}
@@ -108,7 +108,7 @@ func (b *Builder) buildCPUTopology(ctx context.Context, cpuInfo *performance.CPU
 
 	// Create CPU core nodes
 	for _, core := range cpuInfo.Cores {
-		coreNode, coreRef, err := b.createCPUCoreNode(&core)
+		coreNode, coreRef, err := b.createCPUCoreNode(&core, systemRef)
 		if err != nil {
 			return fmt.Errorf("failed to create CPU core: %w", err)
 		}
@@ -147,7 +147,7 @@ func (b *Builder) buildCPUTopology(ctx context.Context, cpuInfo *performance.CPU
 // buildMemoryTopology builds memory nodes and relationships
 func (b *Builder) buildMemoryTopology(ctx context.Context, memInfo *performance.MemoryInfo, systemRef *resourcev1.ResourceRef) error {
 	// Create memory module node
-	memNode, memRef, err := b.createMemoryModuleNode(memInfo)
+	memNode, memRef, err := b.createMemoryModuleNode(memInfo, systemRef)
 	if err != nil {
 		return fmt.Errorf("failed to create memory node: %w", err)
 	}
@@ -169,7 +169,7 @@ func (b *Builder) buildMemoryTopology(ctx context.Context, memInfo *performance.
 
 		// First pass: create all NUMA nodes
 		for _, numaNode := range memInfo.NUMANodes {
-			numa, numaRef, err := b.createNUMANode(&numaNode)
+			numa, numaRef, err := b.createNUMANode(&numaNode, systemRef)
 			if err != nil {
 				return fmt.Errorf("failed to create NUMA node: %w", err)
 			}
@@ -214,7 +214,7 @@ func (b *Builder) buildMemoryTopology(ctx context.Context, memInfo *performance.
 func (b *Builder) buildDiskTopology(ctx context.Context, diskInfo []*performance.DiskInfo, systemRef *resourcev1.ResourceRef) error {
 	for _, disk := range diskInfo {
 		// Create disk device node
-		diskNode, diskRef, err := b.createDiskDeviceNode(disk)
+		diskNode, diskRef, err := b.createDiskDeviceNode(disk, systemRef)
 		if err != nil {
 			return fmt.Errorf("failed to create disk node: %w", err)
 		}
@@ -236,7 +236,7 @@ func (b *Builder) buildDiskTopology(ctx context.Context, diskInfo []*performance
 
 		// Create partition nodes
 		for _, partition := range disk.Partitions {
-			partNode, partRef, err := b.createDiskPartitionNode(&partition, disk.Device)
+			partNode, partRef, err := b.createDiskPartitionNode(&partition, disk.Device, systemRef)
 			if err != nil {
 				return fmt.Errorf("failed to create partition node: %w", err)
 			}
@@ -259,7 +259,7 @@ func (b *Builder) buildDiskTopology(ctx context.Context, diskInfo []*performance
 func (b *Builder) buildNetworkTopology(ctx context.Context, netInfo []*performance.NetworkInfo, systemRef *resourcev1.ResourceRef) error {
 	for _, iface := range netInfo {
 		// Create network interface node
-		netNode, netRef, err := b.createNetworkInterfaceNode(iface)
+		netNode, netRef, err := b.createNetworkInterfaceNode(iface, systemRef)
 		if err != nil {
 			return fmt.Errorf("failed to create network node: %w", err)
 		}
