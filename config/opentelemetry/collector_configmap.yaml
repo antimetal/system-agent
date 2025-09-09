@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: collector-conf
+  labels:
+    app: opentelemetry
+    component: collector-conf
+data:
+  collector-config: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: ${env:MY_POD_IP}:4317
+          http:
+            endpoint: ${env:MY_POD_IP}:4318
+    processors:
+      memory_limiter:
+        # 80% of maximum memory up to 2G
+        limit_mib: 1500
+        # 25% of limit up to 2G
+        spike_limit_mib: 512
+        check_interval: 5s
+    extensions:
+      zpages: {}
+    exporters:
+      nop:
+    service:
+      extensions: [zpages]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter]
+          exporters: [nop]
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter]
+          exporters: [nop]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter]
+          exporters: [nop]

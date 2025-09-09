@@ -60,7 +60,9 @@ spec:
         - /agent
         args:
         - --leader-elect
-        - --zap-log-level=debug
+        - --zap-log-level=2
+        - --enable-performance-collectors
+        - --enable-otel
         - --data-directory
         - ''
         image: agent
@@ -90,6 +92,10 @@ spec:
           value: /host/var
         - name: HOST_CGROUP
           value: /host/cgroup
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "collector.opentelemetry:4317"
+        - name: OTEL_EXPORTER_OTLP_INSECURE
+          value: "true"
         volumeMounts:
         - name: data
           mountPath: /var/lib/antimetal

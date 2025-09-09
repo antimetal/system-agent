@@ -1,0 +1,81 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: collector
+  labels:
+    app: opentelemetry
+    component: collector
+spec:
+  ports:
+  - name: otlp-grpc # Default endpoint for OpenTelemetry gRPC receiver.
+    port: 4317
+    protocol: TCP
+    targetPort: 4317
+  - name: otlp-http # Default endpoint for OpenTelemetry HTTP receiver.
+    port: 4318
+    protocol: TCP
+    targetPort: 4318
+  - name: metrics # Default endpoint for querying metrics.
+    port: 8888
+  selector:
+    component: collector
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: collector
+  labels:
+    app: opentelemetry
+    component: collector
+spec:
+  selector:
+    matchLabels:
+      app: opentelemetry
+      component: collector
+  minReadySeconds: 5
+  progressDeadlineSeconds: 120
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: opentelemetry
+        component: collector
+    spec:
+      containers:
+      - command:
+          - "/otelcol"
+          - "--config=/conf/collector-config.yaml"
+        image: otel/opentelemetry-collector:latest
+        name: collector
+        resources:
+          limits:
+            cpu: 1
+            memory: 2Gi
+          requests:
+            cpu: 200m
+            memory: 400Mi
+        ports:
+        - containerPort: 55679 # Default endpoint for ZPages.
+        - containerPort: 4317 # Default endpoint for OpenTelemetry receiver.
+        - containerPort: 14250 # Default endpoint for Jaeger gRPC receiver.
+        - containerPort: 14268 # Default endpoint for Jaeger HTTP receiver.
+        - containerPort: 9411 # Default endpoint for Zipkin receiver.
+        - containerPort: 8888  # Default endpoint for querying metrics.
+        env:
+          - name: MY_POD_IP
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: status.podIP
+          - name: GOMEMLIMIT
+            value: 1600MiB
+        volumeMounts:
+        - name: collector-config-vol
+          mountPath: /conf
+      volumes:
+        - configMap:
+            name: collector-conf
+            items:
+              - key: collector-config
+                path: collector-config.yaml
+          name: collector-config-vol
