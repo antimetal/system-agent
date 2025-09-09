@@ -23,7 +23,7 @@ func getMachineID() string {
 		// Return a default mock ID if we can't get hostname
 		return "mock-machine-id-123456789"
 	}
-	
+
 	// Generate a deterministic hash based on hostname
 	// This ensures consistent IDs across test runs on the same machine
 	hash := md5.Sum([]byte("machine-" + hostname))
@@ -38,7 +38,7 @@ func getSystemUUID() string {
 		// Return a default mock UUID if we can't get hostname
 		return "mock-uuid-987654321"
 	}
-	
+
 	// Generate a deterministic UUID-like string based on hostname
 	hash := md5.Sum([]byte("system-" + hostname))
 	// Format as a UUID-like string (8-4-4-4-12)

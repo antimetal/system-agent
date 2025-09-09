@@ -345,19 +345,19 @@ func (m *MetricsStore) UpdateMemory(stats *MemoryStats) {
 	m.snapshot.Metrics.Memory = stats
 }
 
-func (m *MetricsStore) UpdateCPU(stats []CPUStats) {
+func (m *MetricsStore) UpdateCPU(stats []*CPUStats) {
 	m.snapshot.Metrics.CPU = stats
 }
 
-func (m *MetricsStore) UpdateProcesses(stats []ProcessStats) {
+func (m *MetricsStore) UpdateProcesses(stats []*ProcessStats) {
 	m.snapshot.Metrics.Processes = stats
 }
 
-func (m *MetricsStore) UpdateDisks(stats []DiskStats) {
+func (m *MetricsStore) UpdateDisks(stats []*DiskStats) {
 	m.snapshot.Metrics.Disks = stats
 }
 
-func (m *MetricsStore) UpdateNetwork(stats []NetworkStats) {
+func (m *MetricsStore) UpdateNetwork(stats []*NetworkStats) {
 	m.snapshot.Metrics.Network = stats
 }
 
@@ -377,11 +377,11 @@ func (m *MetricsStore) UpdateMemoryInfo(info *MemoryInfo) {
 	m.snapshot.Metrics.MemoryInfo = info
 }
 
-func (m *MetricsStore) UpdateDiskInfo(info []DiskInfo) {
+func (m *MetricsStore) UpdateDiskInfo(info []*DiskInfo) {
 	m.snapshot.Metrics.DiskInfo = info
 }
 
-func (m *MetricsStore) UpdateNetworkInfo(info []NetworkInfo) {
+func (m *MetricsStore) UpdateNetworkInfo(info []*NetworkInfo) {
 	m.snapshot.Metrics.NetworkInfo = info
 }
 

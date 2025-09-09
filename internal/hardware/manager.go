@@ -215,9 +215,9 @@ func (m *Manager) collectHardwareSnapshot(ctx context.Context) (*performance.Sna
 		case performance.MetricTypeMemoryInfo:
 			snapshot.Metrics.MemoryInfo = data.(*performance.MemoryInfo)
 		case performance.MetricTypeDiskInfo:
-			snapshot.Metrics.DiskInfo = data.([]performance.DiskInfo)
+			snapshot.Metrics.DiskInfo = data.([]*performance.DiskInfo)
 		case performance.MetricTypeNetworkInfo:
-			snapshot.Metrics.NetworkInfo = data.([]performance.NetworkInfo)
+			snapshot.Metrics.NetworkInfo = data.([]*performance.NetworkInfo)
 		case performance.MetricTypeNUMAStats:
 			snapshot.Metrics.NUMAStats = data.(*performance.NUMAStatistics)
 		}
