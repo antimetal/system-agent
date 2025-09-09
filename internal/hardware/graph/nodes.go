@@ -147,7 +147,6 @@ func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.Resource
 
 	// Build tags list
 	tags := []*resourcev1.Tag{
-		{Key: "hostname", Value: hostname},
 		{Key: "machine-id", Value: machineID},
 	}
 
@@ -179,14 +178,14 @@ func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.Resource
 	// Create reference
 	ref := &resourcev1.ResourceRef{
 		TypeUrl: string(systemSpec.ProtoReflect().Descriptor().FullName()),
-		Name:    hostname, // Keep hostname for readability, machine ID is in ProviderId
+		Name:    name,
 	}
 
 	return resource, ref, nil
 }
 
 // createCPUPackageNode creates a CPU package (socket) node
-func (b *Builder) createCPUPackageNode(cpuInfo *performance.CPUInfo, physicalID int32) (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
+func (b *Builder) createCPUPackageNode(cpuInfo *performance.CPUInfo, physicalID int32, systemRef *resourcev1.ResourceRef) (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
 	// Find the first core with this physical ID to get package info
 	var sampleCore *performance.CPUCore
 	for _, core := range cpuInfo.Cores {
@@ -231,8 +230,7 @@ func (b *Builder) createCPUPackageNode(cpuInfo *performance.CPUInfo, physicalID 
 		return nil, nil, fmt.Errorf("failed to marshal CPU package spec: %w", err)
 	}
 
-	// Create resource
-	packageName := fmt.Sprintf("cpu-package-%d", physicalID)
+	packageName := fmt.Sprintf("%s-cpu-package-%d", systemRef.Name, physicalID)
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
 			Kind: kindResource,
@@ -256,7 +254,7 @@ func (b *Builder) createCPUPackageNode(cpuInfo *performance.CPUInfo, physicalID 
 }
 
 // createCPUCoreNode creates a CPU core node
-func (b *Builder) createCPUCoreNode(core *performance.CPUCore) (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
+func (b *Builder) createCPUCoreNode(core *performance.CPUCore, systemRef *resourcev1.ResourceRef) (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
 	// Create CPU core spec
 	coreSpec := &hardwarev1.CPUCoreNode{
 		ProcessorId:  int32(core.Processor),
@@ -272,8 +270,7 @@ func (b *Builder) createCPUCoreNode(core *performance.CPUCore) (*resourcev1.Reso
 		return nil, nil, fmt.Errorf("failed to marshal CPU core spec: %w", err)
 	}
 
-	// Create resource
-	coreName := fmt.Sprintf("cpu-core-%d", core.Processor)
+	coreName := fmt.Sprintf("%s-cpu-core-%d", systemRef.Name, core.Processor)
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
 			Kind: kindResource,
@@ -297,7 +294,7 @@ func (b *Builder) createCPUCoreNode(core *performance.CPUCore) (*resourcev1.Reso
 }
 
 // createMemoryModuleNode creates a memory module node
-func (b *Builder) createMemoryModuleNode(memInfo *performance.MemoryInfo) (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
+func (b *Builder) createMemoryModuleNode(memInfo *performance.MemoryInfo, systemRef *resourcev1.ResourceRef) (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
 	// Create memory module spec
 	memSpec := &hardwarev1.MemoryModuleNode{
 		TotalBytes:             memInfo.TotalBytes,
@@ -312,8 +309,6 @@ func (b *Builder) createMemoryModuleNode(memInfo *performance.MemoryInfo) (*reso
 		return nil, nil, fmt.Errorf("failed to marshal memory spec: %w", err)
 	}
 
-	// Create resource
-	memName := "system-memory"
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
 			Kind: kindResource,
@@ -321,8 +316,8 @@ func (b *Builder) createMemoryModuleNode(memInfo *performance.MemoryInfo) (*reso
 		},
 		Metadata: &resourcev1.ResourceMeta{
 			Provider:   resourcev1.Provider_PROVIDER_ANTIMETAL,
-			ProviderId: memName,
-			Name:       memName,
+			ProviderId: systemRef.Name,
+			Name:       systemRef.Name,
 		},
 		Spec: specAny,
 	}
@@ -330,14 +325,14 @@ func (b *Builder) createMemoryModuleNode(memInfo *performance.MemoryInfo) (*reso
 	// Create reference
 	ref := &resourcev1.ResourceRef{
 		TypeUrl: string(memSpec.ProtoReflect().Descriptor().FullName()),
-		Name:    memName,
+		Name:    systemRef.Name,
 	}
 
 	return resource, ref, nil
 }
 
 // createNUMANode creates a NUMA node
-func (b *Builder) createNUMANode(numa *performance.NUMANode) (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
+func (b *Builder) createNUMANode(numa *performance.NUMANode, systemRef *resourcev1.ResourceRef) (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
 	// Convert CPU list to int32 slice
 	cpus := make([]int32, len(numa.CPUs))
 	for i, cpu := range numa.CPUs {
@@ -366,8 +361,7 @@ func (b *Builder) createNUMANode(numa *performance.NUMANode) (*resourcev1.Resour
 		return nil, nil, fmt.Errorf("failed to marshal NUMA spec: %w", err)
 	}
 
-	// Create resource
-	numaName := fmt.Sprintf("numa-node-%d", numa.NodeID)
+	numaName := fmt.Sprintf("%s-numa-node-%d", systemRef.Name, numa.NodeID)
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
 			Kind: kindResource,
@@ -391,7 +385,7 @@ func (b *Builder) createNUMANode(numa *performance.NUMANode) (*resourcev1.Resour
 }
 
 // createDiskDeviceNode creates a disk device node
-func (b *Builder) createDiskDeviceNode(disk *performance.DiskInfo) (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
+func (b *Builder) createDiskDeviceNode(disk *performance.DiskInfo, systemRef *resourcev1.ResourceRef) (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
 	// Create disk device spec
 	diskSpec := &hardwarev1.DiskDeviceNode{
 		Device:            disk.Device,
@@ -411,7 +405,7 @@ func (b *Builder) createDiskDeviceNode(disk *performance.DiskInfo) (*resourcev1.
 		return nil, nil, fmt.Errorf("failed to marshal disk spec: %w", err)
 	}
 
-	// Create resource
+	diskName := fmt.Sprintf("%s-disk-%s", systemRef.Name, disk.Device)
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
 			Kind: kindResource,
@@ -419,8 +413,8 @@ func (b *Builder) createDiskDeviceNode(disk *performance.DiskInfo) (*resourcev1.
 		},
 		Metadata: &resourcev1.ResourceMeta{
 			Provider:   resourcev1.Provider_PROVIDER_ANTIMETAL,
-			ProviderId: disk.Device,
-			Name:       disk.Device,
+			ProviderId: diskName,
+			Name:       diskName,
 		},
 		Spec: specAny,
 	}
@@ -428,14 +422,14 @@ func (b *Builder) createDiskDeviceNode(disk *performance.DiskInfo) (*resourcev1.
 	// Create reference
 	ref := &resourcev1.ResourceRef{
 		TypeUrl: string(diskSpec.ProtoReflect().Descriptor().FullName()),
-		Name:    disk.Device,
+		Name:    diskName,
 	}
 
 	return resource, ref, nil
 }
 
 // createDiskPartitionNode creates a disk partition node
-func (b *Builder) createDiskPartitionNode(partition *performance.PartitionInfo, parentDevice string) (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
+func (b *Builder) createDiskPartitionNode(partition *performance.PartitionInfo, parentDevice string, systemRef *resourcev1.ResourceRef) (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
 	// Create disk partition spec
 	partSpec := &hardwarev1.DiskPartitionNode{
 		Name:         partition.Name,
@@ -450,7 +444,7 @@ func (b *Builder) createDiskPartitionNode(partition *performance.PartitionInfo, 
 		return nil, nil, fmt.Errorf("failed to marshal partition spec: %w", err)
 	}
 
-	// Create resource
+	partName := fmt.Sprintf("%s-partition-%s", systemRef.Name, partition.Name)
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
 			Kind: kindResource,
@@ -458,8 +452,8 @@ func (b *Builder) createDiskPartitionNode(partition *performance.PartitionInfo, 
 		},
 		Metadata: &resourcev1.ResourceMeta{
 			Provider:   resourcev1.Provider_PROVIDER_ANTIMETAL,
-			ProviderId: partition.Name,
-			Name:       partition.Name,
+			ProviderId: partName,
+			Name:       partName,
 		},
 		Spec: specAny,
 	}
@@ -467,14 +461,14 @@ func (b *Builder) createDiskPartitionNode(partition *performance.PartitionInfo, 
 	// Create reference
 	ref := &resourcev1.ResourceRef{
 		TypeUrl: string(partSpec.ProtoReflect().Descriptor().FullName()),
-		Name:    partition.Name,
+		Name:    partName,
 	}
 
 	return resource, ref, nil
 }
 
 // createNetworkInterfaceNode creates a network interface node
-func (b *Builder) createNetworkInterfaceNode(iface *performance.NetworkInfo) (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
+func (b *Builder) createNetworkInterfaceNode(iface *performance.NetworkInfo, systemRef *resourcev1.ResourceRef) (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
 	// Map duplex mode
 	var duplexMode hardwarev1.DuplexMode
 	switch strings.ToLower(iface.Duplex) {
@@ -545,7 +539,7 @@ func (b *Builder) createNetworkInterfaceNode(iface *performance.NetworkInfo) (*r
 		return nil, nil, fmt.Errorf("failed to marshal network spec: %w", err)
 	}
 
-	// Create resource
+	netName := fmt.Sprintf("%s-net-%s", systemRef.Name, iface.Interface)
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
 			Kind: kindResource,
@@ -553,8 +547,8 @@ func (b *Builder) createNetworkInterfaceNode(iface *performance.NetworkInfo) (*r
 		},
 		Metadata: &resourcev1.ResourceMeta{
 			Provider:   resourcev1.Provider_PROVIDER_ANTIMETAL,
-			ProviderId: iface.Interface,
-			Name:       iface.Interface,
+			ProviderId: netName,
+			Name:       netName,
 		},
 		Spec: specAny,
 	}
@@ -562,7 +556,7 @@ func (b *Builder) createNetworkInterfaceNode(iface *performance.NetworkInfo) (*r
 	// Create reference
 	ref := &resourcev1.ResourceRef{
 		TypeUrl: string(netSpec.ProtoReflect().Descriptor().FullName()),
-		Name:    iface.Interface,
+		Name:    netName,
 	}
 
 	return resource, ref, nil
