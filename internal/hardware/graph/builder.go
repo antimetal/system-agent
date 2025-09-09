@@ -211,10 +211,10 @@ func (b *Builder) buildMemoryTopology(ctx context.Context, memInfo *performance.
 }
 
 // buildDiskTopology builds disk device and partition nodes and relationships
-func (b *Builder) buildDiskTopology(ctx context.Context, diskInfo []performance.DiskInfo, systemRef *resourcev1.ResourceRef) error {
+func (b *Builder) buildDiskTopology(ctx context.Context, diskInfo []*performance.DiskInfo, systemRef *resourcev1.ResourceRef) error {
 	for _, disk := range diskInfo {
 		// Create disk device node
-		diskNode, diskRef, err := b.createDiskDeviceNode(&disk)
+		diskNode, diskRef, err := b.createDiskDeviceNode(disk)
 		if err != nil {
 			return fmt.Errorf("failed to create disk node: %w", err)
 		}
@@ -256,10 +256,10 @@ func (b *Builder) buildDiskTopology(ctx context.Context, diskInfo []performance.
 }
 
 // buildNetworkTopology builds network interface nodes and relationships
-func (b *Builder) buildNetworkTopology(ctx context.Context, netInfo []performance.NetworkInfo, systemRef *resourcev1.ResourceRef) error {
+func (b *Builder) buildNetworkTopology(ctx context.Context, netInfo []*performance.NetworkInfo, systemRef *resourcev1.ResourceRef) error {
 	for _, iface := range netInfo {
 		// Create network interface node
-		netNode, netRef, err := b.createNetworkInterfaceNode(&iface)
+		netNode, netRef, err := b.createNetworkInterfaceNode(iface)
 		if err != nil {
 			return fmt.Errorf("failed to create network node: %w", err)
 		}
@@ -274,7 +274,7 @@ func (b *Builder) buildNetworkTopology(ctx context.Context, netInfo []performanc
 		}
 
 		// Create bus connection relationship: Network Interface -> System (via hardware bus)
-		busType := b.inferNetworkBusType(&iface)
+		busType := b.inferNetworkBusType(iface)
 		if err := b.createBusConnectionRelationship(netRef, systemRef, busType, ""); err != nil {
 			return fmt.Errorf("failed to create network->system bus relationship: %w", err)
 		}

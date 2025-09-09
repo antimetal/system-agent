@@ -138,18 +138,18 @@ type CollectorStat struct {
 type Metrics struct {
 	Load      *LoadStats
 	Memory    *MemoryStats
-	CPU       []CPUStats
-	Processes []ProcessStats
-	Disks     []DiskStats
-	Network   []NetworkStats
+	CPU       []*CPUStats
+	Processes []*ProcessStats
+	Disks     []*DiskStats
+	Network   []*NetworkStats
 	TCP       *TCPStats
 	System    *SystemStats
 	Kernel    []KernelMessage
 	// Hardware configuration
 	CPUInfo     *CPUInfo
 	MemoryInfo  *MemoryInfo
-	DiskInfo    []DiskInfo
-	NetworkInfo []NetworkInfo
+	DiskInfo    []*DiskInfo
+	NetworkInfo []*NetworkInfo
 	NUMAStats   *NUMAStatistics
 }
 

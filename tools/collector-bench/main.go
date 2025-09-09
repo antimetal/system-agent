@@ -172,9 +172,9 @@ func estimateDataSize(data interface{}) int {
 			return 0
 		}
 		return 100 + len(v.NUMANodes)*50
-	case []performance.DiskInfo:
+	case []*performance.DiskInfo:
 		return len(v) * 100 // Simple estimate for slice
-	case []performance.NetworkInfo:
+	case []*performance.NetworkInfo:
 		return len(v) * 50 // Simple estimate for slice
 	default:
 		return 0
@@ -229,7 +229,7 @@ func printCollectorData(data interface{}, indent string) {
 				float64(node.TotalBytes)/(1024*1024*1024), node.CPUs)
 		}
 
-	case []performance.DiskInfo:
+	case []*performance.DiskInfo:
 		fmt.Printf("%sDisks: %d\n", indent, len(v))
 		if len(v) == 0 && *verbose {
 			fmt.Printf("%s  (No disks detected - check /sys/block/ for available devices)\n", indent)
@@ -253,7 +253,7 @@ func printCollectorData(data interface{}, indent string) {
 			}
 		}
 
-	case []performance.NetworkInfo:
+	case []*performance.NetworkInfo:
 		fmt.Printf("%sInterfaces: %d\n", indent, len(v))
 		for _, iface := range v {
 			fmt.Printf("%s  %s (%s): %s\n", indent, iface.Interface, iface.Type, iface.MACAddress)
