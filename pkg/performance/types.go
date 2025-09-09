@@ -240,15 +240,15 @@ type CPUStats struct {
 	// CPU index (-1 for aggregate "cpu" line, 0+ for "cpu0", "cpu1", etc.)
 	CPUIndex int32 `json:"cpu_index"`
 	// Time spent in different CPU states (in USER_HZ units from /proc/stat)
-	User uint64 `json:"user"` // Time in user mode
-	Nice uint64 `json:"nice"` // Time in user mode with low priority (nice)
-	System uint64 `json:"system"` // Time in system mode
-	Idle uint64 `json:"idle"` // Time spent idle
-	IOWait uint64 `json:"io_wait"` // Time waiting for I/O completion
-	IRQ uint64 `json:"irq"` // Time servicing interrupts
-	SoftIRQ uint64 `json:"soft_irq"` // Time servicing softirqs
-	Steal uint64 `json:"steal"` // Time stolen by other operating systems in virtualized environment
-	Guest uint64 `json:"guest"` // Time spent running a virtual CPU for guest OS
+	User      uint64 `json:"user"`       // Time in user mode
+	Nice      uint64 `json:"nice"`       // Time in user mode with low priority (nice)
+	System    uint64 `json:"system"`     // Time in system mode
+	Idle      uint64 `json:"idle"`       // Time spent idle
+	IOWait    uint64 `json:"io_wait"`    // Time waiting for I/O completion
+	IRQ       uint64 `json:"irq"`        // Time servicing interrupts
+	SoftIRQ   uint64 `json:"soft_irq"`   // Time servicing softirqs
+	Steal     uint64 `json:"steal"`      // Time stolen by other operating systems in virtualized environment
+	Guest     uint64 `json:"guest"`      // Time spent running a virtual CPU for guest OS
 	GuestNice uint64 `json:"guest_nice"` // Time spent running a niced guest
 
 	// Delta data
@@ -260,41 +260,41 @@ type CPUDeltaData struct {
 	DeltaMetadata
 
 	// Delta values (change since last collection)
-	User uint64 `json:"user"`
-	Nice uint64 `json:"nice"`
-	System uint64 `json:"system"`
-	Idle uint64 `json:"idle"`
-	IOWait uint64 `json:"io_wait"`
-	IRQ uint64 `json:"irq"`
-	SoftIRQ uint64 `json:"soft_irq"`
-	Steal uint64 `json:"steal"`
-	Guest uint64 `json:"guest"`
+	User      uint64 `json:"user"`
+	Nice      uint64 `json:"nice"`
+	System    uint64 `json:"system"`
+	Idle      uint64 `json:"idle"`
+	IOWait    uint64 `json:"io_wait"`
+	IRQ       uint64 `json:"irq"`
+	SoftIRQ   uint64 `json:"soft_irq"`
+	Steal     uint64 `json:"steal"`
+	Guest     uint64 `json:"guest"`
 	GuestNice uint64 `json:"guest_nice"`
 
 	// Calculated utilization percentages
-	UserPercent float64 `json:"user_percent"`
-	NicePercent float64 `json:"nice_percent"`
-	SystemPercent float64 `json:"system_percent"`
-	IdlePercent float64 `json:"idle_percent"`
-	IOWaitPercent float64 `json:"io_wait_percent"`
-	IRQPercent float64 `json:"irq_percent"`
-	SoftIRQPercent float64 `json:"soft_irq_percent"`
-	StealPercent float64 `json:"steal_percent"`
-	GuestPercent float64 `json:"guest_percent"`
+	UserPercent      float64 `json:"user_percent"`
+	NicePercent      float64 `json:"nice_percent"`
+	SystemPercent    float64 `json:"system_percent"`
+	IdlePercent      float64 `json:"idle_percent"`
+	IOWaitPercent    float64 `json:"io_wait_percent"`
+	IRQPercent       float64 `json:"irq_percent"`
+	SoftIRQPercent   float64 `json:"soft_irq_percent"`
+	StealPercent     float64 `json:"steal_percent"`
+	GuestPercent     float64 `json:"guest_percent"`
 	GuestNicePercent float64 `json:"guest_nice_percent"`
 }
 
 // ProcessStats represents per-process statistics
 type ProcessStats struct {
 	// Basic process info from /proc/[pid]/stat
-	PID int32 `json:"pid"`  // Process ID (field 1 in stat)
-	PPID int32 `json:"ppid"`  // Parent process ID (field 4 in stat)
-	PGID int32 `json:"pgid"`  // Process group ID (field 5 in stat)
-	SID int32 `json:"sid"`  // Session ID (field 6 in stat)
+	PID     int32  `json:"pid"`     // Process ID (field 1 in stat)
+	PPID    int32  `json:"ppid"`    // Parent process ID (field 4 in stat)
+	PGID    int32  `json:"pgid"`    // Process group ID (field 5 in stat)
+	SID     int32  `json:"sid"`     // Session ID (field 6 in stat)
 	Command string `json:"command"` // Command name from /proc/[pid]/comm or stat field 2
-	State string `json:"state"` // Process state (field 3 in stat: R, S, D, Z, T, etc.)
+	State   string `json:"state"`   // Process state (field 3 in stat: R, S, D, Z, T, etc.)
 	// CPU stats from /proc/[pid]/stat
-	CPUTime uint64 `json:"cpu_time"`  // Total CPU time: utime + stime (fields 14+15)
+	CPUTime    uint64  `json:"cpu_time"`    // Total CPU time: utime + stime (fields 14+15)
 	CPUPercent float64 `json:"cpu_percent"` // Calculated CPU usage percentage
 	// Memory stats
 	MemoryVSZ uint64 `json:"memory_vsz"` // Virtual memory size from /proc/[pid]/stat (field 23)
@@ -309,13 +309,13 @@ type ProcessStats struct {
 	// Process timing
 	StartTime time.Time `json:"start_time"` // Process start time calculated from stat field 22 + boot time
 	// Scheduling info from /proc/[pid]/stat
-	Nice int32 `json:"nice"` // Nice value (field 19)
+	Nice     int32 `json:"nice"`     // Nice value (field 19)
 	Priority int32 `json:"priority"` // Priority (field 18)
 	// File descriptors from /proc/[pid]/fd/
-	NumFds int32 `json:"num_fds"` // Number of open file descriptors
+	NumFds     int32 `json:"num_fds"`     // Number of open file descriptors
 	NumThreads int32 `json:"num_threads"` // Thread count from /proc/[pid]/status
 	// Context switches from /proc/[pid]/status
-	VoluntaryCtxt uint64 `json:"voluntary_ctxt"` // voluntary_ctxt_switches
+	VoluntaryCtxt   uint64 `json:"voluntary_ctxt"`   // voluntary_ctxt_switches
 	InvoluntaryCtxt uint64 `json:"involuntary_ctxt"` // nonvoluntary_ctxt_switches
 }
 
@@ -323,21 +323,21 @@ type ProcessStats struct {
 type DiskStats struct {
 	// Device identification
 	Device string `json:"device"` // Device name (field 3 in /proc/diskstats)
-	Major uint32 `json:"major"` // Major device number (field 1)
-	Minor uint32 `json:"minor"` // Minor device number (field 2)
+	Major  uint32 `json:"major"`  // Major device number (field 1)
+	Minor  uint32 `json:"minor"`  // Minor device number (field 2)
 	// Read statistics (fields 4-7 in /proc/diskstats)
 	ReadsCompleted uint64 `json:"reads_completed"` // Successfully completed reads
-	ReadsMerged uint64 `json:"reads_merged"` // Reads merged before queuing
-	SectorsRead uint64 `json:"sectors_read"` // Sectors read (multiply by 512 for bytes)
-	ReadTime uint64 `json:"read_time"` // Time spent reading (milliseconds)
+	ReadsMerged    uint64 `json:"reads_merged"`    // Reads merged before queuing
+	SectorsRead    uint64 `json:"sectors_read"`    // Sectors read (multiply by 512 for bytes)
+	ReadTime       uint64 `json:"read_time"`       // Time spent reading (milliseconds)
 	// Write statistics (fields 8-11 in /proc/diskstats)
 	WritesCompleted uint64 `json:"writes_completed"` // Successfully completed writes
-	WritesMerged uint64 `json:"writes_merged"` // Writes merged before queuing
-	SectorsWritten uint64 `json:"sectors_written"` // Sectors written (multiply by 512 for bytes)
-	WriteTime uint64 `json:"write_time"` // Time spent writing (milliseconds)
+	WritesMerged    uint64 `json:"writes_merged"`    // Writes merged before queuing
+	SectorsWritten  uint64 `json:"sectors_written"`  // Sectors written (multiply by 512 for bytes)
+	WriteTime       uint64 `json:"write_time"`       // Time spent writing (milliseconds)
 	// I/O queue statistics (fields 12-14 in /proc/diskstats)
-	IOsInProgress uint64 `json:"i_os_in_progress"` // I/Os currently in progress
-	IOTime uint64 `json:"io_time"` // Time spent doing I/Os (milliseconds)
+	IOsInProgress  uint64 `json:"i_os_in_progress"` // I/Os currently in progress
+	IOTime         uint64 `json:"io_time"`          // Time spent doing I/Os (milliseconds)
 	WeightedIOTime uint64 `json:"weighted_io_time"` // Weighted time spent doing I/Os (milliseconds)
 
 	Delta *DiskDeltaData `json:"delta,omitempty"` // Delta data structure containing all calculated deltas and rates
@@ -348,31 +348,31 @@ type DiskDeltaData struct {
 	DeltaMetadata
 
 	// Delta values (change since last collection)
-	ReadsCompleted uint64 `json:"reads_completed"`
+	ReadsCompleted  uint64 `json:"reads_completed"`
 	WritesCompleted uint64 `json:"writes_completed"`
-	ReadsMerged uint64 `json:"reads_merged"`
-	WritesMerged uint64 `json:"writes_merged"`
-	SectorsRead uint64 `json:"sectors_read"`
-	SectorsWritten uint64 `json:"sectors_written"`
-	ReadTime uint64 `json:"read_time"`
-	WriteTime uint64 `json:"write_time"`
-	IOTime uint64 `json:"io_time"`
-	WeightedIOTime uint64 `json:"weighted_io_time"`
+	ReadsMerged     uint64 `json:"reads_merged"`
+	WritesMerged    uint64 `json:"writes_merged"`
+	SectorsRead     uint64 `json:"sectors_read"`
+	SectorsWritten  uint64 `json:"sectors_written"`
+	ReadTime        uint64 `json:"read_time"`
+	WriteTime       uint64 `json:"write_time"`
+	IOTime          uint64 `json:"io_time"`
+	WeightedIOTime  uint64 `json:"weighted_io_time"`
 
 	// Rate values (deltas per second)
-	ReadsPerSec uint64 `json:"reads_per_sec"`
-	WritesPerSec uint64 `json:"writes_per_sec"`
-	SectorsReadPerSec uint64 `json:"sectors_read_per_sec"`
+	ReadsPerSec          uint64 `json:"reads_per_sec"`
+	WritesPerSec         uint64 `json:"writes_per_sec"`
+	SectorsReadPerSec    uint64 `json:"sectors_read_per_sec"`
 	SectorsWrittenPerSec uint64 `json:"sectors_written_per_sec"`
 
 	// Calculated performance metrics (emulating iostat output)
-	IOPS uint64 `json:"iops"`  // iostat: r/s + w/s - Total I/O operations per second
-	ReadBytesPerSec uint64 `json:"read_bytes_per_sec"`  // iostat: rKB/s * 1024 - Read throughput in bytes/sec
-	WriteBytesPerSec uint64 `json:"write_bytes_per_sec"`  // iostat: wKB/s * 1024 - Write throughput in bytes/sec
-	Utilization float64 `json:"utilization"` // iostat: %util - Disk utilization percentage (0-100)
-	AvgQueueSize float64 `json:"avg_queue_size"` // iostat: avgqu-sz - Average queue depth
-	AvgReadLatency uint64 `json:"avg_read_latency"`  // iostat: r_await - Average read latency in milliseconds
-	AvgWriteLatency uint64 `json:"avg_write_latency"`  // iostat: w_await - Average write latency in milliseconds
+	IOPS             uint64  `json:"iops"`                // iostat: r/s + w/s - Total I/O operations per second
+	ReadBytesPerSec  uint64  `json:"read_bytes_per_sec"`  // iostat: rKB/s * 1024 - Read throughput in bytes/sec
+	WriteBytesPerSec uint64  `json:"write_bytes_per_sec"` // iostat: wKB/s * 1024 - Write throughput in bytes/sec
+	Utilization      float64 `json:"utilization"`         // iostat: %util - Disk utilization percentage (0-100)
+	AvgQueueSize     float64 `json:"avg_queue_size"`      // iostat: avgqu-sz - Average queue depth
+	AvgReadLatency   uint64  `json:"avg_read_latency"`    // iostat: r_await - Average read latency in milliseconds
+	AvgWriteLatency  uint64  `json:"avg_write_latency"`   // iostat: w_await - Average write latency in milliseconds
 }
 
 // NetworkStats represents network interface statistics
@@ -380,28 +380,28 @@ type NetworkStats struct {
 	// Interface name from /proc/net/dev
 	Interface string `json:"interface"`
 	// Receive statistics from /proc/net/dev (columns 2-9)
-	RxBytes uint64 `json:"rx_bytes"` // Bytes received
-	RxPackets uint64 `json:"rx_packets"` // Packets received
-	RxErrors uint64 `json:"rx_errors"` // Receive errors
-	RxDropped uint64 `json:"rx_dropped"` // Packets dropped on receive
-	RxFIFO uint64 `json:"rx_fifo"` // FIFO buffer errors
-	RxFrame uint64 `json:"rx_frame"` // Frame alignment errors
+	RxBytes      uint64 `json:"rx_bytes"`      // Bytes received
+	RxPackets    uint64 `json:"rx_packets"`    // Packets received
+	RxErrors     uint64 `json:"rx_errors"`     // Receive errors
+	RxDropped    uint64 `json:"rx_dropped"`    // Packets dropped on receive
+	RxFIFO       uint64 `json:"rx_fifo"`       // FIFO buffer errors
+	RxFrame      uint64 `json:"rx_frame"`      // Frame alignment errors
 	RxCompressed uint64 `json:"rx_compressed"` // Compressed packets received
-	RxMulticast uint64 `json:"rx_multicast"` // Multicast packets received
+	RxMulticast  uint64 `json:"rx_multicast"`  // Multicast packets received
 	// Transmit statistics from /proc/net/dev (columns 10-17)
-	TxBytes uint64 `json:"tx_bytes"` // Bytes transmitted
-	TxPackets uint64 `json:"tx_packets"` // Packets transmitted
-	TxErrors uint64 `json:"tx_errors"` // Transmit errors
-	TxDropped uint64 `json:"tx_dropped"` // Packets dropped on transmit
-	TxFIFO uint64 `json:"tx_fifo"` // FIFO buffer errors
+	TxBytes      uint64 `json:"tx_bytes"`      // Bytes transmitted
+	TxPackets    uint64 `json:"tx_packets"`    // Packets transmitted
+	TxErrors     uint64 `json:"tx_errors"`     // Transmit errors
+	TxDropped    uint64 `json:"tx_dropped"`    // Packets dropped on transmit
+	TxFIFO       uint64 `json:"tx_fifo"`       // FIFO buffer errors
 	TxCollisions uint64 `json:"tx_collisions"` // Collisions detected
-	TxCarrier uint64 `json:"tx_carrier"` // Carrier losses
+	TxCarrier    uint64 `json:"tx_carrier"`    // Carrier losses
 	TxCompressed uint64 `json:"tx_compressed"` // Compressed packets transmitted
 	// Interface metadata from /sys/class/net/[interface]/
-	Speed uint64 `json:"speed"` // Link speed in Mbps from /sys/class/net/[interface]/speed
-	Duplex string `json:"duplex"` // Duplex mode from /sys/class/net/[interface]/duplex
-	OperState string `json:"oper_state"` // Operational state from /sys/class/net/[interface]/operstate
-	LinkDetected bool `json:"link_detected"`   // Link detection from /sys/class/net/[interface]/carrier
+	Speed        uint64 `json:"speed"`         // Link speed in Mbps from /sys/class/net/[interface]/speed
+	Duplex       string `json:"duplex"`        // Duplex mode from /sys/class/net/[interface]/duplex
+	OperState    string `json:"oper_state"`    // Operational state from /sys/class/net/[interface]/operstate
+	LinkDetected bool   `json:"link_detected"` // Link detection from /sys/class/net/[interface]/carrier
 
 	Delta *NetworkDeltaData `json:"delta,omitempty"` // Delta data structure containing all calculated deltas and rates
 }
@@ -411,22 +411,22 @@ type NetworkDeltaData struct {
 	DeltaMetadata
 
 	// Delta values (change since last collection)
-	RxBytes uint64 `json:"rx_bytes"`
-	TxBytes uint64 `json:"tx_bytes"`
+	RxBytes   uint64 `json:"rx_bytes"`
+	TxBytes   uint64 `json:"tx_bytes"`
 	RxPackets uint64 `json:"rx_packets"`
 	TxPackets uint64 `json:"tx_packets"`
-	RxErrors uint64 `json:"rx_errors"`
-	TxErrors uint64 `json:"tx_errors"`
+	RxErrors  uint64 `json:"rx_errors"`
+	TxErrors  uint64 `json:"tx_errors"`
 	RxDropped uint64 `json:"rx_dropped"`
 	TxDropped uint64 `json:"tx_dropped"`
 
 	// Rate values (deltas per second)
-	RxBytesPerSec uint64 `json:"rx_bytes_per_sec"`
-	TxBytesPerSec uint64 `json:"tx_bytes_per_sec"`
+	RxBytesPerSec   uint64 `json:"rx_bytes_per_sec"`
+	TxBytesPerSec   uint64 `json:"tx_bytes_per_sec"`
 	RxPacketsPerSec uint64 `json:"rx_packets_per_sec"`
 	TxPacketsPerSec uint64 `json:"tx_packets_per_sec"`
-	RxErrorsPerSec uint64 `json:"rx_errors_per_sec"`
-	TxErrorsPerSec uint64 `json:"tx_errors_per_sec"`
+	RxErrorsPerSec  uint64 `json:"rx_errors_per_sec"`
+	TxErrorsPerSec  uint64 `json:"tx_errors_per_sec"`
 	RxDroppedPerSec uint64 `json:"rx_dropped_per_sec"`
 	TxDroppedPerSec uint64 `json:"tx_dropped_per_sec"`
 }
@@ -434,27 +434,27 @@ type NetworkDeltaData struct {
 // TCPStats represents TCP connection statistics
 type TCPStats struct {
 	// Connection counts from /proc/net/snmp (Tcp: line)
-	ActiveOpens uint64 `json:"active_opens"` // Active connection openings (count since boot)
-	PassiveOpens uint64 `json:"passive_opens"` // Passive connection openings (count since boot)
-	AttemptFails uint64 `json:"attempt_fails"` // Failed connection attempts (count since boot)
-	EstabResets uint64 `json:"estab_resets"` // Resets from established state (count since boot)
-	CurrEstab uint64 `json:"curr_estab"` // Current established connections (instantaneous count)
-	InSegs uint64 `json:"in_segs"` // Segments received (count since boot)
-	OutSegs uint64 `json:"out_segs"` // Segments sent (count since boot)
-	RetransSegs uint64 `json:"retrans_segs"` // Segments retransmitted (count since boot)
-	InErrs uint64 `json:"in_errs"` // Segments received with errors (count since boot)
-	OutRsts uint64 `json:"out_rsts"` // RST segments sent (count since boot)
+	ActiveOpens  uint64 `json:"active_opens"`   // Active connection openings (count since boot)
+	PassiveOpens uint64 `json:"passive_opens"`  // Passive connection openings (count since boot)
+	AttemptFails uint64 `json:"attempt_fails"`  // Failed connection attempts (count since boot)
+	EstabResets  uint64 `json:"estab_resets"`   // Resets from established state (count since boot)
+	CurrEstab    uint64 `json:"curr_estab"`     // Current established connections (instantaneous count)
+	InSegs       uint64 `json:"in_segs"`        // Segments received (count since boot)
+	OutSegs      uint64 `json:"out_segs"`       // Segments sent (count since boot)
+	RetransSegs  uint64 `json:"retrans_segs"`   // Segments retransmitted (count since boot)
+	InErrs       uint64 `json:"in_errs"`        // Segments received with errors (count since boot)
+	OutRsts      uint64 `json:"out_rsts"`       // RST segments sent (count since boot)
 	InCsumErrors uint64 `json:"in_csum_errors"` // Segments with checksum errors (count since boot)
 	// Extended TCP stats from /proc/net/netstat (TcpExt: line)
-	SyncookiesSent uint64 `json:"syncookies_sent"` // SYN cookies sent (count since boot)
-	SyncookiesRecv uint64 `json:"syncookies_recv"` // SYN cookies received (count since boot)
-	SyncookiesFailed uint64 `json:"syncookies_failed"` // SYN cookies failed (count since boot)
-	ListenOverflows uint64 `json:"listen_overflows"` // Listen queue overflows (count since boot)
-	ListenDrops uint64 `json:"listen_drops"` // Listen queue drops (count since boot)
-	TCPLostRetransmit uint64 `json:"tcp_lost_retransmit"` // Lost retransmissions (count since boot)
-	TCPFastRetrans uint64 `json:"tcp_fast_retrans"` // Fast retransmissions (count since boot)
+	SyncookiesSent      uint64 `json:"syncookies_sent"`        // SYN cookies sent (count since boot)
+	SyncookiesRecv      uint64 `json:"syncookies_recv"`        // SYN cookies received (count since boot)
+	SyncookiesFailed    uint64 `json:"syncookies_failed"`      // SYN cookies failed (count since boot)
+	ListenOverflows     uint64 `json:"listen_overflows"`       // Listen queue overflows (count since boot)
+	ListenDrops         uint64 `json:"listen_drops"`           // Listen queue drops (count since boot)
+	TCPLostRetransmit   uint64 `json:"tcp_lost_retransmit"`    // Lost retransmissions (count since boot)
+	TCPFastRetrans      uint64 `json:"tcp_fast_retrans"`       // Fast retransmissions (count since boot)
 	TCPSlowStartRetrans uint64 `json:"tcp_slow_start_retrans"` // Slow start retransmissions (count since boot)
-	TCPTimeouts uint64 `json:"tcp_timeouts"` // TCP timeouts (count since boot)
+	TCPTimeouts         uint64 `json:"tcp_timeouts"`           // TCP timeouts (count since boot)
 	// Connection states from /proc/net/tcp and /proc/net/tcp6
 	// States: ESTABLISHED, SYN_SENT, SYN_RECV, FIN_WAIT1, FIN_WAIT2,
 	// TIME_WAIT, CLOSE, CLOSE_WAIT, LAST_ACK, LISTEN, CLOSING
@@ -468,46 +468,46 @@ type TCPDeltaData struct {
 	DeltaMetadata
 
 	// Delta values (change since last collection)
-	ActiveOpens uint64 `json:"active_opens"`
-	PassiveOpens uint64 `json:"passive_opens"`
-	AttemptFails uint64 `json:"attempt_fails"`
-	EstabResets uint64 `json:"estab_resets"`
-	InSegs uint64 `json:"in_segs"`
-	OutSegs uint64 `json:"out_segs"`
-	RetransSegs uint64 `json:"retrans_segs"`
-	InErrs uint64 `json:"in_errs"`
-	OutRsts uint64 `json:"out_rsts"`
-	InCsumErrors uint64 `json:"in_csum_errors"`
-	SyncookiesSent uint64 `json:"syncookies_sent"`
-	SyncookiesRecv uint64 `json:"syncookies_recv"`
-	SyncookiesFailed uint64 `json:"syncookies_failed"`
-	ListenOverflows uint64 `json:"listen_overflows"`
-	ListenDrops uint64 `json:"listen_drops"`
-	TCPLostRetransmit uint64 `json:"tcp_lost_retransmit"`
-	TCPFastRetrans uint64 `json:"tcp_fast_retrans"`
+	ActiveOpens         uint64 `json:"active_opens"`
+	PassiveOpens        uint64 `json:"passive_opens"`
+	AttemptFails        uint64 `json:"attempt_fails"`
+	EstabResets         uint64 `json:"estab_resets"`
+	InSegs              uint64 `json:"in_segs"`
+	OutSegs             uint64 `json:"out_segs"`
+	RetransSegs         uint64 `json:"retrans_segs"`
+	InErrs              uint64 `json:"in_errs"`
+	OutRsts             uint64 `json:"out_rsts"`
+	InCsumErrors        uint64 `json:"in_csum_errors"`
+	SyncookiesSent      uint64 `json:"syncookies_sent"`
+	SyncookiesRecv      uint64 `json:"syncookies_recv"`
+	SyncookiesFailed    uint64 `json:"syncookies_failed"`
+	ListenOverflows     uint64 `json:"listen_overflows"`
+	ListenDrops         uint64 `json:"listen_drops"`
+	TCPLostRetransmit   uint64 `json:"tcp_lost_retransmit"`
+	TCPFastRetrans      uint64 `json:"tcp_fast_retrans"`
 	TCPSlowStartRetrans uint64 `json:"tcp_slow_start_retrans"`
-	TCPTimeouts uint64 `json:"tcp_timeouts"`
+	TCPTimeouts         uint64 `json:"tcp_timeouts"`
 
 	// Rate values (deltas per second)
-	ActiveOpensPerSec uint64 `json:"active_opens_per_sec"`
-	PassiveOpensPerSec uint64 `json:"passive_opens_per_sec"`
-	AttemptFailsPerSec uint64 `json:"attempt_fails_per_sec"`
-	EstabResetsPerSec uint64 `json:"estab_resets_per_sec"`
-	InSegsPerSec uint64 `json:"in_segs_per_sec"`
-	OutSegsPerSec uint64 `json:"out_segs_per_sec"`
-	RetransSegsPerSec uint64 `json:"retrans_segs_per_sec"`
-	InErrsPerSec uint64 `json:"in_errs_per_sec"`
-	OutRstsPerSec uint64 `json:"out_rsts_per_sec"`
-	InCsumErrorsPerSec uint64 `json:"in_csum_errors_per_sec"`
-	SyncookiesSentPerSec uint64 `json:"syncookies_sent_per_sec"`
-	SyncookiesRecvPerSec uint64 `json:"syncookies_recv_per_sec"`
-	SyncookiesFailedPerSec uint64 `json:"syncookies_failed_per_sec"`
-	ListenOverflowsPerSec uint64 `json:"listen_overflows_per_sec"`
-	ListenDropsPerSec uint64 `json:"listen_drops_per_sec"`
-	TCPLostRetransmitPerSec uint64 `json:"tcp_lost_retransmit_per_sec"`
-	TCPFastRetransPerSec uint64 `json:"tcp_fast_retrans_per_sec"`
+	ActiveOpensPerSec         uint64 `json:"active_opens_per_sec"`
+	PassiveOpensPerSec        uint64 `json:"passive_opens_per_sec"`
+	AttemptFailsPerSec        uint64 `json:"attempt_fails_per_sec"`
+	EstabResetsPerSec         uint64 `json:"estab_resets_per_sec"`
+	InSegsPerSec              uint64 `json:"in_segs_per_sec"`
+	OutSegsPerSec             uint64 `json:"out_segs_per_sec"`
+	RetransSegsPerSec         uint64 `json:"retrans_segs_per_sec"`
+	InErrsPerSec              uint64 `json:"in_errs_per_sec"`
+	OutRstsPerSec             uint64 `json:"out_rsts_per_sec"`
+	InCsumErrorsPerSec        uint64 `json:"in_csum_errors_per_sec"`
+	SyncookiesSentPerSec      uint64 `json:"syncookies_sent_per_sec"`
+	SyncookiesRecvPerSec      uint64 `json:"syncookies_recv_per_sec"`
+	SyncookiesFailedPerSec    uint64 `json:"syncookies_failed_per_sec"`
+	ListenOverflowsPerSec     uint64 `json:"listen_overflows_per_sec"`
+	ListenDropsPerSec         uint64 `json:"listen_drops_per_sec"`
+	TCPLostRetransmitPerSec   uint64 `json:"tcp_lost_retransmit_per_sec"`
+	TCPFastRetransPerSec      uint64 `json:"tcp_fast_retrans_per_sec"`
 	TCPSlowStartRetransPerSec uint64 `json:"tcp_slow_start_retrans_per_sec"`
-	TCPTimeoutsPerSec uint64 `json:"tcp_timeouts_per_sec"`
+	TCPTimeoutsPerSec         uint64 `json:"tcp_timeouts_per_sec"`
 }
 
 // SystemStats represents system-wide activity statistics from /proc/stat
@@ -527,11 +527,11 @@ type SystemDeltaData struct {
 	DeltaMetadata
 
 	// Delta values (change since last collection)
-	Interrupts uint64 `json:"interrupts"`
+	Interrupts      uint64 `json:"interrupts"`
 	ContextSwitches uint64 `json:"context_switches"`
 
 	// Rate values (deltas per second)
-	InterruptsPerSec uint64 `json:"interrupts_per_sec"`
+	InterruptsPerSec      uint64 `json:"interrupts_per_sec"`
 	ContextSwitchesPerSec uint64 `json:"context_switches_per_sec"`
 }
 

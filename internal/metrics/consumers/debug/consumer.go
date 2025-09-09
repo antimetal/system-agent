@@ -284,14 +284,14 @@ func (c *Consumer) truncateData(data interface{}) interface{} {
 			break
 		}
 	}
-	
+
 	// Truncate at a clean boundary if possible
 	if lastComma > 0 {
 		truncated = truncated[:lastComma]
 	} else if lastBrace > 0 {
 		truncated = truncated[:lastBrace+1]
 	}
-	
+
 	return fmt.Sprintf("%s... (truncated from %d bytes)", string(truncated), len(dataBytes))
 }
 
@@ -311,7 +311,7 @@ func (c *Consumer) formatDataForText(data interface{}) string {
 
 	// Convert to string for display
 	dataStr := string(jsonBytes)
-	
+
 	if c.config.MaxDataLength > 0 && len(dataStr) > c.config.MaxDataLength {
 		return fmt.Sprintf("%s... (truncated from %d chars)",
 			dataStr[:c.config.MaxDataLength], len(dataStr))
