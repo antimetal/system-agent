@@ -305,8 +305,8 @@ preview-deploy: manifests kustomize ## Generate a consolidated YAML for deployme
 	@rm -r $(ROOT)/tmp
 
 .PHONY: cluster
-cluster: kind kustomize ## Build a KIND cluster which can be used for testing and development.
-	PATH="$(LOCALBIN):${PATH}" $(KIND) create cluster --name $(KIND_CLUSTER) --config config/cluster.yaml
+cluster: kind kustomize ## Build a KIND cluster using topology configuration for testing and development.
+	PATH="$(LOCALBIN):${PATH}" $(KIND) create cluster --config config/kind-topology-cluster.yaml --name $(KIND_CLUSTER)
 
 .PHONY: delete-cluster
 destroy-cluster: kind ## Delete the KIND cluster.
