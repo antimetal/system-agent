@@ -10,6 +10,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path"
 	"runtime"
 	"strings"
 	"time"
@@ -24,7 +25,36 @@ import (
 	"github.com/antimetal/agent/pkg/proc"
 )
 
-var kindResource = string((&resourcev1.Resource{}).ProtoReflect().Descriptor().FullName())
+var (
+	kindResource = string((&resourcev1.Resource{}).ProtoReflect().Descriptor().FullName())
+
+	sysDir     string
+	etcDir     string
+	varDir     string
+	machineID  string
+	systemUUID string
+)
+
+func init() {
+	sysDir = os.Getenv("HOST_SYS")
+	if sysDir == "" {
+		varDir = "/sys"
+	}
+
+	etcDir = os.Getenv("HOST_ETC")
+	if etcDir == "" {
+		etcDir = "/etc"
+	}
+
+	varDir = os.Getenv("HOST_VAR")
+	if varDir == "" {
+		varDir = "/var"
+	}
+
+	// assume these are static and set at boot time
+	machineID = getMachineID()
+	systemUUID = getSystemUUID()
+}
 
 // getSystemInfo gathers system information using existing utilities
 func (b *Builder) getSystemInfo() (arch hardwarev1.Architecture, bootTime time.Time, kernelVersion string, osInfo string) {
@@ -64,7 +94,7 @@ func (b *Builder) getSystemInfo() (arch hardwarev1.Architecture, bootTime time.T
 // getOSInfo reads OS information from os-release files according to freedesktop.org standard
 func getOSInfo() string {
 	// Try /etc/os-release first (primary location per freedesktop.org spec)
-	file, err := os.Open("/etc/os-release")
+	file, err := os.Open(path.Join(etcDir, "os-release"))
 	if err != nil {
 		// Fall back to /usr/lib/os-release (secondary location)
 		file, err = os.Open("/usr/lib/os-release")
@@ -91,27 +121,27 @@ func getOSInfo() string {
 // getMachineID reads the OS-specific machine ID from /etc/machine-id
 // This is distinct from the hardware UUID and hostname
 func getMachineID() string {
-	// Try /etc/machine-id (OS-specific identifier)
-	if data, err := os.ReadFile("/etc/machine-id"); err == nil {
+	// Try /etc/machine-id and /var/lib/dbus/machine-id
+
+	if data, err := os.ReadFile(path.Join(etcDir, "machine-id")); err == nil {
 		if id := strings.TrimSpace(string(data)); id != "" {
 			return id
 		}
 	}
 
-	// Fall back to system UUID if machine-id not available
-	if data, err := os.ReadFile("/sys/class/dmi/id/product_uuid"); err == nil {
+	if data, err := os.ReadFile(path.Join(varDir, "lib", "dbus", "machine-id")); err == nil {
 		if uuid := strings.TrimSpace(string(data)); uuid != "" {
 			return uuid
 		}
 	}
 
-	return "unknown"
+	return ""
 }
 
 // getSystemUUID reads the hardware UUID from DMI
 func getSystemUUID() string {
 	// Try /sys/class/dmi/id/product_uuid (hardware-based, requires root)
-	if data, err := os.ReadFile("/sys/class/dmi/id/product_uuid"); err == nil {
+	if data, err := os.ReadFile(path.Join(sysDir, "class", "dmi", "id", "product_uuid")); err == nil {
 		if uuid := strings.TrimSpace(string(data)); uuid != "" {
 			return uuid
 		}
@@ -123,12 +153,6 @@ func getSystemUUID() string {
 func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
 	// Get system information
 	arch, bootTime, kernelVersion, osInfo := b.getSystemInfo()
-
-	// Get machine ID for unique identification (OS-specific)
-	machineID := getMachineID()
-
-	// Get system UUID (hardware-specific)
-	systemUUID := getSystemUUID()
 
 	// Get hostname (network identifier)
 	hostname, err := os.Hostname()
@@ -163,6 +187,11 @@ func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.Resource
 		tags = append(tags, &resourcev1.Tag{Key: "system-uuid", Value: systemUUID})
 	}
 
+	name := machineID
+	if name == "" {
+		name = systemUUID
+	}
+
 	// Create resource with machine ID as the name (globally unique)
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
@@ -171,8 +200,8 @@ func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.Resource
 		},
 		Metadata: &resourcev1.ResourceMeta{
 			Provider:   resourcev1.Provider_PROVIDER_ANTIMETAL,
-			ProviderId: machineID,
-			Name:       machineID, // Use machine ID as name (globally unique)
+			ProviderId: name,
+			Name:       name,
 			Tags:       tags,
 		},
 		Spec: specAny,

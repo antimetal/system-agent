@@ -84,6 +84,10 @@ spec:
           value: /host/sys
         - name: HOST_DEV
           value: /host/dev
+        - name: HOST_ETC
+          value: /host/etc
+        - name: HOST_VAR
+          value: /host/var
         - name: HOST_CGROUP
           value: /host/cgroup
         volumeMounts:
@@ -97,6 +101,12 @@ spec:
           readOnly: true
         - name: dev
           mountPath: /host/dev
+          readOnly: true
+        - name: machine-id
+          mountPath: /host/etc/machine-id
+          readOnly: true
+        - name: dbus
+          mountPath: /host/var/lib/dbus
           readOnly: true
         - name: cgroup
           mountPath: /host/cgroup
@@ -143,6 +153,12 @@ spec:
         hostPath:
           path: /dev
           type: Directory
+      - name: machine-id
+        hostPath:
+          path: /etc/machine-id
+      - name: dbus
+        hostPath:
+          path: /var/lib/dbus
       - name: cgroup
         hostPath:
           path: /sys/fs/cgroup
