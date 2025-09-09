@@ -1,0 +1,157 @@
+name: Auto Format
+
+# This workflow automatically formats Go and C/C++ code on pull requests.
+# If formatting changes are needed, it commits and pushes them to the PR branch.
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - '**.go'
+      - '**.c'
+      - '**.h'
+      - '!docs/**'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-format:
+    name: Auto Format Code
+    runs-on: ubuntu-latest
+    # Only run on PRs from the same repository (not forks)
+    # This ensures we have write access to push changes
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    
+    steps:
+    - name: Checkout PR branch
+      uses: actions/checkout@v4
+      with:
+        # Use the PR head ref to ensure we're on the correct branch
+        ref: ${{ github.event.pull_request.head.ref }}
+        # Use a token with write permissions (default GITHUB_TOKEN)
+        token: ${{ secrets.GITHUB_TOKEN }}
+        # Fetch full history for proper git operations
+        fetch-depth: 0
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: 'go.mod'
+        cache: true
+        cache-dependency-path: go.sum
+
+    - name: Install clang-format
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq clang-format
+
+    - name: Run Go formatter
+      id: go-fmt
+      run: |
+        echo "Running Go formatter..."
+        make fmt.go
+        
+        # Check if there are any changes
+        if [ -n "$(git status --porcelain)" ]; then
+          echo "go_changes=true" >> $GITHUB_OUTPUT
+        else
+          echo "go_changes=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Run clang formatter
+      id: clang-fmt
+      run: |
+        echo "Running clang formatter..."
+        make fmt.clang
+        
+        # Check if there are any changes after both formatters
+        if [ -n "$(git status --porcelain)" ]; then
+          echo "changes=true" >> $GITHUB_OUTPUT
+        else
+          echo "changes=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Configure Git
+      if: steps.clang-fmt.outputs.changes == 'true'
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: Commit and push formatting changes
+      if: steps.clang-fmt.outputs.changes == 'true'
+      run: |
+        # Show what files were changed
+        echo "Files modified by formatting:"
+        git status --porcelain
+        
+        # Add all changes
+        git add .
+        
+        # Create a clear commit message
+        git commit -m "chore: auto-format code
+
+        Applied automatic code formatting:
+        - Go formatting via 'make fmt.go'
+        - C/C++ formatting via 'make fmt.clang'
+        
+        [skip ci]" || exit 0
+        
+        # Push changes back to the PR branch
+        # Use --force-with-lease for safety in case of concurrent changes
+        git push --force-with-lease origin HEAD:${{ github.event.pull_request.head.ref }}
+        
+        echo "✅ Formatting changes pushed to PR branch"
+
+    - name: Comment on PR about formatting
+      if: steps.clang-fmt.outputs.changes == 'true'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const comment = `🤖 **Auto-formatting applied**
+          
+          I've automatically formatted the code in this PR using:
+          - \`make fmt.go\` for Go files
+          - \`make fmt.clang\` for C/C++ files
+          
+          The changes have been pushed to your branch. Please pull the latest changes locally:
+          \`\`\`bash
+          git pull origin ${{ github.event.pull_request.head.ref }}
+          \`\`\``;
+          
+          // Check if we've already commented about formatting
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number
+          });
+          
+          const botComment = comments.find(comment => 
+            comment.user.type === 'Bot' && 
+            comment.body.includes('Auto-formatting applied')
+          );
+          
+          if (botComment) {
+            // Update existing comment
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body: comment
+            });
+          } else {
+            // Create new comment
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: comment
+            });
+          }
+
+    - name: No formatting needed
+      if: steps.clang-fmt.outputs.changes == 'false'
+      run: |
+        echo "✅ Code is already properly formatted - no changes needed"
