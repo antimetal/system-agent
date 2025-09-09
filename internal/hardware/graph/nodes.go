@@ -118,9 +118,6 @@ func getOSInfo() string {
 	return "Linux" // Fallback
 }
 
-// Platform-specific implementations of getMachineID() and getSystemUUID()
-// are in system_linux.go and system_other.go files
-
 // createSystemNode creates the root system node representing the machine
 func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
 	// Get system information
@@ -163,7 +160,6 @@ func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.Resource
 	if name == "" {
 		name = systemUUID
 	}
-	// The mock implementation in system_other.go ensures we always have a value
 
 	// Create resource with machine ID as the name (globally unique)
 	resource := &resourcev1.Resource{
