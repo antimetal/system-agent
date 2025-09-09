@@ -11,10 +11,16 @@ on:
       - '**.c'
       - '**.h'
       - '!docs/**'
+      - '!**/*.pb.go'        # Skip protobuf generated files
+      - '!**/*_generated.go'  # Skip other generated files
 
 permissions:
   contents: write
   pull-requests: write
+
+concurrency:
+  group: auto-format-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   auto-format:
@@ -47,65 +53,22 @@ jobs:
         sudo apt-get update -qq
         sudo apt-get install -y -qq clang-format
 
-    - name: Run Go formatter
-      id: go-fmt
+    - name: Check and apply formatting
+      id: format-check
       run: |
-        echo "Running Go formatter..."
-        make fmt.go
-        
-        # Check if there are any changes
-        if [ -n "$(git status --porcelain)" ]; then
-          echo "go_changes=true" >> $GITHUB_OUTPUT
-        else
-          echo "go_changes=false" >> $GITHUB_OUTPUT
-        fi
+        chmod +x .github/workflows/scripts/check-formatting.sh
+        .github/workflows/scripts/check-formatting.sh
 
-    - name: Run clang formatter
-      id: clang-fmt
+    - name: Commit and push changes
+      if: steps.format-check.outputs.changes == 'true'
+      env:
+        GITHUB_HEAD_REF: ${{ github.event.pull_request.head.ref }}
       run: |
-        echo "Running clang formatter..."
-        make fmt.clang
-        
-        # Check if there are any changes after both formatters
-        if [ -n "$(git status --porcelain)" ]; then
-          echo "changes=true" >> $GITHUB_OUTPUT
-        else
-          echo "changes=false" >> $GITHUB_OUTPUT
-        fi
-
-    - name: Configure Git
-      if: steps.clang-fmt.outputs.changes == 'true'
-      run: |
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-
-    - name: Commit and push formatting changes
-      if: steps.clang-fmt.outputs.changes == 'true'
-      run: |
-        # Show what files were changed
-        echo "Files modified by formatting:"
-        git status --porcelain
-        
-        # Add all changes
-        git add .
-        
-        # Create a clear commit message
-        git commit -m "chore: auto-format code
-
-        Applied automatic code formatting:
-        - Go formatting via 'make fmt.go'
-        - C/C++ formatting via 'make fmt.clang'
-        
-        [skip ci]" || exit 0
-        
-        # Push changes back to the PR branch
-        # Use --force-with-lease for safety in case of concurrent changes
-        git push --force-with-lease origin HEAD:${{ github.event.pull_request.head.ref }}
-        
-        echo "✅ Formatting changes pushed to PR branch"
+        chmod +x .github/workflows/scripts/commit-formatting.sh
+        .github/workflows/scripts/commit-formatting.sh
 
     - name: Comment on PR about formatting
-      if: steps.clang-fmt.outputs.changes == 'true'
+      if: steps.format-check.outputs.changes == 'true'
       uses: actions/github-script@v7
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -150,8 +113,3 @@ jobs:
               body: comment
             });
           }
-
-    - name: No formatting needed
-      if: steps.clang-fmt.outputs.changes == 'false'
-      run: |
-        echo "✅ Code is already properly formatted - no changes needed"
