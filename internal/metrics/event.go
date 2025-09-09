@@ -11,25 +11,34 @@ import (
 )
 
 // MetricType represents the type of performance metric.
-// These constants mirror those in pkg/performance/types.go to avoid import cycles.
-// Any updates here should be synchronized with the performance package.
+// IMPORTANT: This type is duplicated from pkg/performance/types.go to avoid import cycles.
+// The performance package needs to import internal/metrics for the Router interface,
+// so we cannot import performance here without creating a circular dependency.
+// Any updates to MetricType constants must be synchronized between both files.
 type MetricType string
 
 const (
-	MetricTypeLoad        MetricType = "load"
-	MetricTypeMemory      MetricType = "memory"
-	MetricTypeCPU         MetricType = "cpu"
-	MetricTypeProcess     MetricType = "process"
-	MetricTypeDisk        MetricType = "disk"
-	MetricTypeNetwork     MetricType = "network"
-	MetricTypeTCP         MetricType = "tcp"
-	MetricTypeKernel      MetricType = "kernel"
-	MetricTypeSystem      MetricType = "system"
+	// Runtime System Statistics
+	MetricTypeLoad      MetricType = "load"
+	MetricTypeMemory    MetricType = "memory"
+	MetricTypeCPU       MetricType = "cpu"
+	MetricTypeProcess   MetricType = "process"
+	MetricTypeDisk      MetricType = "disk"
+	MetricTypeNetwork   MetricType = "network"
+	MetricTypeTCP       MetricType = "tcp"
+	MetricTypeKernel    MetricType = "kernel"
+	MetricTypeSystem    MetricType = "system"
+	MetricTypeNUMAStats MetricType = "numa_stats"
+	// Runtime Container Statistics
+	MetricTypeCgroupCPU     MetricType = "cgroup_cpu"
+	MetricTypeCgroupMemory  MetricType = "cgroup_memory"
+	MetricTypeCgroupIO      MetricType = "cgroup_io"      // Future
+	MetricTypeCgroupNetwork MetricType = "cgroup_network" // Future
+	// Hardware configuration collectors
 	MetricTypeCPUInfo     MetricType = "cpu_info"
 	MetricTypeMemoryInfo  MetricType = "memory_info"
 	MetricTypeDiskInfo    MetricType = "disk_info"
 	MetricTypeNetworkInfo MetricType = "network_info"
-	MetricTypeNUMAStats   MetricType = "numa_stats"
 )
 
 // MetricEvent represents a metrics event flowing through the pipeline.
@@ -59,21 +68,23 @@ const (
 //   - "snapshot": Complete state capture
 //
 // The Data field contains the actual metric payload, typically one of the
-// performance collector types from pkg/performance:
+// performance collector types from pkg/performance (all using pointers for efficiency):
 //   - *performance.LoadStats for MetricTypeLoad
 //   - *performance.MemoryStats for MetricTypeMemory
-//   - *performance.CPUStatsList for MetricTypeCPU
-//   - *performance.ProcessStatsList for MetricTypeProcess
-//   - *performance.DiskStatsList for MetricTypeDisk
-//   - *performance.NetworkStatsList for MetricTypeNetwork
+//   - []*performance.CPUStats for MetricTypeCPU
+//   - []*performance.ProcessStats for MetricTypeProcess
+//   - []*performance.DiskStats for MetricTypeDisk
+//   - []*performance.NetworkStats for MetricTypeNetwork
 //   - *performance.TCPStats for MetricTypeTCP
-//   - *performance.KernelStats for MetricTypeKernel
+//   - []*performance.KernelMessage for MetricTypeKernel
 //   - *performance.SystemStats for MetricTypeSystem
 //   - *performance.CPUInfo for MetricTypeCPUInfo
 //   - *performance.MemoryInfo for MetricTypeMemoryInfo
-//   - *performance.DiskInfo for MetricTypeDiskInfo
-//   - *performance.NetworkInfo for MetricTypeNetworkInfo
-//   - *performance.NUMAStats for MetricTypeNUMAStats
+//   - []*performance.DiskInfo for MetricTypeDiskInfo
+//   - []*performance.NetworkInfo for MetricTypeNetworkInfo
+//   - *performance.NUMAStatistics for MetricTypeNUMAStats
+//   - []*performance.CgroupCPUStats for MetricTypeCgroupCPU
+//   - []*performance.CgroupMemoryStats for MetricTypeCgroupMemory
 type MetricEvent struct {
 	// Event metadata
 	Timestamp   time.Time

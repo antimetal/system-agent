@@ -116,8 +116,8 @@ func (c *DiskInfoCollector) Collect(ctx context.Context) (any, error) {
 // - Partitions: We only want whole disk information, not individual partitions
 //
 // See: https://www.kernel.org/doc/html/latest/admin-guide/devices.html
-func (c *DiskInfoCollector) collectDiskInfo() ([]performance.DiskInfo, error) {
-	disks := make([]performance.DiskInfo, 0)
+func (c *DiskInfoCollector) collectDiskInfo() ([]*performance.DiskInfo, error) {
+	disks := make([]*performance.DiskInfo, 0)
 
 	// List all block devices from /sys/block/
 	// Each directory represents a block device known to the kernel
@@ -152,14 +152,14 @@ func (c *DiskInfoCollector) collectDiskInfo() ([]performance.DiskInfo, error) {
 			continue
 		}
 
-		disk := performance.DiskInfo{
+		disk := &performance.DiskInfo{
 			Device:     deviceName,
 			Partitions: make([]performance.PartitionInfo, 0),
 		}
 
 		// Collect disk information
-		c.parseDiskProperties(&disk, devicePath)
-		c.parsePartitions(&disk, devicePath)
+		c.parseDiskProperties(disk, devicePath)
+		c.parsePartitions(disk, devicePath)
 
 		c.Logger().V(1).Info("Found disk device", "device", deviceName, "size", disk.SizeBytes)
 		disks = append(disks, disk)

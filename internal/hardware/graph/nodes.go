@@ -38,7 +38,7 @@ var (
 func init() {
 	sysDir = os.Getenv("HOST_SYS")
 	if sysDir == "" {
-		varDir = "/sys"
+		sysDir = "/sys"
 	}
 
 	etcDir = os.Getenv("HOST_ETC")
@@ -190,6 +190,10 @@ func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.Resource
 	name := machineID
 	if name == "" {
 		name = systemUUID
+	}
+	if name == "" {
+		// Fallback for test environments or systems without machine-id
+		name = fmt.Sprintf("system-%s", hostname)
 	}
 
 	// Create resource with machine ID as the name (globally unique)
