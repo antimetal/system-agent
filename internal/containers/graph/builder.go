@@ -20,8 +20,8 @@ import (
 	runtimev1 "github.com/antimetal/agent/pkg/api/antimetal/runtime/v1"
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"github.com/antimetal/agent/pkg/config/environment"
+	"github.com/antimetal/agent/pkg/cpu"
 	"github.com/antimetal/agent/pkg/host"
-	"github.com/antimetal/agent/pkg/performance"
 	"github.com/go-logr/logr"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -313,7 +313,7 @@ func (b *Builder) processMatchesContainer(cgroupContent string, container Contai
 // createContainerCPURelationships creates relationships between container and CPU cores based on cpuset
 func (b *Builder) createContainerCPURelationships(containerRef *resourcev1.ResourceRef, cpusetCpus string) error {
 	// Parse CPU list using our shared utility
-	cpuList, err := performance.ParseCPUList(cpusetCpus)
+	cpuList, err := cpu.ParseCPUList(cpusetCpus)
 	if err != nil {
 		return fmt.Errorf("failed to parse cpuset_cpus %s: %w", cpusetCpus, err)
 	}
@@ -347,7 +347,7 @@ func (b *Builder) createContainerCPURelationships(containerRef *resourcev1.Resou
 // createContainerNUMARelationships creates relationships between container and NUMA nodes based on cpuset
 func (b *Builder) createContainerNUMARelationships(containerRef *resourcev1.ResourceRef, cpusetMems string) error {
 	// Parse NUMA node list using our shared utility
-	numaList, err := performance.ParseCPUList(cpusetMems)
+	numaList, err := cpu.ParseCPUList(cpusetMems)
 	if err != nil {
 		return fmt.Errorf("failed to parse cpuset_mems %s: %w", cpusetMems, err)
 	}
