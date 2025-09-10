@@ -16,7 +16,8 @@ import (
 	"github.com/antimetal/agent/pkg/errors"
 	"github.com/antimetal/agent/pkg/resource"
 	gogoproto "github.com/gogo/protobuf/proto"
-	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
@@ -77,10 +78,12 @@ func (i *indexer) Update(ctx context.Context, obj object) error {
 
 	relsToAdd := make([]*resourcev1.Relationship, 0)
 	for _, rel := range rels {
-		pred, err := anypb.UnmarshalNew(rel.Predicate, proto.UnmarshalOptions{})
+		msgType, err := protoregistry.GlobalTypes.FindMessageByName(protoreflect.FullName(rel.Type.Type))
 		if err != nil {
-			return fmt.Errorf("failed to unmarshal predicate: %w", err)
+			return fmt.Errorf("failed to find message type %q in registry: %w", rel.Type.Type, err)
 		}
+		pred := msgType.New().Interface()
+
 		_, err = i.store.GetRelationships(rel.GetSubject(), rel.GetObject(), pred)
 		if err != nil {
 			if !errors.Is(err, resource.ErrRelationshipsNotFound) {
