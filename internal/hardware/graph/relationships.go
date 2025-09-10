@@ -20,8 +20,7 @@ import (
 var kindRelationship = string((&resourcev1.Relationship{}).ProtoReflect().Descriptor().FullName())
 
 // createContainsRelationship creates a containment relationship between two resources
-func (b *Builder) createContainsRelationship(subject, object *resourcev1.ResourceRef, containsType string) error {
-	// Map string containment type to protobuf enum
+func (b *Builder) createContainsRelationship(subject, object *resourcev1.ResourceRef, containsType string) (*resourcev1.Relationship, error) {
 	var containmentType hardwarev1.ContainmentType
 	switch containsType {
 	case "physical":
@@ -34,15 +33,13 @@ func (b *Builder) createContainsRelationship(subject, object *resourcev1.Resourc
 		containmentType = hardwarev1.ContainmentType_CONTAINMENT_TYPE_UNKNOWN
 	}
 
-	// Create containment relationship data using protobuf message
 	predicate := &hardwarev1.Contains{
 		Type: containmentType,
 	}
 
-	// Use protobuf marshaling instead of JSON
 	predicateAny, err := anypb.New(predicate)
 	if err != nil {
-		return fmt.Errorf("failed to marshal contains relationship data: %w", err)
+		return nil, fmt.Errorf("failed to marshal contains relationship data: %w", err)
 	}
 
 	relationship := &resourcev1.Relationship{
@@ -55,25 +52,19 @@ func (b *Builder) createContainsRelationship(subject, object *resourcev1.Resourc
 		Predicate: predicateAny,
 	}
 
-	if err := b.store.AddRelationships(relationship); err != nil {
-		return fmt.Errorf("failed to add containment relationship: %w", err)
-	}
-
-	return nil
+	return relationship, nil
 }
 
 // createNUMAAffinityRelationship creates a NUMA affinity relationship
-func (b *Builder) createNUMAAffinityRelationship(subject, object *resourcev1.ResourceRef, nodeID int32) error {
-	// Create NUMA affinity relationship data using protobuf message
+func (b *Builder) createNUMAAffinityRelationship(subject, object *resourcev1.ResourceRef, nodeID int32) (*resourcev1.Relationship, error) {
 	predicate := &hardwarev1.NUMAAffinity{
 		NodeId:   nodeID,
-		Distance: 0, // Local affinity, no distance
+		Distance: 0,
 	}
 
-	// Use protobuf marshaling instead of JSON
 	predicateAny, err := anypb.New(predicate)
 	if err != nil {
-		return fmt.Errorf("failed to marshal NUMA affinity relationship data: %w", err)
+		return nil, fmt.Errorf("failed to marshal NUMA affinity relationship data: %w", err)
 	}
 
 	relationship := &resourcev1.Relationship{
@@ -86,25 +77,19 @@ func (b *Builder) createNUMAAffinityRelationship(subject, object *resourcev1.Res
 		Predicate: predicateAny,
 	}
 
-	if err := b.store.AddRelationships(relationship); err != nil {
-		return fmt.Errorf("failed to add NUMA affinity relationship: %w", err)
-	}
-
-	return nil
+	return relationship, nil
 }
 
 // createSocketSharingRelationship creates a socket sharing relationship between CPU cores
-func (b *Builder) createSocketSharingRelationship(core1, core2 *resourcev1.ResourceRef, physicalID int32) error {
-	// Create socket sharing relationship data using protobuf message
+func (b *Builder) createSocketSharingRelationship(core1, core2 *resourcev1.ResourceRef, physicalID int32) (*resourcev1.Relationship, error) {
 	predicate := &hardwarev1.SocketSharing{
 		PhysicalId: physicalID,
-		SocketId:   physicalID, // Same as PhysicalID for consistency
+		SocketId:   physicalID,
 	}
 
-	// Use protobuf marshaling instead of JSON
 	predicateAny, err := anypb.New(predicate)
 	if err != nil {
-		return fmt.Errorf("failed to marshal socket sharing relationship data: %w", err)
+		return nil, fmt.Errorf("failed to marshal socket sharing relationship data: %w", err)
 	}
 
 	relationship := &resourcev1.Relationship{
@@ -117,25 +102,19 @@ func (b *Builder) createSocketSharingRelationship(core1, core2 *resourcev1.Resou
 		Predicate: predicateAny,
 	}
 
-	if err := b.store.AddRelationships(relationship); err != nil {
-		return fmt.Errorf("failed to add socket sharing relationship: %w", err)
-	}
-
-	return nil
+	return relationship, nil
 }
 
 // createNUMADistanceRelationship creates a NUMA distance relationship between NUMA nodes
-func (b *Builder) createNUMADistanceRelationship(sourceNode, targetNode *resourcev1.ResourceRef, sourceNodeID, targetNodeID, distance int32) error {
-	// Create NUMA distance relationship data using protobuf message
+func (b *Builder) createNUMADistanceRelationship(sourceNode, targetNode *resourcev1.ResourceRef, sourceNodeID, targetNodeID, distance int32) (*resourcev1.Relationship, error) {
 	predicate := &hardwarev1.NUMAAffinity{
-		NodeId:   targetNodeID, // Target node ID
-		Distance: distance,     // Distance metric
+		NodeId:   targetNodeID,
+		Distance: distance,
 	}
 
-	// Use protobuf marshaling instead of JSON
 	predicateAny, err := anypb.New(predicate)
 	if err != nil {
-		return fmt.Errorf("failed to marshal NUMA distance relationship data: %w", err)
+		return nil, fmt.Errorf("failed to marshal NUMA distance relationship data: %w", err)
 	}
 
 	relationship := &resourcev1.Relationship{
@@ -148,11 +127,7 @@ func (b *Builder) createNUMADistanceRelationship(sourceNode, targetNode *resourc
 		Predicate: predicateAny,
 	}
 
-	if err := b.store.AddRelationships(relationship); err != nil {
-		return fmt.Errorf("failed to add NUMA distance relationship: %w", err)
-	}
-
-	return nil
+	return relationship, nil
 }
 
 // inferDiskBusType infers the bus type from the disk device name
@@ -193,8 +168,7 @@ func (b *Builder) inferNetworkBusType(iface *performance.NetworkInfo) string {
 }
 
 // createBusConnectionRelationship creates a bus connection relationship
-func (b *Builder) createBusConnectionRelationship(device, system *resourcev1.ResourceRef, busType, busAddress string) error {
-	// Map string bus type to protobuf enum
+func (b *Builder) createBusConnectionRelationship(device, system *resourcev1.ResourceRef, busType, busAddress string) (*resourcev1.Relationship, error) {
 	var busTypeEnum hardwarev1.BusType
 	switch busType {
 	case "pci":
@@ -219,16 +193,14 @@ func (b *Builder) createBusConnectionRelationship(device, system *resourcev1.Res
 		busTypeEnum = hardwarev1.BusType_BUS_TYPE_UNKNOWN
 	}
 
-	// Create bus connection relationship data using protobuf message
 	predicate := &hardwarev1.ConnectedTo{
 		BusType:    busTypeEnum,
 		BusAddress: busAddress,
 	}
 
-	// Use protobuf marshaling instead of JSON
 	predicateAny, err := anypb.New(predicate)
 	if err != nil {
-		return fmt.Errorf("failed to marshal bus connection relationship data: %w", err)
+		return nil, fmt.Errorf("failed to marshal bus connection relationship data: %w", err)
 	}
 
 	relationship := &resourcev1.Relationship{
@@ -241,9 +213,5 @@ func (b *Builder) createBusConnectionRelationship(device, system *resourcev1.Res
 		Predicate: predicateAny,
 	}
 
-	if err := b.store.AddRelationships(relationship); err != nil {
-		return fmt.Errorf("failed to add bus connection relationship: %w", err)
-	}
-
-	return nil
+	return relationship, nil
 }

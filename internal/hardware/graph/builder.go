@@ -8,12 +8,15 @@ package graph
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/antimetal/agent/pkg/resource"
 	"github.com/go-logr/logr"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
 // Builder constructs the hardware graph from performance collector data
@@ -81,11 +84,10 @@ func (b *Builder) BuildFromSnapshot(ctx context.Context, snapshot *performance.S
 
 // buildCPUTopology builds the CPU nodes and relationships
 func (b *Builder) buildCPUTopology(ctx context.Context, cpuInfo *performance.CPUInfo, systemRef *resourcev1.ResourceRef) error {
-	// Track unique physical packages and cores by socket
+	relationships := make([]*resourcev1.Relationship, 0)
 	packages := make(map[int32]*resourcev1.ResourceRef)
 	coresBySocket := make(map[int32][]*resourcev1.ResourceRef)
 
-	// Create CPU package nodes
 	for _, core := range cpuInfo.Cores {
 		if _, exists := packages[core.PhysicalID]; !exists {
 			pkg, pkgRef, err := b.createCPUPackageNode(cpuInfo, core.PhysicalID, systemRef)
@@ -99,14 +101,14 @@ func (b *Builder) buildCPUTopology(ctx context.Context, cpuInfo *performance.CPU
 
 			packages[core.PhysicalID] = pkgRef
 
-			// Create containment relationship: System -> CPU Package
-			if err := b.createContainsRelationship(systemRef, pkgRef, "physical"); err != nil {
+			rel, err := b.createContainsRelationship(systemRef, pkgRef, "physical")
+			if err != nil {
 				return fmt.Errorf("failed to create system->package relationship: %w", err)
 			}
+			relationships = append(relationships, rel)
 		}
 	}
 
-	// Create CPU core nodes
 	for _, core := range cpuInfo.Cores {
 		coreNode, coreRef, err := b.createCPUCoreNode(&core, systemRef)
 		if err != nil {
@@ -117,27 +119,34 @@ func (b *Builder) buildCPUTopology(ctx context.Context, cpuInfo *performance.CPU
 			return fmt.Errorf("failed to add CPU core: %w", err)
 		}
 
-		// Track cores by socket for SharesSocket relationships
 		coresBySocket[core.PhysicalID] = append(coresBySocket[core.PhysicalID], coreRef)
 
-		// Create containment relationship: CPU Package -> CPU Core
 		if packageRef, exists := packages[core.PhysicalID]; exists {
-			if err := b.createContainsRelationship(packageRef, coreRef, "physical"); err != nil {
+			rel, err := b.createContainsRelationship(packageRef, coreRef, "physical")
+			if err != nil {
 				return fmt.Errorf("failed to create package->core relationship: %w", err)
+			}
+			relationships = append(relationships, rel)
+		}
+	}
+
+	for physicalID, cores := range coresBySocket {
+		for i, core1 := range cores {
+			for j, core2 := range cores {
+				if i != j {
+					rel, err := b.createSocketSharingRelationship(core1, core2, physicalID)
+					if err != nil {
+						return fmt.Errorf("failed to create socket sharing relationship: %w", err)
+					}
+					relationships = append(relationships, rel)
+				}
 			}
 		}
 	}
 
-	// Create SharesSocket relationships between cores on the same physical socket
-	for physicalID, cores := range coresBySocket {
-		for i, core1 := range cores {
-			for j, core2 := range cores {
-				if i != j { // Don't create self-relationships
-					if err := b.createSocketSharingRelationship(core1, core2, physicalID); err != nil {
-						return fmt.Errorf("failed to create socket sharing relationship: %w", err)
-					}
-				}
-			}
+	if len(relationships) > 0 {
+		if err := b.addRelationships(relationships...); err != nil {
+			return fmt.Errorf("failed to add CPU topology relationships: %w", err)
 		}
 	}
 
@@ -146,7 +155,7 @@ func (b *Builder) buildCPUTopology(ctx context.Context, cpuInfo *performance.CPU
 
 // buildMemoryTopology builds memory nodes and relationships
 func (b *Builder) buildMemoryTopology(ctx context.Context, memInfo *performance.MemoryInfo, systemRef *resourcev1.ResourceRef) error {
-	// Create memory module node
+	relationships := make([]*resourcev1.Relationship, 0)
 	memNode, memRef, err := b.createMemoryModuleNode(memInfo, systemRef)
 	if err != nil {
 		return fmt.Errorf("failed to create memory node: %w", err)
@@ -156,18 +165,16 @@ func (b *Builder) buildMemoryTopology(ctx context.Context, memInfo *performance.
 		return fmt.Errorf("failed to add memory node: %w", err)
 	}
 
-	// Create containment relationship: System -> Memory Module
-	if err := b.createContainsRelationship(systemRef, memRef, "physical"); err != nil {
+	rel, err := b.createContainsRelationship(systemRef, memRef, "physical")
+	if err != nil {
 		return fmt.Errorf("failed to create system->memory relationship: %w", err)
 	}
+	relationships = append(relationships, rel)
 
-	// Create NUMA nodes if enabled
 	if memInfo.NUMAEnabled {
-		// Track NUMA node references for distance relationships
 		numaRefs := make(map[int32]*resourcev1.ResourceRef)
 		numaNodes := make(map[int32]*performance.NUMANode)
 
-		// First pass: create all NUMA nodes
 		for _, numaNode := range memInfo.NUMANodes {
 			numa, numaRef, err := b.createNUMANode(&numaNode, systemRef)
 			if err != nil {
@@ -178,32 +185,39 @@ func (b *Builder) buildMemoryTopology(ctx context.Context, memInfo *performance.
 				return fmt.Errorf("failed to add NUMA node: %w", err)
 			}
 
-			// Track for distance relationships
 			numaRefs[numaNode.NodeID] = numaRef
 			numaNodes[numaNode.NodeID] = &numaNode
 
-			// Create containment relationship: System -> NUMA Node
-			if err := b.createContainsRelationship(systemRef, numaRef, "logical"); err != nil {
+			rel, err := b.createContainsRelationship(systemRef, numaRef, "logical")
+			if err != nil {
 				return fmt.Errorf("failed to create system->numa relationship: %w", err)
 			}
+			relationships = append(relationships, rel)
 
-			// Create NUMA affinity relationship: Memory Module -> NUMA Node
-			if err := b.createNUMAAffinityRelationship(memRef, numaRef, numaNode.NodeID); err != nil {
+			rel, err = b.createNUMAAffinityRelationship(memRef, numaRef, numaNode.NodeID)
+			if err != nil {
 				return fmt.Errorf("failed to create memory->numa affinity: %w", err)
 			}
+			relationships = append(relationships, rel)
 		}
 
-		// Second pass: create NUMA distance relationships between nodes
 		for nodeID, nodeRef := range numaRefs {
 			node := numaNodes[nodeID]
-			// Create distance relationships to other NUMA nodes
 			for otherNodeID, distance := range node.Distances {
 				if otherNodeRef, exists := numaRefs[int32(otherNodeID)]; exists && nodeID != int32(otherNodeID) {
-					if err := b.createNUMADistanceRelationship(nodeRef, otherNodeRef, nodeID, int32(otherNodeID), int32(distance)); err != nil {
+					rel, err := b.createNUMADistanceRelationship(nodeRef, otherNodeRef, nodeID, int32(otherNodeID), int32(distance))
+					if err != nil {
 						return fmt.Errorf("failed to create NUMA distance relationship %d->%d: %w", nodeID, otherNodeID, err)
 					}
+					relationships = append(relationships, rel)
 				}
 			}
+		}
+	}
+
+	if len(relationships) > 0 {
+		if err := b.addRelationships(relationships...); err != nil {
+			return fmt.Errorf("failed to add memory topology relationships: %w", err)
 		}
 	}
 
@@ -212,8 +226,8 @@ func (b *Builder) buildMemoryTopology(ctx context.Context, memInfo *performance.
 
 // buildDiskTopology builds disk device and partition nodes and relationships
 func (b *Builder) buildDiskTopology(ctx context.Context, diskInfo []*performance.DiskInfo, systemRef *resourcev1.ResourceRef) error {
+	relationships := make([]*resourcev1.Relationship, 0)
 	for _, disk := range diskInfo {
-		// Create disk device node
 		diskNode, diskRef, err := b.createDiskDeviceNode(disk, systemRef)
 		if err != nil {
 			return fmt.Errorf("failed to create disk node: %w", err)
@@ -223,18 +237,19 @@ func (b *Builder) buildDiskTopology(ctx context.Context, diskInfo []*performance
 			return fmt.Errorf("failed to add disk node: %w", err)
 		}
 
-		// Create containment relationship: System -> Disk Device
-		if err := b.createContainsRelationship(systemRef, diskRef, "physical"); err != nil {
+		rel, err := b.createContainsRelationship(systemRef, diskRef, "physical")
+		if err != nil {
 			return fmt.Errorf("failed to create system->disk relationship: %w", err)
 		}
+		relationships = append(relationships, rel)
 
-		// Create bus connection relationship: Disk Device -> System (via hardware bus)
 		busType := b.inferDiskBusType(disk.Device)
-		if err := b.createBusConnectionRelationship(diskRef, systemRef, busType, ""); err != nil {
+		rel, err = b.createBusConnectionRelationship(diskRef, systemRef, busType, "")
+		if err != nil {
 			return fmt.Errorf("failed to create disk->system bus relationship: %w", err)
 		}
+		relationships = append(relationships, rel)
 
-		// Create partition nodes
 		for _, partition := range disk.Partitions {
 			partNode, partRef, err := b.createDiskPartitionNode(&partition, disk.Device, systemRef)
 			if err != nil {
@@ -245,10 +260,17 @@ func (b *Builder) buildDiskTopology(ctx context.Context, diskInfo []*performance
 				return fmt.Errorf("failed to add partition node: %w", err)
 			}
 
-			// Create containment relationship: Disk Device -> Partition
-			if err := b.createContainsRelationship(diskRef, partRef, "partition"); err != nil {
+			rel, err := b.createContainsRelationship(diskRef, partRef, "partition")
+			if err != nil {
 				return fmt.Errorf("failed to create disk->partition relationship: %w", err)
 			}
+			relationships = append(relationships, rel)
+		}
+	}
+
+	if len(relationships) > 0 {
+		if err := b.addRelationships(relationships...); err != nil {
+			return fmt.Errorf("failed to add disk topology relationships: %w", err)
 		}
 	}
 
@@ -257,8 +279,8 @@ func (b *Builder) buildDiskTopology(ctx context.Context, diskInfo []*performance
 
 // buildNetworkTopology builds network interface nodes and relationships
 func (b *Builder) buildNetworkTopology(ctx context.Context, netInfo []*performance.NetworkInfo, systemRef *resourcev1.ResourceRef) error {
+	relationships := make([]*resourcev1.Relationship, 0)
 	for _, iface := range netInfo {
-		// Create network interface node
 		netNode, netRef, err := b.createNetworkInterfaceNode(iface, systemRef)
 		if err != nil {
 			return fmt.Errorf("failed to create network node: %w", err)
@@ -268,17 +290,50 @@ func (b *Builder) buildNetworkTopology(ctx context.Context, netInfo []*performan
 			return fmt.Errorf("failed to add network node: %w", err)
 		}
 
-		// Create containment relationship: System -> Network Interface
-		if err := b.createContainsRelationship(systemRef, netRef, "physical"); err != nil {
+		rel, err := b.createContainsRelationship(systemRef, netRef, "physical")
+		if err != nil {
 			return fmt.Errorf("failed to create system->network relationship: %w", err)
 		}
+		relationships = append(relationships, rel)
 
-		// Create bus connection relationship: Network Interface -> System (via hardware bus)
 		busType := b.inferNetworkBusType(iface)
-		if err := b.createBusConnectionRelationship(netRef, systemRef, busType, ""); err != nil {
+		rel, err = b.createBusConnectionRelationship(netRef, systemRef, busType, "")
+		if err != nil {
 			return fmt.Errorf("failed to create network->system bus relationship: %w", err)
+		}
+		relationships = append(relationships, rel)
+	}
+
+	if len(relationships) > 0 {
+		if err := b.addRelationships(relationships...); err != nil {
+			return fmt.Errorf("failed to add network topology relationships: %w", err)
 		}
 	}
 
+	return nil
+}
+
+func (b *Builder) addRelationships(rels ...*resourcev1.Relationship) error {
+	relsToAdd := make([]*resourcev1.Relationship, 0)
+	for _, rel := range rels {
+		msgType, err := protoregistry.GlobalTypes.FindMessageByName(protoreflect.FullName(rel.Type.Type))
+		if err != nil {
+			return fmt.Errorf("failed to find message type %q in registry: %w", rel.Type.Type, err)
+		}
+		pred := msgType.New().Interface()
+
+		_, err = b.store.GetRelationships(rel.GetSubject(), rel.GetObject(), pred)
+		if err != nil {
+			if !errors.Is(err, resource.ErrRelationshipsNotFound) {
+				return fmt.Errorf("failed to find existing relationships: %w", err)
+			}
+			relsToAdd = append(relsToAdd, rel)
+		}
+	}
+	if len(relsToAdd) > 0 {
+		if err := b.store.AddRelationships(relsToAdd...); err != nil {
+			return fmt.Errorf("failed to add relationship: %w", err)
+		}
+	}
 	return nil
 }
