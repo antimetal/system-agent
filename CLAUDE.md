@@ -316,12 +316,13 @@ func TestEBPFFeature(t *testing.T) {
 
 ### Code Style
 
-#### Go Code
+#### Golang
 - **Early returns** to reduce nesting
 - **Functional patterns** where applicable
 - **Concise implementations** without unnecessary comments
 - **Error wrapping** with context
-- **Format with `make fmt`** before committing
+- **ALWAYS use `any` instead of `interface{}`**
+- **ALWAYS format with `make fmt`** before committing
 
 #### C/C++ and eBPF Code
 - **Google C++ Style** as base (via `.clang-format`)
