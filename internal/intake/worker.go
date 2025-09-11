@@ -21,7 +21,7 @@ import (
 
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	intakev1 "github.com/antimetal/agent/pkg/api/service/resource/v1"
-	"github.com/antimetal/agent/pkg/resource"
+	"github.com/antimetal/agent/internal/resource"
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
