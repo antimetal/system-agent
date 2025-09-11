@@ -14,7 +14,7 @@ import (
 
 	"github.com/antimetal/agent/internal/hardware/graph"
 	"github.com/antimetal/agent/pkg/performance"
-	"github.com/antimetal/agent/pkg/resource"
+	"github.com/antimetal/agent/internal/resource"
 	"github.com/go-logr/logr"
 )
 

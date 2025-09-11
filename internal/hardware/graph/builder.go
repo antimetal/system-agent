@@ -12,7 +12,7 @@ import (
 
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"github.com/antimetal/agent/pkg/performance"
-	"github.com/antimetal/agent/pkg/resource"
+	"github.com/antimetal/agent/internal/resource"
 	"github.com/go-logr/logr"
 )
 

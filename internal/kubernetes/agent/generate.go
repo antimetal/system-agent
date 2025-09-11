@@ -13,7 +13,7 @@ import (
 	k8sv1 "github.com/antimetal/agent/pkg/api/kubernetes/v1"
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"github.com/antimetal/agent/pkg/errors"
-	"github.com/antimetal/agent/pkg/resource"
+	"github.com/antimetal/agent/internal/resource"
 	gogoproto "github.com/gogo/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	appsv1 "k8s.io/api/apps/v1"
