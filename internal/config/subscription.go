@@ -44,6 +44,10 @@ func (s *subscriptions) add(filters Filters) chan Instance {
 		return nil
 	}
 
+	if filters.Status == 0 {
+		filters.Status = StatusOK
+	}
+
 	ch := make(chan Instance, 10)
 	s.subs = append(s.subs, subscription{
 		ch:      ch,

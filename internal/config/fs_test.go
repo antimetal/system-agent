@@ -288,6 +288,7 @@ func TestFSLoader_GetConfig(t *testing.T) {
 func TestFSLoader_FileChangeSubscription(t *testing.T) {
 	tests := []struct {
 		name          string
+		filters       config.Filters
 		initialConfig string
 		updatedConfig string
 		expectUpdate  bool
@@ -303,6 +304,7 @@ func TestFSLoader_FileChangeSubscription(t *testing.T) {
 		},
 		{
 			name:          "invalid JSON",
+			filters:       config.Filters{Status: config.StatusOK | config.StatusInvalid},
 			initialConfig: createHostStatsJSON("config1", "cpu"),
 			updatedConfig: `{"invalid": json}`,
 			expectUpdate:  true,
@@ -311,6 +313,7 @@ func TestFSLoader_FileChangeSubscription(t *testing.T) {
 		},
 		{
 			name:          "empty file",
+			filters:       config.Filters{Status: config.StatusOK | config.StatusInvalid},
 			initialConfig: createHostStatsJSON("config1", "cpu"),
 			updatedConfig: ``,
 			expectUpdate:  true,
@@ -319,6 +322,7 @@ func TestFSLoader_FileChangeSubscription(t *testing.T) {
 		},
 		{
 			name:          "missing type",
+			filters:       config.Filters{Status: config.StatusOK | config.StatusInvalid},
 			initialConfig: createHostStatsJSON("config1", "cpu"),
 			updatedConfig: `{"name":"config1","version":"2"}`,
 			expectUpdate:  true,
@@ -343,7 +347,7 @@ func TestFSLoader_FileChangeSubscription(t *testing.T) {
 			require.NoError(t, err)
 			defer fl.Close()
 
-			instanceCh := fl.Watch(config.Options{})
+			instanceCh := fl.Watch(config.Options{Filters: tt.filters})
 
 			// Drain initial config from subscription (loaded at startup)
 			select {
