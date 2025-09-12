@@ -128,7 +128,7 @@ test: test-unit test-integration ## Run all tests (unit and integration).
 .PHONY: test-unit
 test-unit: generate ## Run unit tests with coverage.
 	@mkdir -p coverage
-	go test -tags '!integration' ./... -v -timeout 30s -coverprofile=coverage/coverage-unit.out -covermode=atomic
+	go test ./... -v -timeout 30s -coverprofile=coverage/coverage-unit.out -covermode=atomic
 	@echo "Unit test coverage saved to coverage/coverage-unit.out"
 
 .PHONY: test-integration
@@ -305,8 +305,8 @@ preview-deploy: manifests kustomize ## Generate a consolidated YAML for deployme
 	@rm -r $(ROOT)/tmp
 
 .PHONY: cluster
-cluster: kind kustomize ## Build a KIND cluster which can be used for testing and development.
-	PATH="$(LOCALBIN):${PATH}" $(KIND) create cluster --name $(KIND_CLUSTER) --config config/cluster.yaml
+cluster: kind kustomize ## Build a KIND cluster using topology configuration for testing and development.
+	PATH="$(LOCALBIN):${PATH}" $(KIND) create cluster --config config/kind-topology-cluster.yaml --name $(KIND_CLUSTER)
 
 .PHONY: delete-cluster
 destroy-cluster: kind ## Delete the KIND cluster.

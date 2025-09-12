@@ -1,0 +1,334 @@
+// Copyright Antimetal, Inc. All rights reserved.
+//
+// Use of this source code is governed by a source available license that can be found in the
+// LICENSE file or at:
+// https://polyformproject.org/wp-content/uploads/2020/06/PolyForm-Shield-1.0.0.txt
+
+// Package containers provides container and process discovery and graph building.
+// This package is responsible for discovering runtime resources (containers, processes)
+// and building their relationships in the resource graph.
+package containers
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
+
+	"github.com/antimetal/agent/internal/containers/graph"
+	pkgcontainers "github.com/antimetal/agent/pkg/containers"
+	"github.com/antimetal/agent/pkg/performance"
+	"github.com/antimetal/agent/pkg/resource"
+	"github.com/go-logr/logr"
+)
+
+// Manager coordinates runtime (container/process) discovery and graph building
+type Manager struct {
+	logger      logr.Logger
+	store       resource.Store
+	perfManager *performance.Manager
+	builder     *graph.Builder
+	discovery   *pkgcontainers.Discovery
+
+	interval   time.Duration
+	lastUpdate time.Time
+	mu         sync.RWMutex
+
+	// Metrics for monitoring discovery performance
+	metrics *DiscoveryMetrics
+}
+
+// DiscoveryMetrics tracks performance metrics for runtime discovery
+type DiscoveryMetrics struct {
+	mu                     sync.RWMutex
+	LastDiscoveryDuration  time.Duration
+	LastContainerCount     int
+	LastProcessCount       int
+	LastDiscoveryErrors    int
+	TotalDiscoveries       uint64
+	TotalDiscoveryErrors   uint64
+	LastDiscoveryTimestamp time.Time
+}
+
+type ManagerConfig struct {
+	UpdateInterval     time.Duration
+	Store              resource.Store
+	PerformanceManager *performance.Manager
+	CgroupPath         string
+}
+
+func NewManager(logger logr.Logger, config ManagerConfig) (*Manager, error) {
+	if config.Store == nil {
+		return nil, fmt.Errorf("resource store is required")
+	}
+	if config.PerformanceManager == nil {
+		return nil, fmt.Errorf("performance manager is required")
+	}
+
+	interval := config.UpdateInterval
+	if interval == 0 {
+		interval = 30 * time.Second
+	}
+
+	// Determine cgroup path, respecting HOST_SYS environment variable
+	cgroupPath := config.CgroupPath
+	if cgroupPath == "" {
+		// Check for HOST_SYS environment variable (for containerized environments)
+		if hostSys := os.Getenv("HOST_SYS"); hostSys != "" {
+			cgroupPath = filepath.Join(hostSys, "fs", "cgroup")
+		} else {
+			cgroupPath = "/sys/fs/cgroup"
+		}
+	}
+
+	return &Manager{
+		logger:      logger.WithName("containers-manager"),
+		store:       config.Store,
+		perfManager: config.PerformanceManager,
+		builder:     graph.NewBuilder(logger, config.Store),
+		discovery:   pkgcontainers.NewDiscovery(cgroupPath),
+		interval:    interval,
+		metrics:     &DiscoveryMetrics{},
+	}, nil
+}
+
+// Start begins runtime discovery and graph building
+// Implements controller-runtime's Runnable interface
+func (m *Manager) Start(ctx context.Context) error {
+	m.logger.Info("Starting containers manager", "interval", m.interval)
+
+	// Do an initial runtime discovery
+	if err := m.updateRuntimeGraph(ctx); err != nil {
+		m.logger.Error(err, "Failed initial runtime discovery")
+		// Don't fail startup on initial discovery error
+	}
+
+	// Run periodic updates until context is cancelled
+	m.runPeriodicUpdates(ctx)
+
+	return nil
+}
+
+func (m *Manager) runPeriodicUpdates(ctx context.Context) {
+	ticker := time.NewTicker(m.interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			m.logger.Info("Stopping containers manager")
+			return
+		case <-ticker.C:
+			if err := m.updateRuntimeGraph(ctx); err != nil {
+				m.logger.Error(err, "Failed to update runtime graph")
+			}
+		}
+	}
+}
+
+func (m *Manager) updateRuntimeGraph(ctx context.Context) error {
+	startTime := time.Now()
+	m.logger.V(1).Info("Updating runtime graph")
+
+	// Track discovery attempt
+	errorCount := 0
+
+	// Collect a snapshot of all runtime information
+	snapshot, err := m.collectRuntimeSnapshot(ctx)
+	if err != nil {
+		errorCount++
+		m.updateMetrics(startTime, nil, errorCount)
+		return fmt.Errorf("failed to collect runtime snapshot: %w", err)
+	}
+
+	// Build the runtime graph from the snapshot
+	buildCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	if err := m.builder.BuildFromSnapshot(buildCtx, snapshot); err != nil {
+		errorCount++
+		m.updateMetrics(startTime, snapshot, errorCount)
+		return fmt.Errorf("failed to build runtime graph: %w", err)
+	}
+
+	// Update metrics with successful discovery
+	m.updateMetrics(startTime, snapshot, errorCount)
+
+	// Update last update time
+	m.mu.Lock()
+	m.lastUpdate = time.Now()
+	m.mu.Unlock()
+
+	// Log with metrics
+	duration := time.Since(startTime)
+	m.logger.V(1).Info("Runtime graph updated successfully",
+		"duration", duration,
+		"containers", len(snapshot.Containers),
+		"processes", len(snapshot.ProcessStats.Processes))
+	return nil
+}
+
+// RuntimeSnapshot contains all runtime information collected at a point in time
+type RuntimeSnapshot struct {
+	Timestamp    time.Time
+	Containers   []pkgcontainers.Container
+	ProcessStats *performance.ProcessSnapshot
+}
+
+// Compile-time interface implementation checks
+var _ graph.RuntimeSnapshot = (*RuntimeSnapshot)(nil)
+
+// GetContainers implements the graph.RuntimeSnapshot interface
+func (s *RuntimeSnapshot) GetContainers() []graph.ContainerInfo {
+	containerInfos := make([]graph.ContainerInfo, len(s.Containers))
+
+	for i, container := range s.Containers {
+		containerInfo := graph.ContainerInfo{
+			ID:            container.ID,
+			Runtime:       container.Runtime,
+			CgroupVersion: container.CgroupVersion,
+			CgroupPath:    container.CgroupPath,
+		}
+
+		containerInfos[i] = containerInfo
+	}
+
+	return containerInfos
+}
+
+// GetProcesses implements the graph.RuntimeSnapshot interface
+func (s *RuntimeSnapshot) GetProcesses() []graph.ProcessInfo {
+	if s.ProcessStats == nil {
+		return []graph.ProcessInfo{}
+	}
+
+	processInfos := make([]graph.ProcessInfo, len(s.ProcessStats.Processes))
+
+	for i, process := range s.ProcessStats.Processes {
+		processInfos[i] = graph.ProcessInfo{
+			PID:     process.PID,
+			PPID:    process.PPID,
+			PGID:    process.PGID,
+			SID:     process.SID,
+			Command: process.Command,
+			Cmdline: process.Cmdline,
+			State:   process.State,
+		}
+	}
+
+	return processInfos
+}
+
+func (m *Manager) collectRuntimeSnapshot(ctx context.Context) (*RuntimeSnapshot, error) {
+	startTime := time.Now()
+
+	allContainers, err := m.discovery.DiscoverAllContainers()
+	if err != nil {
+		m.logger.Error(err, "Failed to discover containers")
+		// Continue with empty containers list rather than failing completely
+		allContainers = []pkgcontainers.Container{}
+	}
+
+	m.logger.V(1).Info("Discovered containers", "count", len(allContainers))
+
+	// Collect process information using the performance manager's configuration
+	// Since the performance manager doesn't expose running collectors yet,
+	// we create a process collector using the same config and invoke it for one-shot collection
+	var processSnapshot *performance.ProcessSnapshot
+
+	if factory, err := performance.GetCollector(performance.MetricTypeProcess); err == nil {
+		// Create process collector using the same config as performance manager
+		if processCollector, err := factory(m.logger, m.perfManager.GetConfig()); err == nil {
+			// Use the collector for a one-shot collection
+			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+
+			if dataChannel, err := processCollector.Start(ctx); err == nil {
+				// Read the first data point
+				// The collector will stop when ctx is cancelled
+				select {
+				case data := <-dataChannel:
+					if snapshot, ok := data.(*performance.ProcessSnapshot); ok {
+						processSnapshot = snapshot
+					}
+				case <-ctx.Done():
+					m.logger.V(1).Info("Process collection timed out")
+					// The collector will stop due to context cancellation
+				}
+			}
+		}
+	}
+
+	// Fallback to empty snapshot if collection failed
+	if processSnapshot == nil {
+		processSnapshot = &performance.ProcessSnapshot{
+			Timestamp: startTime,
+			Processes: []performance.ProcessStats{},
+		}
+	}
+
+	snapshot := &RuntimeSnapshot{
+		Timestamp:    startTime,
+		Containers:   allContainers,
+		ProcessStats: processSnapshot,
+	}
+
+	m.logger.V(1).Info("Runtime snapshot collected successfully",
+		"duration", time.Since(startTime),
+		"containers", len(allContainers))
+
+	return snapshot, nil
+}
+
+func (m *Manager) GetLastUpdateTime() time.Time {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.lastUpdate
+}
+
+func (m *Manager) ForceUpdate(ctx context.Context) error {
+	return m.updateRuntimeGraph(ctx)
+}
+
+// updateMetrics updates discovery performance metrics
+func (m *Manager) updateMetrics(startTime time.Time, snapshot *RuntimeSnapshot, errorCount int) {
+	duration := time.Since(startTime)
+
+	m.metrics.mu.Lock()
+	defer m.metrics.mu.Unlock()
+
+	m.metrics.LastDiscoveryDuration = duration
+	m.metrics.LastDiscoveryTimestamp = startTime
+	m.metrics.LastDiscoveryErrors = errorCount
+	m.metrics.TotalDiscoveries++
+
+	if errorCount > 0 {
+		m.metrics.TotalDiscoveryErrors += uint64(errorCount)
+	}
+
+	if snapshot != nil {
+		m.metrics.LastContainerCount = len(snapshot.Containers)
+		if snapshot.ProcessStats != nil {
+			m.metrics.LastProcessCount = len(snapshot.ProcessStats.Processes)
+		}
+	}
+}
+
+// GetMetrics returns a copy of the current discovery metrics
+func (m *Manager) GetMetrics() DiscoveryMetrics {
+	m.metrics.mu.RLock()
+	defer m.metrics.mu.RUnlock()
+
+	// Return a copy to avoid race conditions
+	return DiscoveryMetrics{
+		LastDiscoveryDuration:  m.metrics.LastDiscoveryDuration,
+		LastContainerCount:     m.metrics.LastContainerCount,
+		LastProcessCount:       m.metrics.LastProcessCount,
+		LastDiscoveryErrors:    m.metrics.LastDiscoveryErrors,
+		TotalDiscoveries:       m.metrics.TotalDiscoveries,
+		TotalDiscoveryErrors:   m.metrics.TotalDiscoveryErrors,
+		LastDiscoveryTimestamp: m.metrics.LastDiscoveryTimestamp,
+	}
+}
