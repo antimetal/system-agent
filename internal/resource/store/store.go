@@ -661,8 +661,8 @@ func (s *store) sendInitialObjects(subscriber *subscriber) {
 					objs = append(objs, &resourcev1.Object{
 						Type: r.GetType(),
 						Object: &anypb.Any{
-							TypeUrl: fmt.Sprintf("%s/%s", "type.googleapis.com", r.GetType().GetType()),
-							Value:   val,
+							TypeUrl: fmt.Sprintf("%s/%s", "type.googleapis.com", proto.MessageName(r)),
+							Value:   bytes.Clone(val),
 						},
 					})
 				}
@@ -682,8 +682,11 @@ func (s *store) sendInitialObjects(subscriber *subscriber) {
 				}
 				if subscriber.match(rel.GetType()) {
 					objs = append(objs, &resourcev1.Object{
-						Type:   rel.GetType(),
-						Object: &anypb.Any{Value: val},
+						Type: rel.GetType(),
+						Object: &anypb.Any{
+							TypeUrl: fmt.Sprintf("%s/%s", "type.googleapis.com", proto.MessageName(rel)),
+							Value:   bytes.Clone(val),
+						},
 					})
 				}
 				return nil
