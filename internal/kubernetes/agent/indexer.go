@@ -11,10 +11,10 @@ import (
 	"fmt"
 
 	"github.com/antimetal/agent/internal/kubernetes/cluster"
+	"github.com/antimetal/agent/internal/resource"
 	k8sv1 "github.com/antimetal/agent/pkg/api/kubernetes/v1"
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"github.com/antimetal/agent/pkg/errors"
-	"github.com/antimetal/agent/internal/resource"
 	gogoproto "github.com/gogo/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"

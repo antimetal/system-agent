@@ -24,8 +24,8 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/antimetal/agent/pkg/errors"
 	"github.com/antimetal/agent/internal/resource"
+	"github.com/antimetal/agent/pkg/errors"
 )
 
 const (

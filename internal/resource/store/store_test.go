@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/antimetal/agent/internal/resource"
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"github.com/antimetal/agent/pkg/errors"
-	"github.com/antimetal/agent/internal/resource"
 	"github.com/go-logr/logr"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"

@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/antimetal/agent/pkg/errors"
 	"github.com/antimetal/agent/internal/resource"
+	"github.com/antimetal/agent/pkg/errors"
 	"github.com/go-logr/logr"
 	gogoproto "github.com/gogo/protobuf/proto"
 	"golang.org/x/sync/errgroup"
