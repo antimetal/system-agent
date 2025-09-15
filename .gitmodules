@@ -1,0 +1,4 @@
+[submodule "the-wiki"]
+	path = .wiki
+	url = git@github.com:antimetal/system-agent.wiki.git
+	branch = master

@@ -353,3 +353,80 @@ The Antimetal Agent supports eBPF-based collectors for deep kernel observability
 - `make generate-ebpf-bindings` - Generate Go bindings from eBPF C code
 
 For detailed eBPF development guidance including CO-RE support, adding new programs, troubleshooting, and best practices, see **[docs/ebpf-development.md](docs/ebpf-development.md)**.
+
+## Wiki Documentation Integration
+
+The project maintains comprehensive documentation in a GitHub Wiki, available as a git submodule in the `.wiki/` directory.
+
+### Wiki-Keeper Agent
+
+**IMPORTANT**: Always use the `wiki-keeper` agent for ALL wiki operations via the Task tool. This specialized agent:
+- Dynamically reads `.wiki/CLAUDE.md` for current conventions
+- Searches, analyzes, updates, and creates documentation  
+- Returns concise summaries without loading full content
+- Reduces context usage significantly
+
+#### When to Use Wiki-Keeper
+
+Use the wiki-keeper agent for:
+- **Searching documentation** before implementing features
+- **Checking if features are documented**
+- **Updating documentation** after code changes
+- **Creating new documentation** for new features
+- **Analyzing documentation completeness**
+- **Finding architecture decisions and design patterns**
+
+#### Example Usage
+
+```python
+Task(
+    subagent_type="general-purpose",
+    description="Search wiki for [topic]",
+    prompt="""
+    You are the wiki-keeper agent. Your instructions are in .claude/agents/wiki-keeper.md.
+    Work from the .wiki/ directory.
+    IMPORTANT: First read .wiki/CLAUDE.md for wiki-specific conventions.
+    
+    Task: [Your specific task here]
+    Context: [Any relevant context about code changes]
+    Return: [What you need back - summaries, locations, gaps, etc.]
+    """
+)
+```
+
+The wiki-keeper returns structured responses with file paths, brief summaries, and specific recommendations.
+
+#### Best Practices
+
+1. **Always use wiki-keeper** instead of reading wiki files directly
+2. **Provide context** about code changes when requesting updates
+3. **Trust the agent's summaries** - avoid requesting full content
+
+### Git Operations
+
+```bash
+# ALWAYS pull latest wiki changes (not pinned to specific commit)
+git submodule update --remote --merge .wiki
+
+# Initialize wiki if cloning fresh
+git submodule init && git submodule update --remote .wiki
+
+# After wiki-keeper makes documentation changes
+cd .wiki && git add -A && git commit -m "docs: [description]" && git push
+cd ..
+
+# IMPORTANT: Avoid committing the .wiki submodule reference
+# If you see .wiki as modified in git status, DO NOT stage it
+git add .  # Stage your changes
+git reset .wiki  # Unstage the submodule reference
+git commit -m "your changes"  # Commit without updating wiki reference
+```
+
+**Important**: The wiki tracks the `master` branch and should always use the latest documentation, not a pinned commit. Use `--remote` flag to get latest changes.
+
+### Code References
+
+When referencing wiki documentation in code comments:
+```go
+// See wiki: Cgroup/Memory-Collector.md for algorithm details
+```
