@@ -149,6 +149,8 @@ func (c *controller) Start(ctx context.Context) error {
 		return fmt.Errorf("controller was started more than once. This can be caused by being added to a manager multiple times")
 	}
 
+	c.logger.V(1).Info("Starting controller")
+
 	major, minor, err := c.getKubeVersion()
 	if err != nil {
 		return fmt.Errorf("failed to get k8s version: %w", err)
@@ -183,10 +185,10 @@ func (c *controller) Shutdown() {
 	c.started = false
 }
 
-// Implements. sigs.k8s.io/controller-runtime/pkg/manager.LeaderElectionRunnable interface
-// so that the controller-runtime Manager knows that this controller needs leader election.
+// Implements sigs.k8s.io/controller-runtime/pkg/manager.LeaderElectionRunnable interface
+// Always returns false to disable leader election.
 func (c *controller) NeedLeaderElection() bool {
-	return true
+	return false
 }
 
 func (c *controller) indexWorker(ctx context.Context) {
