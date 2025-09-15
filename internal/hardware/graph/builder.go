@@ -11,9 +11,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/antimetal/agent/internal/resource"
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"github.com/antimetal/agent/pkg/performance"
-	"github.com/antimetal/agent/internal/resource"
 	"github.com/go-logr/logr"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"

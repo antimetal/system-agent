@@ -12,11 +12,11 @@ import (
 	"time"
 
 	"github.com/antimetal/agent/internal/hardware/graph"
+	"github.com/antimetal/agent/internal/resource"
+	"github.com/antimetal/agent/internal/resource/store"
 	hardwarev1 "github.com/antimetal/agent/pkg/api/antimetal/hardware/v1"
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"github.com/antimetal/agent/pkg/performance"
-	"github.com/antimetal/agent/internal/resource"
-	"github.com/antimetal/agent/internal/resource/store"
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -132,7 +132,7 @@ func TestBuilder_BuildFromSnapshot(t *testing.T) {
 				},
 			},
 			DiskInfo: []*performance.DiskInfo{
-				&performance.DiskInfo{
+				{
 					Device:            "nvme0n1",
 					Model:             "Amazon Elastic Block Store",
 					Vendor:            "NVMe",
@@ -152,7 +152,7 @@ func TestBuilder_BuildFromSnapshot(t *testing.T) {
 				},
 			},
 			NetworkInfo: []*performance.NetworkInfo{
-				&performance.NetworkInfo{
+				{
 					Interface:  "eth0",
 					MACAddress: "02:42:ac:11:00:02",
 					Speed:      10000, // 10Gbps

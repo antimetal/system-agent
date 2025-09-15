@@ -1,0 +1,10 @@
+run:
+  timeout: 10m
+
+output:
+  show-stats: true
+
+linters:
+  default: standard
+  enable:
+    - gofmt

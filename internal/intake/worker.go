@@ -19,9 +19,9 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
+	"github.com/antimetal/agent/internal/resource"
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	intakev1 "github.com/antimetal/agent/pkg/api/service/resource/v1"
-	"github.com/antimetal/agent/internal/resource"
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"

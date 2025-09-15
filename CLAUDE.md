@@ -127,6 +127,7 @@ Always run `make generate` after:
 - Mock external dependencies (gRPC, AWS, K8s)
 
 #### Git Commits and PRs
+- **ALWAYS** run `make lint-fix` before creating a commit
 - **ALWAYS** use the `commit-author` agent for creating commit messages, reviewing commits, or generating PR descriptions
 - The agent ensures compliance with project commit conventions and formatting standards
 
