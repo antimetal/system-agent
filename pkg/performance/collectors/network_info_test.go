@@ -289,7 +289,7 @@ func TestNetworkInfoCollector_Collect(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			interfaces, ok := result.([]*performance.NetworkInfo)
+			interfaces, ok := result.Data.([]*performance.NetworkInfo)
 			require.True(t, ok, "Expected []*performance.NetworkInfo, got %T", result)
 
 			if tt.wantInfo != nil {
@@ -379,7 +379,7 @@ func TestNetworkInfoCollector_InterfaceTypes(t *testing.T) {
 			result, err := collector.Collect(context.Background())
 			require.NoError(t, err)
 
-			interfaces, ok := result.([]*performance.NetworkInfo)
+			interfaces, ok := result.Data.([]*performance.NetworkInfo)
 			require.True(t, ok)
 			require.Len(t, interfaces, 1)
 

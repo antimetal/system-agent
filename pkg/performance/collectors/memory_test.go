@@ -359,7 +359,7 @@ func collectAndValidateMemory(t *testing.T, collector *MemoryCollector, wantErr 
 	}
 
 	require.NoError(t, err)
-	stats, ok := result.(*performance.MemoryStats)
+	stats, ok := result.Data.(*performance.MemoryStats)
 	require.True(t, ok)
 	return stats
 }

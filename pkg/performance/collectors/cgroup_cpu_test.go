@@ -85,7 +85,7 @@ func TestCgroupCPUCollector_CgroupV1(t *testing.T) {
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	stats, ok := result.([]performance.CgroupCPUStats)
+	stats, ok := result.Data.([]performance.CgroupCPUStats)
 	require.True(t, ok, "result should be []performance.CgroupCPUStats")
 	require.Len(t, stats, 2, "should find 2 containers")
 
@@ -125,7 +125,7 @@ func TestCgroupCPUCollector_CgroupV2(t *testing.T) {
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	stats, ok := result.([]performance.CgroupCPUStats)
+	stats, ok := result.Data.([]performance.CgroupCPUStats)
 	require.True(t, ok, "result should be []performance.CgroupCPUStats")
 	require.Len(t, stats, 2, "should find 2 containers")
 
@@ -190,7 +190,7 @@ throttled_time 1000000000`)
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	stats, ok := result.([]performance.CgroupCPUStats)
+	stats, ok := result.Data.([]performance.CgroupCPUStats)
 	require.True(t, ok)
 	require.Len(t, stats, 1)
 

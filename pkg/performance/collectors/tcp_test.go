@@ -66,7 +66,7 @@ func collectAndValidate(t *testing.T, collector *collectors.TCPCollector) *perfo
 	result, err := collector.Collect(ctx)
 	require.NoError(t, err)
 
-	stats, ok := result.(*performance.TCPStats)
+	stats, ok := result.Data.(*performance.TCPStats)
 	require.True(t, ok, "expected *performance.TCPStats, got %T", result)
 	require.NotNil(t, stats.ConnectionsByState)
 
@@ -684,7 +684,7 @@ TcpExt: 5 3 2 8 12 25 40 30 100
 		result1, err := collector.Collect(context.Background())
 		require.NoError(t, err)
 
-		stats1, ok := result1.(*performance.TCPStats)
+		stats1, ok := result1.Data.(*performance.TCPStats)
 		require.True(t, ok)
 
 		// Verify basic stats are collected
@@ -717,7 +717,7 @@ TcpExt: 7 4 3 10 15 30 45 35 110
 		result2, err := collector.Collect(context.Background())
 		require.NoError(t, err)
 
-		stats2, ok := result2.(*performance.TCPStats)
+		stats2, ok := result2.Data.(*performance.TCPStats)
 		require.True(t, ok)
 
 		// Verify updated stats
@@ -783,7 +783,7 @@ Tcp: 1 200 120000 -1 1000 500 10 5 50 100000 95000 200 0 15 0
 			result, err := collector.Collect(context.Background())
 			require.NoError(t, err)
 
-			stats, ok := result.(*performance.TCPStats)
+			stats, ok := result.Data.(*performance.TCPStats)
 			require.True(t, ok)
 
 			// Basic stats should be present
@@ -836,7 +836,7 @@ Tcp: 1 200 120000 -1 100 50 5 2 25 5000 4500 10 0 8 0
 		result, err := collector.Collect(context.Background())
 		require.NoError(t, err)
 
-		stats, ok := result.(*performance.TCPStats)
+		stats, ok := result.Data.(*performance.TCPStats)
 		require.True(t, ok)
 		require.NotNil(t, stats.Delta)
 
@@ -865,7 +865,7 @@ Tcp: 1 200 120000 -1 100 50 5 2 25 5000 4500 10 0 8 0
 		// Collection should fail gracefully
 		result, err := collector.Collect(context.Background())
 		assert.Error(t, err)
-		assert.Nil(t, result)
+		assert.Equal(t, performance.Event{}, result)
 		assert.Contains(t, err.Error(), "no such file or directory")
 	})
 
@@ -895,21 +895,21 @@ Tcp: 1 200 120000 -1 1000 500 10 5 50 100000 95000 200 0 15 0
 		// First collection
 		result1, err := collector.Collect(context.Background())
 		require.NoError(t, err)
-		stats1 := result1.(*performance.TCPStats)
+		stats1 := result1.Data.(*performance.TCPStats)
 		assert.Nil(t, stats1.Delta) // No delta on first collection
 
 		// Second collection too soon (under MinInterval)
 		time.Sleep(100 * time.Millisecond) // Less than MinInterval
 		result2, err := collector.Collect(context.Background())
 		require.NoError(t, err)
-		stats2 := result2.(*performance.TCPStats)
+		stats2 := result2.Data.(*performance.TCPStats)
 		assert.Nil(t, stats2.Delta) // Should skip delta calculation
 
 		// Third collection after too long (over MaxInterval)
 		time.Sleep(1200 * time.Millisecond) // More than MaxInterval
 		result3, err := collector.Collect(context.Background())
 		require.NoError(t, err)
-		stats3 := result3.(*performance.TCPStats)
+		stats3 := result3.Data.(*performance.TCPStats)
 		assert.Nil(t, stats3.Delta) // Should skip delta calculation due to large interval
 	})
 }

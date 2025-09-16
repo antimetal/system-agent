@@ -245,7 +245,7 @@ func TestLoadCollector_MissingFiles(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			stats, ok := result.(*performance.LoadStats)
+			stats, ok := result.Data.(*performance.LoadStats)
 			require.True(t, ok)
 
 			// For missing uptime case, should have zero uptime but valid load data
@@ -424,7 +424,7 @@ func TestLoadCollector_DataParsing(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			stats, ok := result.(*performance.LoadStats)
+			stats, ok := result.Data.(*performance.LoadStats)
 			require.True(t, ok)
 			validateLoadStats(t, stats, tt.expected)
 		})
@@ -678,7 +678,7 @@ func TestLoadCollector_BlockedProcsIntegration(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			stats, ok := result.(*performance.LoadStats)
+			stats, ok := result.Data.(*performance.LoadStats)
 			require.True(t, ok, "result should be *performance.LoadStats")
 
 			validateLoadStats(t, stats, tt.expected)
@@ -713,7 +713,7 @@ func TestLoadCollector_StatPermissions(t *testing.T) {
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	stats, ok := result.(*performance.LoadStats)
+	stats, ok := result.Data.(*performance.LoadStats)
 	require.True(t, ok)
 
 	// Load data should be present
@@ -752,7 +752,7 @@ func TestLoadCollector_StatAsDirectory(t *testing.T) {
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	stats, ok := result.(*performance.LoadStats)
+	stats, ok := result.Data.(*performance.LoadStats)
 	require.True(t, ok)
 
 	// Load data should be present
@@ -768,7 +768,7 @@ func TestLoadCollector_AllFieldsWithStat(t *testing.T) {
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	stats, ok := result.(*performance.LoadStats)
+	stats, ok := result.Data.(*performance.LoadStats)
 	require.True(t, ok, "result should be *performance.LoadStats")
 
 	// Verify all fields including the new BlockedProcs

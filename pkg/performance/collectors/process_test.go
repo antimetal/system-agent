@@ -59,7 +59,7 @@ func TestProcessCollector(t *testing.T) {
 	for len(collections) < 2 {
 		select {
 		case data := <-dataChan:
-			processes, ok := data.([]*performance.ProcessStats)
+			processes, ok := data.Data.([]*performance.ProcessStats)
 			require.True(t, ok, "expected []*performance.ProcessStats, got %T", data)
 			collections = append(collections, processes)
 		case <-timeout:
@@ -364,7 +364,7 @@ nonvoluntary_ctxt_switches: 5`
 	select {
 	case data := <-dataChan:
 		var ok bool
-		processes, ok = data.([]*performance.ProcessStats)
+		processes, ok = data.Data.([]*performance.ProcessStats)
 		require.True(t, ok)
 		require.Len(t, processes, 1)
 	case <-timeout:

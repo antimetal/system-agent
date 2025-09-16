@@ -295,7 +295,7 @@ func TestDiskInfoCollector_Collect(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			disks, ok := result.([]*performance.DiskInfo)
+			disks, ok := result.Data.([]*performance.DiskInfo)
 			require.True(t, ok, "Expected []*performance.DiskInfo, got %T", result)
 
 			if tt.wantInfo != nil {
@@ -328,7 +328,7 @@ func TestDiskInfoCollector_PartitionDetectionWithSoftwareRAID(t *testing.T) {
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	disks, ok := result.([]*performance.DiskInfo)
+	disks, ok := result.Data.([]*performance.DiskInfo)
 	require.True(t, ok)
 
 	// Should include: sda (whole disk) and md0 (software RAID device)

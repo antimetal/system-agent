@@ -317,7 +317,7 @@ func TestMemoryInfoCollector_Collect(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			info, ok := result.(*performance.MemoryInfo)
+			info, ok := result.Data.(*performance.MemoryInfo)
 			require.True(t, ok, "Expected *performance.MemoryInfo, got %T", result)
 
 			if tt.wantInfo != nil {
@@ -348,7 +348,7 @@ func TestMemoryInfoCollector_ComplexCPUList(t *testing.T) {
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.MemoryInfo)
+	info, ok := result.Data.(*performance.MemoryInfo)
 	require.True(t, ok)
 
 	assert.Len(t, info.NUMANodes, 1)
@@ -383,7 +383,7 @@ func TestMemoryInfoCollector_EmptyCPUList(t *testing.T) {
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.MemoryInfo)
+	info, ok := result.Data.(*performance.MemoryInfo)
 	require.True(t, ok)
 
 	assert.Len(t, info.NUMANodes, 1)

@@ -75,10 +75,10 @@ func NewNetworkCollector(logger logr.Logger, config performance.CollectionConfig
 	}, nil
 }
 
-func (c *NetworkCollector) Collect(ctx context.Context) (any, error) {
+func (c *NetworkCollector) Collect(ctx context.Context) (performance.Event, error) {
 	stats, err := c.collectNetworkStats()
 	if err != nil {
-		return nil, fmt.Errorf("failed to collect network stats: %w", err)
+		return performance.Event{}, fmt.Errorf("failed to collect network stats: %w", err)
 	}
 
 	currentTime := time.Now()
@@ -95,7 +95,7 @@ func (c *NetworkCollector) Collect(ctx context.Context) (any, error) {
 	c.UpdateDeltaState(stats, currentTime)
 
 	c.Logger().V(1).Info("Collected network statistics", "interfaces", len(stats))
-	return stats, nil
+	return performance.Event{Metric: performance.MetricTypeNetwork, Data: stats}, nil
 }
 
 // collectNetworkStats reads and parses /proc/net/dev and /sys/class/net/[interface]/*

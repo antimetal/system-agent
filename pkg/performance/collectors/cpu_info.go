@@ -78,8 +78,12 @@ func NewCPUInfoCollector(logger logr.Logger, config performance.CollectionConfig
 	}, nil
 }
 
-func (c *CPUInfoCollector) Collect(ctx context.Context) (any, error) {
-	return c.collectCPUInfo()
+func (c *CPUInfoCollector) Collect(ctx context.Context) (performance.Event, error) {
+	info, err := c.collectCPUInfo()
+	if err != nil {
+		return performance.Event{}, err
+	}
+	return performance.Event{Metric: performance.MetricTypeCPUInfo, Data: info}, nil
 }
 
 func (c *CPUInfoCollector) collectCPUInfo() (*performance.CPUInfo, error) {

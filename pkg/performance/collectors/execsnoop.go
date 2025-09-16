@@ -58,7 +58,7 @@ type ExecSnoopCollector struct {
 	enterLink     link.Link
 	exitLink      link.Link
 	reader        *ringbuf.Reader
-	outputChan    chan any
+	outputChan    chan performance.Event
 }
 
 func NewExecSnoopCollector(logger logr.Logger, config performance.CollectionConfig, bpfObjectPath string) (*ExecSnoopCollector, error) {
@@ -91,7 +91,7 @@ func NewExecSnoopCollector(logger logr.Logger, config performance.CollectionConf
 	return collector, nil
 }
 
-func (c *ExecSnoopCollector) Start(ctx context.Context) (<-chan any, error) {
+func (c *ExecSnoopCollector) Start(ctx context.Context) (<-chan performance.Event, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -167,7 +167,7 @@ func (c *ExecSnoopCollector) Start(ctx context.Context) (<-chan any, error) {
 	}
 
 	// Create output channel
-	c.outputChan = make(chan any, 100)
+	c.outputChan = make(chan performance.Event, 100)
 
 	// Start reading events
 	go c.readEvents(ctx)
@@ -232,7 +232,7 @@ func (c *ExecSnoopCollector) readEvents(ctx context.Context) {
 			}
 
 			select {
-			case c.outputChan <- event:
+			case c.outputChan <- performance.Event{Metric: performance.MetricTypeProcess, Data: event}:
 			case <-ctx.Done():
 				return
 			default:

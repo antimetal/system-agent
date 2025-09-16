@@ -86,11 +86,11 @@ func NewNUMAStatsCollector(logger logr.Logger, config performance.CollectionConf
 	}, nil
 }
 
-func (c *NUMAStatsCollector) Collect(ctx context.Context) (any, error) {
+func (c *NUMAStatsCollector) Collect(ctx context.Context) (performance.Event, error) {
 	// First check if this is a NUMA system
 	nodes, err := c.detectNUMANodes()
 	if err != nil {
-		return nil, fmt.Errorf("failed to detect NUMA nodes: %w", err)
+		return performance.Event{}, fmt.Errorf("failed to detect NUMA nodes: %w", err)
 	}
 
 	stats := &performance.NUMAStatistics{
@@ -107,7 +107,7 @@ func (c *NUMAStatsCollector) Collect(ctx context.Context) (any, error) {
 
 	// If not a NUMA system, return basic info
 	if !stats.Enabled {
-		return stats, nil
+		return performance.Event{Metric: performance.MetricTypeNUMAStats, Data: stats}, nil
 	}
 
 	// Collect runtime statistics for each node
@@ -133,7 +133,7 @@ func (c *NUMAStatsCollector) Collect(ctx context.Context) (any, error) {
 	}
 	c.UpdateDeltaState(stats, currentTime)
 
-	return stats, nil
+	return performance.Event{Metric: performance.MetricTypeNUMAStats, Data: stats}, nil
 }
 
 // detectNUMANodes returns a list of NUMA node IDs by scanning the sysfs directory

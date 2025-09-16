@@ -60,7 +60,7 @@ func TestExecSnoopCollector_Integration(t *testing.T) {
 			for {
 				select {
 				case event := <-eventChan:
-					if execEvent, ok := event.(*collectors.ExecEvent); ok {
+					if execEvent, ok := event.Data.(*collectors.ExecEvent); ok {
 						events = append(events, execEvent)
 						// Look for our test commands
 						if execEvent.Command == "echo" || execEvent.Command == "true" {

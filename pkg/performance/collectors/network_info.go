@@ -98,8 +98,12 @@ func NewNetworkInfoCollector(logger logr.Logger, config performance.CollectionCo
 	}, nil
 }
 
-func (c *NetworkInfoCollector) Collect(ctx context.Context) (any, error) {
-	return c.collectNetworkInfo()
+func (c *NetworkInfoCollector) Collect(ctx context.Context) (performance.Event, error) {
+	info, err := c.collectNetworkInfo()
+	if err != nil {
+		return performance.Event{}, err
+	}
+	return performance.Event{Metric: performance.MetricTypeNetworkInfo, Data: info}, nil
 }
 
 // collectNetworkInfo discovers and collects information for all network interfaces.

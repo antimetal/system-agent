@@ -493,7 +493,7 @@ func TestCPUInfoCollector_Collect(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			info, ok := result.(*performance.CPUInfo)
+			info, ok := result.Data.(*performance.CPUInfo)
 			require.True(t, ok, "Expected *performance.CPUInfo, got %T", result)
 
 			if tt.wantInfo != nil {
@@ -532,7 +532,7 @@ cpu cores	: 4
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.CPUInfo)
+	info, ok := result.Data.(*performance.CPUInfo)
 	require.True(t, ok)
 
 	assert.Equal(t, int32(4), info.LogicalCores)
@@ -558,7 +558,7 @@ vendor_id: Intel
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.CPUInfo)
+	info, ok := result.Data.(*performance.CPUInfo)
 	require.True(t, ok)
 
 	// Should handle parsing errors gracefully
@@ -635,7 +635,7 @@ power management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14]
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.CPUInfo)
+	info, ok := result.Data.(*performance.CPUInfo)
 	require.True(t, ok)
 
 	assert.Equal(t, "AuthenticAMD", info.VendorID)
@@ -719,7 +719,7 @@ power management:
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.CPUInfo)
+	info, ok := result.Data.(*performance.CPUInfo)
 	require.True(t, ok)
 
 	assert.Equal(t, "AuthenticAMD", info.VendorID)
@@ -783,7 +783,7 @@ CPU revision	: 4
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.CPUInfo)
+	info, ok := result.Data.(*performance.CPUInfo)
 	require.True(t, ok)
 
 	assert.Equal(t, float64(48.00), info.BogoMIPS)
@@ -824,7 +824,7 @@ Serial		: 304d19f36a02309e
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.CPUInfo)
+	info, ok := result.Data.(*performance.CPUInfo)
 	require.True(t, ok)
 
 	assert.Equal(t, float64(1592.52), info.BogoMIPS) // First processor's BogoMIPS
@@ -869,7 +869,7 @@ Serial		: 5400503583203c3c040e
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.CPUInfo)
+	info, ok := result.Data.(*performance.CPUInfo)
 	require.True(t, ok)
 
 	assert.Equal(t, float64(2400.00), info.BogoMIPS)
@@ -946,7 +946,7 @@ power management:
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.CPUInfo)
+	info, ok := result.Data.(*performance.CPUInfo)
 	require.True(t, ok)
 
 	assert.Equal(t, "GenuineIntel", info.VendorID)
@@ -1078,7 +1078,7 @@ power management:
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.CPUInfo)
+	info, ok := result.Data.(*performance.CPUInfo)
 	require.True(t, ok)
 
 	assert.Equal(t, "GenuineIntel", info.VendorID)
@@ -1160,7 +1160,7 @@ power management:
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.CPUInfo)
+	info, ok := result.Data.(*performance.CPUInfo)
 	require.True(t, ok)
 
 	assert.Equal(t, "GenuineIntel", info.VendorID)
@@ -1241,7 +1241,7 @@ power management:
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.CPUInfo)
+	info, ok := result.Data.(*performance.CPUInfo)
 	require.True(t, ok)
 
 	assert.Equal(t, "GenuineIntel", info.VendorID)
@@ -1284,7 +1284,7 @@ pmac-generation : NewWorld
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	info, ok := result.(*performance.CPUInfo)
+	info, ok := result.Data.(*performance.CPUInfo)
 	require.True(t, ok)
 
 	// PowerPC doesn't have vendor_id, model name, or numeric CPU identification

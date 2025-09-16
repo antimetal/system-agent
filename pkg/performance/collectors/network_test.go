@@ -124,7 +124,7 @@ func collectAndValidateNetwork(t *testing.T, collector *collectors.NetworkCollec
 	}
 
 	require.NoError(t, err)
-	stats, ok := result.([]*performance.NetworkStats)
+	stats, ok := result.Data.([]*performance.NetworkStats)
 	require.True(t, ok, "result should be []*performance.NetworkStats")
 
 	if validate != nil {

@@ -25,7 +25,7 @@ type ContinuousCollectionConfig struct {
 // activeCollector holds a collector's metadata and channel
 type activeCollector struct {
 	metricType MetricType
-	channel    <-chan any
+	channel    <-chan Event
 }
 
 // CollectAllMetrics starts continuous collection of all available performance metrics.
@@ -121,14 +121,14 @@ func (m *Manager) handleCollectorData(ctx context.Context, collectors []activeCo
 	// Since we know our collector types at compile time, we can use a static select.
 	// We'll set up channels for each known collector type, using nil for unavailable ones.
 	var (
-		cpuChan     <-chan any
-		memoryChan  <-chan any
-		diskChan    <-chan any
-		networkChan <-chan any
-		systemChan  <-chan any
-		loadChan    <-chan any
-		tcpChan     <-chan any
-		processChan <-chan any
+		cpuChan     <-chan Event
+		memoryChan  <-chan Event
+		diskChan    <-chan Event
+		networkChan <-chan Event
+		systemChan  <-chan Event
+		loadChan    <-chan Event
+		tcpChan     <-chan Event
+		processChan <-chan Event
 	)
 
 	// Map collectors to their specific channels
@@ -161,8 +161,8 @@ func (m *Manager) handleCollectorData(ctx context.Context, collectors []activeCo
 			return
 
 		case data, ok := <-cpuChan:
-			if ok && data != nil {
-				if err := m.PublishCollectorData(MetricTypeCPU, data); err != nil {
+			if ok && data.Data != nil {
+				if err := m.PublishCollectorData(MetricTypeCPU, data.Data); err != nil {
 					logger.Error(err, "Failed to publish CPU data")
 				} else {
 					logger.V(2).Info("Published CPU data")
@@ -173,8 +173,8 @@ func (m *Manager) handleCollectorData(ctx context.Context, collectors []activeCo
 			}
 
 		case data, ok := <-memoryChan:
-			if ok && data != nil {
-				if err := m.PublishCollectorData(MetricTypeMemory, data); err != nil {
+			if ok && data.Data != nil {
+				if err := m.PublishCollectorData(MetricTypeMemory, data.Data); err != nil {
 					logger.Error(err, "Failed to publish memory data")
 				} else {
 					logger.V(2).Info("Published memory data")
@@ -185,8 +185,8 @@ func (m *Manager) handleCollectorData(ctx context.Context, collectors []activeCo
 			}
 
 		case data, ok := <-diskChan:
-			if ok && data != nil {
-				if err := m.PublishCollectorData(MetricTypeDisk, data); err != nil {
+			if ok && data.Data != nil {
+				if err := m.PublishCollectorData(MetricTypeDisk, data.Data); err != nil {
 					logger.Error(err, "Failed to publish disk data")
 				} else {
 					logger.V(2).Info("Published disk data")
@@ -197,8 +197,8 @@ func (m *Manager) handleCollectorData(ctx context.Context, collectors []activeCo
 			}
 
 		case data, ok := <-networkChan:
-			if ok && data != nil {
-				if err := m.PublishCollectorData(MetricTypeNetwork, data); err != nil {
+			if ok && data.Data != nil {
+				if err := m.PublishCollectorData(MetricTypeNetwork, data.Data); err != nil {
 					logger.Error(err, "Failed to publish network data")
 				} else {
 					logger.V(2).Info("Published network data")
@@ -209,8 +209,8 @@ func (m *Manager) handleCollectorData(ctx context.Context, collectors []activeCo
 			}
 
 		case data, ok := <-systemChan:
-			if ok && data != nil {
-				if err := m.PublishCollectorData(MetricTypeSystem, data); err != nil {
+			if ok && data.Data != nil {
+				if err := m.PublishCollectorData(MetricTypeSystem, data.Data); err != nil {
 					logger.Error(err, "Failed to publish system data")
 				} else {
 					logger.V(2).Info("Published system data")
@@ -221,8 +221,8 @@ func (m *Manager) handleCollectorData(ctx context.Context, collectors []activeCo
 			}
 
 		case data, ok := <-loadChan:
-			if ok && data != nil {
-				if err := m.PublishCollectorData(MetricTypeLoad, data); err != nil {
+			if ok && data.Data != nil {
+				if err := m.PublishCollectorData(MetricTypeLoad, data.Data); err != nil {
 					logger.Error(err, "Failed to publish load data")
 				} else {
 					logger.V(2).Info("Published load data")
@@ -233,8 +233,8 @@ func (m *Manager) handleCollectorData(ctx context.Context, collectors []activeCo
 			}
 
 		case data, ok := <-tcpChan:
-			if ok && data != nil {
-				if err := m.PublishCollectorData(MetricTypeTCP, data); err != nil {
+			if ok && data.Data != nil {
+				if err := m.PublishCollectorData(MetricTypeTCP, data.Data); err != nil {
 					logger.Error(err, "Failed to publish TCP data")
 				} else {
 					logger.V(2).Info("Published TCP data")
@@ -245,8 +245,8 @@ func (m *Manager) handleCollectorData(ctx context.Context, collectors []activeCo
 			}
 
 		case data, ok := <-processChan:
-			if ok && data != nil {
-				if err := m.PublishCollectorData(MetricTypeProcess, data); err != nil {
+			if ok && data.Data != nil {
+				if err := m.PublishCollectorData(MetricTypeProcess, data.Data); err != nil {
 					logger.Error(err, "Failed to publish process data")
 				} else {
 					logger.V(2).Info("Published process data")
