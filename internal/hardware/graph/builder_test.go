@@ -132,7 +132,7 @@ func TestBuilder_BuildFromSnapshot(t *testing.T) {
 			},
 		},
 		DiskInfo: []*performance.DiskInfo{
-			&performance.DiskInfo{
+			{
 				Device:            "nvme0n1",
 				Model:             "Amazon Elastic Block Store",
 				Vendor:            "NVMe",
@@ -152,7 +152,7 @@ func TestBuilder_BuildFromSnapshot(t *testing.T) {
 			},
 		},
 		NetworkInfo: []*performance.NetworkInfo{
-			&performance.NetworkInfo{
+			{
 				Interface:  "eth0",
 				MACAddress: "02:42:ac:11:00:02",
 				Speed:      10000, // 10Gbps
