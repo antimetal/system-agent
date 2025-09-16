@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/antimetal/agent/internal/hardware/types"
 	"github.com/antimetal/agent/internal/resource"
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"github.com/antimetal/agent/pkg/performance"
@@ -34,7 +35,7 @@ func NewBuilder(logger logr.Logger, store resource.Store) *Builder {
 }
 
 // BuildFromSnapshot builds the hardware graph from a performance snapshot
-func (b *Builder) BuildFromSnapshot(ctx context.Context, snapshot *performance.Snapshot) error {
+func (b *Builder) BuildFromSnapshot(ctx context.Context, snapshot *types.Snapshot) error {
 	b.logger.Info("Building hardware graph from snapshot")
 
 	// Create the root system node
@@ -51,29 +52,29 @@ func (b *Builder) BuildFromSnapshot(ctx context.Context, snapshot *performance.S
 	b.logger.V(1).Info("Created system node", "name", systemRef.Name)
 
 	// Build CPU topology if CPU info is available
-	if snapshot.Metrics.CPUInfo != nil {
-		if err := b.buildCPUTopology(ctx, snapshot.Metrics.CPUInfo, systemRef); err != nil {
+	if snapshot.CPUInfo != nil {
+		if err := b.buildCPUTopology(ctx, snapshot.CPUInfo, systemRef); err != nil {
 			return fmt.Errorf("failed to build CPU topology: %w", err)
 		}
 	}
 
 	// Build memory topology if memory info is available
-	if snapshot.Metrics.MemoryInfo != nil {
-		if err := b.buildMemoryTopology(ctx, snapshot.Metrics.MemoryInfo, systemRef); err != nil {
+	if snapshot.MemoryInfo != nil {
+		if err := b.buildMemoryTopology(ctx, snapshot.MemoryInfo, systemRef); err != nil {
 			return fmt.Errorf("failed to build memory topology: %w", err)
 		}
 	}
 
 	// Build disk topology if disk info is available
-	if len(snapshot.Metrics.DiskInfo) > 0 {
-		if err := b.buildDiskTopology(ctx, snapshot.Metrics.DiskInfo, systemRef); err != nil {
+	if len(snapshot.DiskInfo) > 0 {
+		if err := b.buildDiskTopology(ctx, snapshot.DiskInfo, systemRef); err != nil {
 			return fmt.Errorf("failed to build disk topology: %w", err)
 		}
 	}
 
 	// Build network topology if network info is available
-	if len(snapshot.Metrics.NetworkInfo) > 0 {
-		if err := b.buildNetworkTopology(ctx, snapshot.Metrics.NetworkInfo, systemRef); err != nil {
+	if len(snapshot.NetworkInfo) > 0 {
+		if err := b.buildNetworkTopology(ctx, snapshot.NetworkInfo, systemRef); err != nil {
 			return fmt.Errorf("failed to build network topology: %w", err)
 		}
 	}

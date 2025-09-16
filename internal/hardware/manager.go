@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/antimetal/agent/internal/hardware/graph"
+	"github.com/antimetal/agent/internal/hardware/types"
 	"github.com/antimetal/agent/internal/resource"
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/go-logr/logr"
@@ -133,16 +134,15 @@ func (m *Manager) updateHardwareGraph(ctx context.Context) error {
 }
 
 // collectHardwareSnapshot collects all hardware information into a snapshot
-func (m *Manager) collectHardwareSnapshot(ctx context.Context) (*performance.Snapshot, error) {
+func (m *Manager) collectHardwareSnapshot(ctx context.Context) (*types.Snapshot, error) {
 	// Create collectors with the config from performance manager
 	config := m.perfManager.GetConfig()
 
 	// Initialize the snapshot
-	snapshot := &performance.Snapshot{
+	snapshot := &types.Snapshot{
 		Timestamp:   time.Now(),
 		NodeName:    m.perfManager.GetNodeName(),
 		ClusterName: m.perfManager.GetClusterName(),
-		Metrics:     performance.Metrics{},
 		CollectorRun: performance.CollectorRunInfo{
 			CollectorStats: make(map[performance.MetricType]performance.CollectorStat),
 		},
@@ -211,21 +211,20 @@ func (m *Manager) collectHardwareSnapshot(ctx context.Context) (*performance.Sna
 		// Store the collected data in the snapshot based on type
 		switch metricType {
 		case performance.MetricTypeCPUInfo:
-			snapshot.Metrics.CPUInfo = data.(*performance.CPUInfo)
+			snapshot.CPUInfo = data.(*performance.CPUInfo)
 		case performance.MetricTypeMemoryInfo:
-			snapshot.Metrics.MemoryInfo = data.(*performance.MemoryInfo)
+			snapshot.MemoryInfo = data.(*performance.MemoryInfo)
 		case performance.MetricTypeDiskInfo:
-			snapshot.Metrics.DiskInfo = data.([]*performance.DiskInfo)
+			snapshot.DiskInfo = data.([]*performance.DiskInfo)
 		case performance.MetricTypeNetworkInfo:
-			snapshot.Metrics.NetworkInfo = data.([]*performance.NetworkInfo)
+			snapshot.NetworkInfo = data.([]*performance.NetworkInfo)
 		case performance.MetricTypeNUMAStats:
-			snapshot.Metrics.NUMAStats = data.(*performance.NUMAStatistics)
+			snapshot.NUMAStats = data.(*performance.NUMAStatistics)
 		}
 
 		snapshot.CollectorRun.CollectorStats[metricType] = performance.CollectorStat{
 			Status:   performance.CollectorStatusActive,
 			Duration: time.Since(collectorStartTime),
-			Data:     data,
 		}
 	}
 
