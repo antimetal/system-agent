@@ -29,7 +29,7 @@ type PointCollector interface {
 	Collector
 
 	// Collect performs a single collection and returns the metrics
-	Collect(ctx context.Context) (any, error)
+	Collect(ctx context.Context) (Event, error)
 }
 
 // ContinuousCollector performs ongoing data collection with streaming output
@@ -38,7 +38,7 @@ type ContinuousCollector interface {
 
 	// Start begins continuous collection and returns a channel for streaming results
 	// The collector must clean up when the context is cancelled
-	Start(ctx context.Context) (<-chan any, error)
+	Start(ctx context.Context) (<-chan Event, error)
 
 	Status() CollectorStatus
 	LastError() error
@@ -161,7 +161,7 @@ func (b *BaseContinuousCollector) ClearError() {
 type ContinuousPointCollector struct {
 	BaseContinuousCollector
 	pointCollector PointCollector
-	ch             chan any
+	ch             chan Event
 }
 
 // NewContinuousPointCollector creates a new ContinuousPointCollector
@@ -201,12 +201,12 @@ func PartialNewContinuousPointCollector(collector NewPointCollector) NewContinuo
 }
 
 // Start begins the continuous point collection
-func (c *ContinuousPointCollector) Start(ctx context.Context) (<-chan any, error) {
+func (c *ContinuousPointCollector) Start(ctx context.Context) (<-chan Event, error) {
 	if c.Status() != CollectorStatusDisabled {
 		return nil, fmt.Errorf("collector already running, possibly in another goroutine")
 	}
 
-	c.ch = make(chan any, 10000)
+	c.ch = make(chan Event, 10000)
 	go c.start(ctx)
 	c.SetStatus(CollectorStatusActive)
 	return c.ch, nil
@@ -251,7 +251,7 @@ func (c *ContinuousPointCollector) start(ctx context.Context) {
 type OnceContinuousCollector struct {
 	BaseContinuousCollector
 	pointCollector PointCollector
-	result         any
+	result         Event
 	once           sync.Once
 }
 
@@ -297,13 +297,13 @@ func PartialNewOnceContinuousCollector(collector NewPointCollector) NewContinuou
 // containing the previous result and the last recorded error status
 //
 // WARNING: Call Start() multiple times will return separate channel instances.
-func (c *OnceContinuousCollector) Start(ctx context.Context) (<-chan any, error) {
+func (c *OnceContinuousCollector) Start(ctx context.Context) (<-chan Event, error) {
 	if c.Status() != CollectorStatusDisabled {
 		return nil, fmt.Errorf("collector already running, possibly in another goroutine")
 	}
 	c.SetStatus(CollectorStatusActive)
 
-	var data any
+	var data Event
 	var err error
 	c.once.Do(func() {
 		data, err = c.pointCollector.Collect(ctx)
@@ -314,8 +314,8 @@ func (c *OnceContinuousCollector) Start(ctx context.Context) (<-chan any, error)
 			return
 		}
 	})
-	ch := make(chan any, 1)
-	if c.result != nil {
+	ch := make(chan Event, 1)
+	if c.result.Data != nil {
 		ch <- c.result
 	}
 	close(ch)

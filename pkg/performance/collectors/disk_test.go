@@ -70,7 +70,7 @@ func collectDiskStats(t *testing.T, collector *collectors.DiskCollector) []*perf
 	result, err := collector.Collect(ctx)
 	require.NoError(t, err)
 
-	stats, ok := result.([]*performance.DiskStats)
+	stats, ok := result.Data.([]*performance.DiskStats)
 	require.True(t, ok, "expected []*performance.DiskStats, got %T", result)
 	return stats
 }

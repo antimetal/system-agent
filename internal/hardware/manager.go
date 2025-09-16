@@ -211,15 +211,15 @@ func (m *Manager) collectHardwareSnapshot(ctx context.Context) (*types.Snapshot,
 		// Store the collected data in the snapshot based on type
 		switch metricType {
 		case performance.MetricTypeCPUInfo:
-			snapshot.CPUInfo = data.(*performance.CPUInfo)
+			snapshot.CPUInfo = data.Data.(*performance.CPUInfo)
 		case performance.MetricTypeMemoryInfo:
-			snapshot.MemoryInfo = data.(*performance.MemoryInfo)
+			snapshot.MemoryInfo = data.Data.(*performance.MemoryInfo)
 		case performance.MetricTypeDiskInfo:
-			snapshot.DiskInfo = data.([]*performance.DiskInfo)
+			snapshot.DiskInfo = data.Data.([]*performance.DiskInfo)
 		case performance.MetricTypeNetworkInfo:
-			snapshot.NetworkInfo = data.([]*performance.NetworkInfo)
+			snapshot.NetworkInfo = data.Data.([]*performance.NetworkInfo)
 		case performance.MetricTypeNUMAStats:
-			snapshot.NUMAStats = data.(*performance.NUMAStatistics)
+			snapshot.NUMAStats = data.Data.(*performance.NUMAStatistics)
 		}
 
 		snapshot.CollectorRun.CollectorStats[metricType] = performance.CollectorStat{

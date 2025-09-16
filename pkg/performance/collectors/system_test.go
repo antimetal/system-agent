@@ -155,7 +155,7 @@ func collectAndValidateSystemStats(t *testing.T, collector *collectors.SystemSta
 	}
 
 	require.NoError(t, err)
-	stats, ok := result.(*performance.SystemStats)
+	stats, ok := result.Data.(*performance.SystemStats)
 	require.True(t, ok, "result should be *performance.SystemStats")
 
 	if validate != nil {
@@ -412,7 +412,7 @@ func TestSystemStatsCollector_FilePermissions(t *testing.T) {
 	result, err := collector.Collect(context.Background())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "permission denied")
-	assert.Nil(t, result)
+	assert.Equal(t, performance.Event{}, result)
 }
 
 func TestSystemStatsCollector_DirectoryAsStatFile(t *testing.T) {
@@ -432,7 +432,7 @@ func TestSystemStatsCollector_DirectoryAsStatFile(t *testing.T) {
 
 	result, err := collector.Collect(context.Background())
 	assert.Error(t, err)
-	assert.Nil(t, result)
+	assert.Equal(t, performance.Event{}, result)
 }
 
 func TestSystemStatsCollector_InterfaceCompliance(t *testing.T) {

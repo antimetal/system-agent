@@ -66,7 +66,7 @@ func main() {
 				fmt.Printf("\nProcessed %d events\n", eventCount)
 				return
 			}
-			if execEvent, ok := event.(*collectors.ExecEvent); ok {
+			if execEvent, ok := event.Data.(*collectors.ExecEvent); ok {
 				eventCount++
 				fmt.Printf("[%d] PID=%d PPID=%d UID=%d CMD=%s ARGS=%v RetVal=%d\n",
 					eventCount, execEvent.PID, execEvent.PPID, execEvent.UID,

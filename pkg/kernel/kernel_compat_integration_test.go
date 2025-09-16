@@ -194,11 +194,11 @@ func TestCollectorCompatibility(t *testing.T) {
 
 			// Wait for at least one data point
 			select {
-			case data := <-ch:
-				if data == nil {
+			case event := <-ch:
+				if event.Data == nil {
 					t.Errorf("%s produced nil data", tc.name)
 				} else {
-					t.Logf("✓ %s: Successfully collected data of type %T", tc.name, data)
+					t.Logf("✓ %s: Successfully collected data of type %T", tc.name, event.Data)
 				}
 			case <-ctx.Done():
 				t.Errorf("%s: Timeout waiting for data", tc.name)

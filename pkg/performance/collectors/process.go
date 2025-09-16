@@ -71,7 +71,7 @@ type ProcessCollector struct {
 	lastUpdateTime time.Time
 
 	// Channel management
-	ch chan any
+	ch chan performance.Event
 }
 
 // ProcessCPUTime tracks CPU usage for a process over time
@@ -122,7 +122,7 @@ func NewProcessCollector(logger logr.Logger, config performance.CollectionConfig
 	}, nil
 }
 
-func (c *ProcessCollector) Start(ctx context.Context) (<-chan any, error) {
+func (c *ProcessCollector) Start(ctx context.Context) (<-chan performance.Event, error) {
 	if c.Status() != performance.CollectorStatusDisabled {
 		return nil, fmt.Errorf("collector already running")
 	}
@@ -141,7 +141,7 @@ func (c *ProcessCollector) Start(ctx context.Context) (<-chan any, error) {
 	c.lastUpdateTime = time.Now()
 	c.mu.Unlock()
 
-	c.ch = make(chan any)
+	c.ch = make(chan performance.Event)
 	go c.runCollection(ctx)
 	return c.ch, nil
 }
@@ -171,7 +171,7 @@ func (c *ProcessCollector) runCollection(ctx context.Context) {
 			}
 
 			select {
-			case c.ch <- processes:
+			case c.ch <- performance.Event{Metric: performance.MetricTypeProcess, Data: processes}:
 			case <-ctx.Done():
 				return
 			}

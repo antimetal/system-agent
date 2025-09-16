@@ -95,11 +95,11 @@ func NewCgroupMemoryCollector(logger logr.Logger, config performance.CollectionC
 }
 
 // Collect performs a one-shot collection of cgroup memory statistics
-func (c *CgroupMemoryCollector) Collect(ctx context.Context) (any, error) {
+func (c *CgroupMemoryCollector) Collect(ctx context.Context) (performance.Event, error) {
 	// Detect cgroup version
 	version, err := c.discovery.DetectCgroupVersion()
 	if err != nil {
-		return nil, fmt.Errorf("failed to detect cgroup version: %w", err)
+		return performance.Event{}, fmt.Errorf("failed to detect cgroup version: %w", err)
 	}
 
 	c.Logger().V(2).Info("Detected cgroup version", "version", version)
@@ -107,7 +107,7 @@ func (c *CgroupMemoryCollector) Collect(ctx context.Context) (any, error) {
 	// Discover containers
 	containers, err := c.discovery.DiscoverContainers("memory", version)
 	if err != nil {
-		return nil, fmt.Errorf("failed to discover containers: %w", err)
+		return performance.Event{}, fmt.Errorf("failed to discover containers: %w", err)
 	}
 
 	// Collect stats for each container
@@ -116,7 +116,7 @@ func (c *CgroupMemoryCollector) Collect(ctx context.Context) (any, error) {
 		// Check for context cancellation
 		select {
 		case <-ctx.Done():
-			return stats, ctx.Err()
+			return performance.Event{Metric: performance.MetricTypeCgroupMemory, Data: stats}, ctx.Err()
 		default:
 		}
 
@@ -131,7 +131,7 @@ func (c *CgroupMemoryCollector) Collect(ctx context.Context) (any, error) {
 		stats = append(stats, stat)
 	}
 
-	return stats, nil
+	return performance.Event{Metric: performance.MetricTypeCgroupMemory, Data: stats}, nil
 }
 
 // collectContainerStats collects memory stats for a single container

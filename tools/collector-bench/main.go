@@ -149,7 +149,7 @@ func testCollector(collector performance.PointCollector) CollectorResult {
 	result.Error = err
 	result.Data = data
 
-	if data != nil {
+	if data.Data != nil {
 		result.DataSize = estimateDataSize(data)
 	} else {
 		result.DataSize = 0

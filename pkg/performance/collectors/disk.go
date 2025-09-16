@@ -78,10 +78,10 @@ func NewDiskCollector(logger logr.Logger, config performance.CollectionConfig) (
 }
 
 // Collect performs a one-shot collection of disk statistics
-func (c *DiskCollector) Collect(ctx context.Context) (any, error) {
+func (c *DiskCollector) Collect(ctx context.Context) (performance.Event, error) {
 	stats, err := c.collectDiskStats()
 	if err != nil {
-		return nil, fmt.Errorf("failed to collect disk stats: %w", err)
+		return performance.Event{}, fmt.Errorf("failed to collect disk stats: %w", err)
 	}
 
 	currentTime := time.Now()
@@ -98,7 +98,7 @@ func (c *DiskCollector) Collect(ctx context.Context) (any, error) {
 	c.UpdateDeltaState(stats, currentTime)
 
 	c.Logger().V(1).Info("Collected disk statistics", "devices", len(stats))
-	return stats, nil
+	return performance.Event{Metric: performance.MetricTypeDisk, Data: stats}, nil
 }
 
 // collectDiskStats reads and parses /proc/diskstats

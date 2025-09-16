@@ -85,7 +85,7 @@ func TestCgroupMemoryCollector_CgroupV1(t *testing.T) {
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	stats, ok := result.([]performance.CgroupMemoryStats)
+	stats, ok := result.Data.([]performance.CgroupMemoryStats)
 	require.True(t, ok, "result should be []performance.CgroupMemoryStats")
 	require.Len(t, stats, 2, "should find 2 containers")
 
@@ -123,7 +123,7 @@ func TestCgroupMemoryCollector_CgroupV2(t *testing.T) {
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	stats, ok := result.([]performance.CgroupMemoryStats)
+	stats, ok := result.Data.([]performance.CgroupMemoryStats)
 	require.True(t, ok, "result should be []performance.CgroupMemoryStats")
 	require.Len(t, stats, 2, "should find 2 containers")
 
@@ -189,7 +189,7 @@ swap 0`)
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	stats, ok := result.([]performance.CgroupMemoryStats)
+	stats, ok := result.Data.([]performance.CgroupMemoryStats)
 	require.True(t, ok)
 	require.Len(t, stats, 1)
 
@@ -229,7 +229,7 @@ oom_kill 10`)
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	stats, ok := result.([]performance.CgroupMemoryStats)
+	stats, ok := result.Data.([]performance.CgroupMemoryStats)
 	require.True(t, ok)
 	require.Len(t, stats, 1)
 

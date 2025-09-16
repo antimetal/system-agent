@@ -211,7 +211,7 @@ cpu7 250 0 250 2000 0 0 0 0 0 0
 			}
 
 			require.NoError(t, err)
-			stats, ok := result.([]*performance.CPUStats)
+			stats, ok := result.Data.([]*performance.CPUStats)
 			require.True(t, ok, "Expected []*performance.CPUStats")
 
 			if tt.validate != nil {
@@ -250,7 +250,7 @@ procs_blocked 0
 	result, err := collector.Collect(context.Background())
 	require.NoError(t, err)
 
-	stats, ok := result.([]*performance.CPUStats)
+	stats, ok := result.Data.([]*performance.CPUStats)
 	require.True(t, ok, "Expected []*performance.CPUStats")
 	require.Len(t, stats, 3) // cpu, cpu0, cpu1
 

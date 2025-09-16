@@ -39,6 +39,11 @@ const (
 	MetricTypeNetworkInfo MetricType = "network_info"
 )
 
+type Event struct {
+	Metric MetricType
+	Data   any
+}
+
 // DeltaCalculationMode represents how delta/rate calculations are performed
 type DeltaCalculationMode string
 

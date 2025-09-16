@@ -131,7 +131,7 @@ func collectAndValidateNUMAStats(t *testing.T, collector *collectors.NUMAStatsCo
 	}
 
 	require.NoError(t, err)
-	numaStats, ok := result.(*performance.NUMAStatistics)
+	numaStats, ok := result.Data.(*performance.NUMAStatistics)
 	require.True(t, ok, "result should be *performance.NUMAStatistics")
 
 	if validate != nil {

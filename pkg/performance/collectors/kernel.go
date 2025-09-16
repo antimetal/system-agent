@@ -64,7 +64,7 @@ type KernelCollector struct {
 
 	// Continuous collection state
 	continuousMu   sync.Mutex
-	continuousChan chan any
+	continuousChan chan performance.Event
 	isRunning      bool
 	lastError      error
 }
@@ -115,16 +115,16 @@ func NewKernelCollector(logger logr.Logger, config performance.CollectionConfig,
 	return collector, nil
 }
 
-func (c *KernelCollector) Collect(ctx context.Context) (any, error) {
+func (c *KernelCollector) Collect(ctx context.Context) (performance.Event, error) {
 	messages, err := c.collectKernelMessages(ctx)
 	if err != nil {
 		if os.IsPermission(err) {
 			c.logger.V(1).Info("Permission denied reading kernel messages", "path", c.kmsgPath)
-			return []*performance.KernelMessage{}, nil
+			return performance.Event{Metric: performance.MetricTypeKernel, Data: []*performance.KernelMessage{}}, nil
 		}
-		return nil, err
+		return performance.Event{}, err
 	}
-	return messages, nil
+	return performance.Event{Metric: performance.MetricTypeKernel, Data: messages}, nil
 }
 
 func (c *KernelCollector) collectKernelMessages(ctx context.Context) ([]*performance.KernelMessage, error) {
@@ -333,7 +333,7 @@ func parseMessageContent(message string) (subsystem, device string) {
 	return subsystem, device
 }
 
-func (c *KernelCollector) Start(ctx context.Context) (<-chan any, error) {
+func (c *KernelCollector) Start(ctx context.Context) (<-chan performance.Event, error) {
 	c.continuousMu.Lock()
 	defer c.continuousMu.Unlock()
 
@@ -346,7 +346,7 @@ func (c *KernelCollector) Start(ctx context.Context) (<-chan any, error) {
 		return nil, fmt.Errorf("failed to get boot time: %w", err)
 	}
 
-	c.continuousChan = make(chan any, continuousChannelBuffer)
+	c.continuousChan = make(chan performance.Event, continuousChannelBuffer)
 	c.isRunning = true
 	c.lastError = nil
 
@@ -441,7 +441,7 @@ func (c *KernelCollector) continuousCollectionLoop(ctx context.Context, bootTime
 		}
 
 		select {
-		case c.continuousChan <- msg:
+		case c.continuousChan <- performance.Event{Metric: performance.MetricTypeKernel, Data: msg}:
 		default:
 			c.logger.V(1).Info("Channel full, dropping kernel message")
 		}

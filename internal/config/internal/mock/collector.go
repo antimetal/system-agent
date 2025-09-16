@@ -35,8 +35,8 @@ func (m *Collector) Capabilities() performance.CollectorCapabilities {
 	}
 }
 
-func (m *Collector) Start(ctx context.Context) (<-chan any, error) {
-	ch := make(chan any, 1)
+func (m *Collector) Start(ctx context.Context) (<-chan performance.Event, error) {
+	ch := make(chan performance.Event, 1)
 	close(ch)
 	return ch, nil
 }

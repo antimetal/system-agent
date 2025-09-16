@@ -113,13 +113,13 @@ func NewSystemStatsCollector(logger logr.Logger, config performance.CollectionCo
 	}, nil
 }
 
-func (c *SystemStatsCollector) Collect(ctx context.Context) (any, error) {
+func (c *SystemStatsCollector) Collect(ctx context.Context) (performance.Event, error) {
 	currentTime := time.Now()
 
 	// Collect current statistics
 	currentStats, err := c.collectSystemStats()
 	if err != nil {
-		return nil, fmt.Errorf("failed to collect system stats: %w", err)
+		return performance.Event{}, fmt.Errorf("failed to collect system stats: %w", err)
 	}
 
 	shouldCalc, reason := c.ShouldCalculateDeltas(currentTime)
@@ -129,21 +129,21 @@ func (c *SystemStatsCollector) Collect(ctx context.Context) (any, error) {
 			c.UpdateDeltaState(currentStats, currentTime)
 		}
 		c.Logger().V(1).Info("Collected system statistics")
-		return currentStats, nil
+		return performance.Event{Metric: performance.MetricTypeSystem, Data: currentStats}, nil
 	}
 
 	previousStats, ok := c.LastSnapshot.(*performance.SystemStats)
 	if !ok || previousStats == nil {
 		c.UpdateDeltaState(currentStats, currentTime)
 		c.Logger().V(1).Info("Collected system statistics")
-		return currentStats, nil
+		return performance.Event{Metric: performance.MetricTypeSystem, Data: currentStats}, nil
 	}
 
 	c.calculateSystemDeltas(currentStats, previousStats, currentTime, c.Config)
 	c.UpdateDeltaState(currentStats, currentTime)
 
 	c.Logger().V(1).Info("Collected system statistics with delta support")
-	return currentStats, nil
+	return performance.Event{Metric: performance.MetricTypeSystem, Data: currentStats}, nil
 }
 
 // collectSystemStats reads and parses system activity statistics from /proc/stat
