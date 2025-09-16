@@ -39,7 +39,7 @@ echo "Building integration test binaries..."
 # Find packages with integration tests
 packages_with_tests=""
 for pkg in $(go list -tags integration ./...); do
-    if go list -f '{{.TestGoFiles}}' -tags integration "$pkg" | grep -q "\.go"; then
+    if go list -f '{{or .TestGoFiles .XTestGoFiles}}' -tags integration "$pkg" | grep -q "\.go"; then
         if [ -z "$packages_with_tests" ]; then
             packages_with_tests="$pkg"
         else
