@@ -9,6 +9,7 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -28,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	"github.com/antimetal/agent/internal/config"
 	"github.com/antimetal/agent/internal/hardware"
 	"github.com/antimetal/agent/internal/intake"
 	k8sagent "github.com/antimetal/agent/internal/kubernetes/agent"
@@ -36,40 +38,44 @@ import (
 	"github.com/antimetal/agent/internal/metrics"
 	"github.com/antimetal/agent/internal/metrics/consumers/debug"
 	"github.com/antimetal/agent/internal/metrics/consumers/otel"
+	perfmanager "github.com/antimetal/agent/internal/perf/manager"
 	"github.com/antimetal/agent/internal/resource/store"
 	"github.com/antimetal/agent/internal/runtime"
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"github.com/antimetal/agent/pkg/performance"
-	_ "github.com/antimetal/agent/pkg/performance/collectors" // Register collectors
 )
 
 var (
 	setupLog logr.Logger
 
 	// CLI Options
+	configLoader           string
+	configFSPath           string
+	configAMSAddr          string
+	configAMSSecure        bool
+	configAMSAPIKey        string
+	dataDir                string
+	eksAccountID           string
+	eksRegion              string
+	eksClusterName         string
+	eksAutodiscover        bool
+	enableHTTP2            bool
+	enableK8sController    bool
+	enableLeaderElection   bool
+	enablePerfCollectors   bool
+	hardwareUpdateInterval time.Duration
 	intakeAddr             string
 	intakeAPIKey           string
 	intakeSecure           bool
+	kubernetesProvider     string
+	maxStreamAge           time.Duration
 	metricsAddr            string
 	metricsSecure          bool
 	metricsCertDir         string
 	metricsCertName        string
 	metricsKeyName         string
-	enableLeaderElection   bool
-	probeAddr              string
-	enableHTTP2            bool
-	enableK8sController    bool
-	kubernetesProvider     string
-	eksAccountID           string
-	eksRegion              string
-	eksClusterName         string
-	eksAutodiscover        bool
-	maxStreamAge           time.Duration
 	pprofAddr              string
-	dataDir                string
-	hardwareUpdateInterval time.Duration
-	enablePerfCollectors   bool
-	perfCollectorInterval  time.Duration
+	probeAddr              string
 )
 
 func init() {
@@ -114,7 +120,7 @@ func init() {
 	flag.BoolVar(&eksAutodiscover, "kubernetes-provider-eks-autodiscover", true,
 		"Autodiscover EKS cluster name")
 	flag.DurationVar(&maxStreamAge, "max-stream-age", 10*time.Minute,
-		"Maximum age of the intake stream before it is reset")
+		"Maximum age of the gRPC stream before it is reset")
 	flag.StringVar(&pprofAddr, "pprof-address", "0",
 		"The address the pprof server binds to. Set this to '0' to disable the pprof server")
 	flag.StringVar(&dataDir, "data-directory", "/var/lib/antimetal",
@@ -123,8 +129,16 @@ func init() {
 		"Interval for hardware topology discovery updates")
 	flag.BoolVar(&enablePerfCollectors, "enable-performance-collectors", false,
 		"Enable continuous performance collectors for testing (CPU, memory, disk, network, process)")
-	flag.DurationVar(&perfCollectorInterval, "performance-collector-interval", 10*time.Second,
-		"Interval for continuous performance data collection")
+	flag.StringVar(&configLoader, "config-loader", "fs",
+		"Config loader type: 'fs' for filesystem loader, 'ams' for AMS gRPC loader")
+	flag.StringVar(&configFSPath, "config-fs-path", "/etc/antimetal/agent",
+		"Path to configuration directory (used with fs loader)")
+	flag.StringVar(&configAMSAddr, "config-ams-addr", "",
+		"AMS service address for configuration (used with ams loader)")
+	flag.BoolVar(&configAMSSecure, "config-ams-secure", true,
+		"Use secure connection to the AMS service")
+	flag.StringVar(&configAMSAPIKey, "config-ams-api-key", "",
+		"API key for AMS service authentication")
 
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
@@ -208,6 +222,17 @@ func main() {
 	}
 	if err := mgr.Add(rsrcStore); err != nil {
 		setupLog.Error(err, "unable to register resource inventory")
+		os.Exit(1)
+	}
+
+	// Setup Config Manager
+	configMgr, err := createConfigManager(mgr.GetLogger())
+	if err != nil {
+		setupLog.Error(err, "unable to create config manager")
+		os.Exit(1)
+	}
+	if err := mgr.Add(configMgr); err != nil {
+		setupLog.Error(err, "unable to register config manager")
 		os.Exit(1)
 	}
 
@@ -325,7 +350,7 @@ func main() {
 		setupLog.Info("Metrics pipeline enabled")
 	}
 
-	// Setup Performance Manager (for hardware discovery)
+	// Setup Legacy Performance Manager (for hardware discovery)
 	perfManager, err := performance.NewManager(performance.ManagerOptions{
 		Logger:        mgr.GetLogger().WithName("performance-manager"),
 		NodeName:      os.Getenv("NODE_NAME"),
@@ -355,17 +380,21 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Setup Performance Collectors (if enabled for testing)
-	if enablePerfCollectors && perfManager.HasMetricsRouter() {
-		collectionConfig := performance.ContinuousCollectionConfig{
-			Interval: perfCollectorInterval,
-			// MetricTypes will default to all available collectors
-		}
-		if err := perfManager.CollectAllMetrics(ctx, collectionConfig); err != nil {
-			setupLog.Error(err, "unable to start performance collectors")
+	// Setup Performance Manager
+	if enablePerfCollectors && metricsRouter != nil {
+		perfMgr, err := perfmanager.New(
+			configMgr,
+			metricsRouter,
+			perfmanager.WithLogger(mgr.GetLogger()),
+		)
+		if err != nil {
+			setupLog.Error(err, "unable to create performance manager")
 			os.Exit(1)
 		}
-		setupLog.Info("Performance collectors enabled", "interval", perfCollectorInterval)
+		if err := mgr.Add(perfMgr); err != nil {
+			setupLog.Error(err, "unable to register performance manager")
+			os.Exit(1)
+		}
 	}
 
 	// Setup Kubernetes Collector Controller
@@ -401,6 +430,55 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+func createConfigManager(logger logr.Logger) (*config.Manager, error) {
+	var loader config.Loader
+	var err error
+
+	switch configLoader {
+	case "fs":
+		loader, err = config.NewFSLoader(configFSPath, logger)
+		if err != nil {
+			return nil, fmt.Errorf("unable to create filesystem config loader: %w", err)
+		}
+
+	case "ams":
+		if configAMSAddr == "" {
+			return nil, fmt.Errorf("config-ams-addr is required when using ams loader")
+		}
+		var creds credentials.TransportCredentials
+		if configAMSSecure {
+			creds = credentials.NewTLS(&tls.Config{})
+		} else {
+			creds = insecure.NewCredentials()
+		}
+		amsConn, err := grpc.NewClient(configAMSAddr, grpc.WithTransportCredentials(creds))
+		if err != nil {
+			return nil, fmt.Errorf("unable to connect to AMS service: %w", err)
+		}
+
+		amsOpts := []config.AMSLoaderOpts{
+			config.WithAMSLogger(logger),
+			config.WithMaxStreamAge(maxStreamAge),
+		}
+		if configAMSAPIKey != "" {
+			amsOpts = append(amsOpts, config.WithAMSAPIKey(configAMSAPIKey))
+		}
+
+		loader, err = config.NewAMSLoader(amsConn, amsOpts...)
+		if err != nil {
+			return nil, fmt.Errorf("unable to create AMS config loader: %w", err)
+		}
+
+	default:
+		return nil, fmt.Errorf("unknown config loader: %s", configLoader)
+	}
+
+	return config.NewManager(
+		config.WithLoader(loader),
+		config.WithLogger(logger),
+	)
 }
 
 func getProviderOptions(logger logr.Logger) cluster.ProviderOptions {
