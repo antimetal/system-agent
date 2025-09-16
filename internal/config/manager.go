@@ -74,6 +74,12 @@ func (m *Manager) Start(ctx context.Context) error {
 	return nil
 }
 
+// Implements sigs.k8s.io/controller-runtime/pkg/manager.LeaderElectionRunnable interface
+// Always returns false to disable leader election.
+func (m *Manager) NeedLeaderElection() bool {
+	return false
+}
+
 // ListConfigs retrieves available configs with optional filters.
 //
 // If a new version of a config is received that is invalid, it will
