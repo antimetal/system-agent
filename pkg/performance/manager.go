@@ -9,7 +9,6 @@ package performance
 import (
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/antimetal/agent/internal/metrics"
 	"github.com/go-logr/logr"
@@ -93,49 +92,4 @@ func (m *Manager) GetNodeName() string {
 // GetClusterName returns the cluster name
 func (m *Manager) GetClusterName() string {
 	return m.clusterName
-}
-
-// PublishCollectorData publishes data from a specific collector
-func (m *Manager) PublishCollectorData(metricType MetricType, data any) error {
-	if m.router == nil {
-		return nil // Silently ignore if no router
-	}
-
-	event := metrics.MetricEvent{
-		Timestamp:   time.Now(),
-		Source:      "performance-collector",
-		NodeName:    m.nodeName,
-		ClusterName: m.clusterName,
-		MetricType:  metrics.MetricType(metricType), // Convert performance.MetricType to metrics.MetricType (duplicated to avoid import cycle)
-		EventType:   determineEventType(metricType),
-		Data:        data,
-	}
-
-	if err := m.router.Publish(event); err != nil {
-		m.logger.Error(err, "Failed to publish collector data", "metric_type", metricType)
-		return err
-	}
-
-	m.logger.V(2).Info("Published collector data", "metric_type", metricType)
-	return nil
-}
-
-// HasMetricsRouter returns true if the manager has a metrics router configured
-func (m *Manager) HasMetricsRouter() bool {
-	return m.router != nil
-}
-
-// determineEventType maps metric types to appropriate event types
-func determineEventType(metricType MetricType) metrics.EventType {
-	switch metricType {
-	case MetricTypeLoad, MetricTypeMemory, MetricTypeCPU,
-		MetricTypeDisk, MetricTypeNetwork, MetricTypeProcess,
-		MetricTypeCPUInfo, MetricTypeMemoryInfo, MetricTypeDiskInfo,
-		MetricTypeNetworkInfo, MetricTypeNUMAStats:
-		return metrics.EventTypeGauge
-	case MetricTypeSystem, MetricTypeTCP, MetricTypeKernel:
-		return metrics.EventTypeCounter
-	default:
-		return metrics.EventTypeGauge
-	}
 }
