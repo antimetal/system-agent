@@ -111,15 +111,6 @@ const (
 	CollectorStatusDisabled CollectorStatus = "disabled"
 )
 
-// Snapshot represents a complete performance snapshot at a point in time
-type Snapshot struct {
-	Timestamp    time.Time
-	NodeName     string
-	ClusterName  string
-	CollectorRun CollectorRunInfo
-	Metrics      Metrics
-}
-
 // CollectorRunInfo contains metadata about a collector run
 type CollectorRunInfo struct {
 	Duration       time.Duration
@@ -131,7 +122,6 @@ type CollectorStat struct {
 	Status   CollectorStatus
 	Duration time.Duration
 	Error    error
-	Data     any // The actual collected data
 }
 
 // Metrics contains all collected performance metrics
@@ -145,12 +135,6 @@ type Metrics struct {
 	TCP       *TCPStats
 	System    *SystemStats
 	Kernel    []KernelMessage
-	// Hardware configuration
-	CPUInfo     *CPUInfo
-	MemoryInfo  *MemoryInfo
-	DiskInfo    []*DiskInfo
-	NetworkInfo []*NetworkInfo
-	NUMAStats   *NUMAStatistics
 }
 
 // LoadStats represents system load information

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/antimetal/agent/internal/hardware/graph"
+	"github.com/antimetal/agent/internal/hardware/types"
 	"github.com/antimetal/agent/internal/resource"
 	"github.com/antimetal/agent/internal/resource/store"
 	hardwarev1 "github.com/antimetal/agent/pkg/api/antimetal/hardware/v1"
@@ -87,82 +88,80 @@ func TestBuilder_BuildFromSnapshot(t *testing.T) {
 	builder := graph.NewBuilder(logger, testStore)
 
 	// Create a test snapshot with sample data
-	snapshot := &performance.Snapshot{
+	snapshot := &types.Snapshot{
 		Timestamp: time.Now(),
-		Metrics: performance.Metrics{
-			CPUInfo: &performance.CPUInfo{
-				VendorID:      "GenuineIntel",
-				CPUFamily:     6,
-				Model:         85,
-				ModelName:     "Intel(R) Xeon(R) Platinum 8275CL CPU @ 3.00GHz",
-				Stepping:      7,
-				Microcode:     "0x500320a",
-				CPUMHz:        3599.998,
-				CacheSize:     "36608 KB",
-				PhysicalCores: 4,
-				LogicalCores:  8,
-				Cores: []performance.CPUCore{
-					{
-						Processor:  0,
-						PhysicalID: 0,
-						CoreID:     0,
-						Siblings:   4,
-						CPUMHz:     3599.998,
-					},
-					{
-						Processor:  1,
-						PhysicalID: 0,
-						CoreID:     1,
-						Siblings:   4,
-						CPUMHz:     3599.998,
-					},
-				},
-			},
-			MemoryInfo: &performance.MemoryInfo{
-				TotalBytes:             16777216000, // ~16GB
-				NUMAEnabled:            true,
-				NUMABalancingAvailable: true,
-				NUMANodes: []performance.NUMANode{
-					{
-						NodeID:     0,
-						TotalBytes: 16777216000,
-						CPUs:       []int32{0, 1, 2, 3, 4, 5, 6, 7},
-						Distances:  []int32{10},
-					},
-				},
-			},
-			DiskInfo: []*performance.DiskInfo{
+		CPUInfo: &performance.CPUInfo{
+			VendorID:      "GenuineIntel",
+			CPUFamily:     6,
+			Model:         85,
+			ModelName:     "Intel(R) Xeon(R) Platinum 8275CL CPU @ 3.00GHz",
+			Stepping:      7,
+			Microcode:     "0x500320a",
+			CPUMHz:        3599.998,
+			CacheSize:     "36608 KB",
+			PhysicalCores: 4,
+			LogicalCores:  8,
+			Cores: []performance.CPUCore{
 				{
-					Device:            "nvme0n1",
-					Model:             "Amazon Elastic Block Store",
-					Vendor:            "NVMe",
-					SizeBytes:         107374182400, // 100GB
-					Rotational:        false,
-					BlockSize:         512,
-					PhysicalBlockSize: 512,
-					Scheduler:         "none",
-					QueueDepth:        1024,
-					Partitions: []performance.PartitionInfo{
-						{
-							Name:        "nvme0n1p1",
-							SizeBytes:   107373133824,
-							StartSector: 2048,
-						},
+					Processor:  0,
+					PhysicalID: 0,
+					CoreID:     0,
+					Siblings:   4,
+					CPUMHz:     3599.998,
+				},
+				{
+					Processor:  1,
+					PhysicalID: 0,
+					CoreID:     1,
+					Siblings:   4,
+					CPUMHz:     3599.998,
+				},
+			},
+		},
+		MemoryInfo: &performance.MemoryInfo{
+			TotalBytes:             16777216000, // ~16GB
+			NUMAEnabled:            true,
+			NUMABalancingAvailable: true,
+			NUMANodes: []performance.NUMANode{
+				{
+					NodeID:     0,
+					TotalBytes: 16777216000,
+					CPUs:       []int32{0, 1, 2, 3, 4, 5, 6, 7},
+					Distances:  []int32{10},
+				},
+			},
+		},
+		DiskInfo: []*performance.DiskInfo{
+			&performance.DiskInfo{
+				Device:            "nvme0n1",
+				Model:             "Amazon Elastic Block Store",
+				Vendor:            "NVMe",
+				SizeBytes:         107374182400, // 100GB
+				Rotational:        false,
+				BlockSize:         512,
+				PhysicalBlockSize: 512,
+				Scheduler:         "none",
+				QueueDepth:        1024,
+				Partitions: []performance.PartitionInfo{
+					{
+						Name:        "nvme0n1p1",
+						SizeBytes:   107373133824,
+						StartSector: 2048,
 					},
 				},
 			},
-			NetworkInfo: []*performance.NetworkInfo{
-				{
-					Interface:  "eth0",
-					MACAddress: "02:42:ac:11:00:02",
-					Speed:      10000, // 10Gbps
-					Duplex:     "full",
-					MTU:        1500,
-					Driver:     "ena",
-					Type:       "ether",
-					OperState:  "up",
-					Carrier:    true,
-				},
+		},
+		NetworkInfo: []*performance.NetworkInfo{
+			&performance.NetworkInfo{
+				Interface:  "eth0",
+				MACAddress: "02:42:ac:11:00:02",
+				Speed:      10000, // 10Gbps
+				Duplex:     "full",
+				MTU:        1500,
+				Driver:     "ena",
+				Type:       "ether",
+				OperState:  "up",
+				Carrier:    true,
 			},
 		},
 	}
@@ -242,9 +241,8 @@ func TestBuilder_BuildFromSnapshot_EmptySnapshot(t *testing.T) {
 	builder := graph.NewBuilder(logger, testStore)
 
 	// Create an empty snapshot
-	snapshot := &performance.Snapshot{
+	snapshot := &types.Snapshot{
 		Timestamp: time.Now(),
-		Metrics:   performance.Metrics{},
 	}
 
 	// Build should succeed even with empty data
@@ -265,27 +263,25 @@ func TestBuilder_BuildFromSnapshot_PartialData(t *testing.T) {
 	builder := graph.NewBuilder(logger, testStore)
 
 	// Create a snapshot with only CPU data
-	snapshot := &performance.Snapshot{
+	snapshot := &types.Snapshot{
 		Timestamp: time.Now(),
-		Metrics: performance.Metrics{
-			CPUInfo: &performance.CPUInfo{
-				VendorID:      "AuthenticAMD",
-				ModelName:     "AMD EPYC 7R32",
-				PhysicalCores: 2,
-				LogicalCores:  4,
-				Cores: []performance.CPUCore{
-					{
-						Processor:  0,
-						PhysicalID: 0,
-						CoreID:     0,
-						CPUMHz:     2799.998,
-					},
-					{
-						Processor:  1,
-						PhysicalID: 0,
-						CoreID:     1,
-						CPUMHz:     2799.998,
-					},
+		CPUInfo: &performance.CPUInfo{
+			VendorID:      "AuthenticAMD",
+			ModelName:     "AMD EPYC 7R32",
+			PhysicalCores: 2,
+			LogicalCores:  4,
+			Cores: []performance.CPUCore{
+				{
+					Processor:  0,
+					PhysicalID: 0,
+					CoreID:     0,
+					CPUMHz:     2799.998,
+				},
+				{
+					Processor:  1,
+					PhysicalID: 0,
+					CoreID:     1,
+					CPUMHz:     2799.998,
 				},
 			},
 		},
