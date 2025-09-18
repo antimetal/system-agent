@@ -39,7 +39,7 @@ type UnavailableCollector struct {
 // unavailable collectors list with the reason, and an error is logged.
 //
 // This function is usually called during package initialization (typically in init() functions)
-// to register collector implementations before they can be instantiated by performance.Manager.
+// to register collector implementations before they can be instantiated via the registry.
 //
 // It will panic if a collector for the given metricType is already registered.
 func Register(metricType MetricType, collector NewContinuousCollector) {

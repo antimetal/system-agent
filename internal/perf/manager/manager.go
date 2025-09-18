@@ -9,7 +9,6 @@ package manager
 import (
 	"context"
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
@@ -20,6 +19,7 @@ import (
 	"github.com/antimetal/agent/internal/metrics"
 	agentv1 "github.com/antimetal/agent/pkg/api/antimetal/agent/v1"
 	"github.com/antimetal/agent/pkg/channel"
+	"github.com/antimetal/agent/pkg/config/environment"
 	"github.com/antimetal/agent/pkg/performance"
 	// register all collectors to the registry
 	_ "github.com/antimetal/agent/pkg/performance/collectors"
@@ -79,14 +79,17 @@ func New(configLoader config.Loader, router metrics.Router, opts ...Option) (*ma
 
 	perfEvents := channel.NewMerger[performance.Event]()
 
+	// Get host paths from environment
+	hostPaths := environment.GetHostPaths()
+
 	m := &manager{
 		configLoader:      configLoader,
 		router:            router,
 		perfEvents:        perfEvents,
 		runningCollectors: make(map[string]*collectorInstance),
-		procPath:          os.Getenv("HOST_PROC"),
-		sysPath:           os.Getenv("HOST_SYS"),
-		devPath:           os.Getenv("HOST_DEV"),
+		procPath:          hostPaths.Proc,
+		sysPath:           hostPaths.Sys,
+		devPath:           hostPaths.Dev,
 	}
 	for _, opt := range opts {
 		opt(m)
