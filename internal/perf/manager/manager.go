@@ -152,7 +152,6 @@ func (m *manager) eventCollector(ctx context.Context) {
 				Timestamp:  time.Now(),
 				Source:     "performance-collector",
 				MetricType: metrics.MetricType(event.Metric),
-				EventType:  getEventType(event.Metric),
 				Data:       event.Data,
 			}
 
@@ -299,19 +298,4 @@ func (m *manager) startCollector(ctx context.Context, config config.Instance) (c
 	m.perfEvents.Add(events)
 
 	return cancel, nil
-}
-
-func getEventType(metricType performance.MetricType) metrics.EventType {
-	switch metricType {
-	case performance.MetricTypeLoad,
-		performance.MetricTypeMemory,
-		performance.MetricTypeCPU,
-		performance.MetricTypeDisk,
-		performance.MetricTypeNetwork,
-		performance.MetricTypeProcess:
-
-		return metrics.EventTypeGauge
-	default:
-		return metrics.EventTypeCounter
-	}
 }
