@@ -23,7 +23,6 @@ type LogEntry struct {
 // MetricEventSummary provides a condensed view of metric events for logging
 type MetricEventSummary struct {
 	MetricType  string `json:"metric_type"`
-	EventType   string `json:"event_type"`
 	Source      string `json:"source"`
 	NodeName    string `json:"node_name"`
 	ClusterName string `json:"cluster_name"`

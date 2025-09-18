@@ -59,14 +59,6 @@ const (
 //   - "network_info": Static network information
 //   - "numa_stats": NUMA node statistics
 //
-// EventType indicates how to interpret the metric:
-//   - "gauge": Point-in-time value (e.g., current memory usage)
-//   - "counter": Monotonically increasing value (e.g., bytes sent)
-//   - "histogram": Distribution of values
-//   - "timing": Duration measurements
-//   - "set": Unique value counting
-//   - "snapshot": Complete state capture
-//
 // The Data field contains the actual metric payload, typically one of the
 // performance collector types from pkg/performance (all using pointers for efficiency):
 //   - *performance.LoadStats for MetricTypeLoad
@@ -85,6 +77,10 @@ const (
 //   - *performance.NUMAStatistics for MetricTypeNUMAStats
 //   - []*performance.CgroupCPUStats for MetricTypeCgroupCPU
 //   - []*performance.CgroupMemoryStats for MetricTypeCgroupMemory
+//
+// Note: Consumers determine how to interpret metrics (gauge, counter, histogram, etc.)
+// based on the actual field semantics within the Data payload, as many metric types
+// contain mixed data (e.g., network stats have both gauges and counters).
 type MetricEvent struct {
 	// Event metadata
 	Timestamp   time.Time
@@ -94,23 +90,10 @@ type MetricEvent struct {
 
 	// Metric identification
 	MetricType MetricType
-	EventType  EventType
 
 	// Metric data (contains the actual performance data)
 	Data any
 }
-
-// EventType indicates the nature of the metric event
-type EventType string
-
-const (
-	EventTypeGauge     EventType = "gauge"     // Point-in-time value
-	EventTypeCounter   EventType = "counter"   // Monotonically increasing value
-	EventTypeHistogram EventType = "histogram" // Distribution of values
-	EventTypeTiming    EventType = "timing"    // Duration measurements
-	EventTypeSet       EventType = "set"       // Unique value counting
-	EventTypeSnapshot  EventType = "snapshot"  // Complete snapshot of data
-)
 
 // Router defines the interface for routing metrics events to consumers
 type Router interface {
