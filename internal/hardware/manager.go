@@ -21,10 +21,14 @@ import (
 
 // Manager coordinates hardware discovery and graph building
 type Manager struct {
-	logger      logr.Logger
-	store       resource.Store
-	perfManager *performance.Manager
-	builder     *graph.Builder
+	logger  logr.Logger
+	store   resource.Store
+	builder *graph.Builder
+
+	// Configuration
+	collectionConfig performance.CollectionConfig
+	nodeName         string
+	clusterName      string
 
 	interval   time.Duration
 	lastUpdate time.Time
@@ -37,8 +41,12 @@ type ManagerConfig struct {
 	UpdateInterval time.Duration
 	// Store is the resource store to write hardware nodes to
 	Store resource.Store
-	// PerformanceManager is the performance collector manager
-	PerformanceManager *performance.Manager
+	// CollectionConfig is the performance collection configuration for paths
+	CollectionConfig performance.CollectionConfig
+	// NodeName is the name of the node
+	NodeName string
+	// ClusterName is the name of the cluster
+	ClusterName string
 }
 
 // NewManager creates a new hardware manager
@@ -46,8 +54,16 @@ func NewManager(logger logr.Logger, config ManagerConfig) (*Manager, error) {
 	if config.Store == nil {
 		return nil, fmt.Errorf("resource store is required")
 	}
-	if config.PerformanceManager == nil {
-		return nil, fmt.Errorf("performance manager is required")
+
+	// Apply defaults to collection config if needed
+	if config.CollectionConfig.HostProcPath == "" {
+		config.CollectionConfig.HostProcPath = "/proc"
+	}
+	if config.CollectionConfig.HostSysPath == "" {
+		config.CollectionConfig.HostSysPath = "/sys"
+	}
+	if config.CollectionConfig.HostDevPath == "" {
+		config.CollectionConfig.HostDevPath = "/dev"
 	}
 
 	// Default to 5 minute update interval
@@ -57,11 +73,13 @@ func NewManager(logger logr.Logger, config ManagerConfig) (*Manager, error) {
 	}
 
 	return &Manager{
-		logger:      logger.WithName("hardware-manager"),
-		store:       config.Store,
-		perfManager: config.PerformanceManager,
-		builder:     graph.NewBuilder(logger, config.Store),
-		interval:    interval,
+		logger:           logger.WithName("hardware-manager"),
+		store:            config.Store,
+		builder:          graph.NewBuilder(logger, config.Store),
+		collectionConfig: config.CollectionConfig,
+		nodeName:         config.NodeName,
+		clusterName:      config.ClusterName,
+		interval:         interval,
 	}, nil
 }
 
@@ -135,14 +153,11 @@ func (m *Manager) updateHardwareGraph(ctx context.Context) error {
 
 // collectHardwareSnapshot collects all hardware information into a snapshot
 func (m *Manager) collectHardwareSnapshot(ctx context.Context) (*types.Snapshot, error) {
-	// Create collectors with the config from performance manager
-	config := m.perfManager.GetConfig()
-
 	// Initialize the snapshot
 	snapshot := &types.Snapshot{
 		Timestamp:   time.Now(),
-		NodeName:    m.perfManager.GetNodeName(),
-		ClusterName: m.perfManager.GetClusterName(),
+		NodeName:    m.nodeName,
+		ClusterName: m.clusterName,
 		CollectorRun: performance.CollectorRunInfo{
 			CollectorStats: make(map[performance.MetricType]performance.CollectorStat),
 		},
@@ -180,7 +195,7 @@ func (m *Manager) collectHardwareSnapshot(ctx context.Context) (*types.Snapshot,
 		}
 
 		// Create the continuous collector instance
-		collector, err := factory(m.logger, config)
+		collector, err := factory(m.logger, m.collectionConfig)
 		if err != nil {
 			m.logger.Error(err, "Failed to create collector",
 				"metric_type", metricType)

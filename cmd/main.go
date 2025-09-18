@@ -42,6 +42,7 @@ import (
 	"github.com/antimetal/agent/internal/resource/store"
 	"github.com/antimetal/agent/internal/runtime"
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
+	"github.com/antimetal/agent/pkg/config/environment"
 	"github.com/antimetal/agent/pkg/performance"
 )
 
@@ -350,25 +351,30 @@ func main() {
 		setupLog.Info("Metrics pipeline enabled")
 	}
 
-	// Setup Legacy Performance Manager (for hardware discovery)
-	perfManager, err := performance.NewManager(performance.ManagerOptions{
-		Logger:        mgr.GetLogger().WithName("performance-manager"),
-		NodeName:      os.Getenv("NODE_NAME"),
-		ClusterName:   "",
-		MetricsRouter: metricsRouter,
-	})
+	// Get configuration from environment
+	nodeName, err := environment.GetNodeName()
 	if err != nil {
-		setupLog.Error(err, "unable to create performance manager")
+		setupLog.Error(err, "unable to get node name")
 		os.Exit(1)
 	}
+	clusterName := environment.GetClusterName()
+
+	// Create a shared collection config with environment overrides
+	collectionConfig := performance.DefaultCollectionConfig()
+	hostPaths := environment.GetHostPaths()
+	collectionConfig.HostProcPath = hostPaths.Proc
+	collectionConfig.HostSysPath = hostPaths.Sys
+	collectionConfig.HostDevPath = hostPaths.Dev
 
 	// Setup Hardware Manager
 	hwManager, err := hardware.NewManager(
 		mgr.GetLogger().WithName("hardware-manager"),
 		hardware.ManagerConfig{
-			Store:              rsrcStore,
-			PerformanceManager: perfManager,
-			UpdateInterval:     hardwareUpdateInterval,
+			Store:            rsrcStore,
+			CollectionConfig: collectionConfig,
+			NodeName:         nodeName,
+			ClusterName:      clusterName,
+			UpdateInterval:   hardwareUpdateInterval,
 		},
 	)
 	if err != nil {
