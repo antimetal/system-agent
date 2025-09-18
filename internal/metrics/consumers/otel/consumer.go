@@ -336,7 +336,6 @@ func (c *Consumer) processEvent(event metrics.MetricEvent) error {
 	// Log detailed event information at debug level
 	c.logger.V(2).Info("Processing metrics event",
 		"metric_type", event.MetricType,
-		"event_type", event.EventType,
 		"source", event.Source,
 		"node", event.NodeName,
 		"cluster", event.ClusterName,

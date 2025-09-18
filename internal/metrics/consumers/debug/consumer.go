@@ -198,9 +198,6 @@ func (c *Consumer) logEventText(event metrics.MetricEvent) error {
 		if event.ClusterName != "" {
 			parts = append(parts, fmt.Sprintf("Cluster: %s", event.ClusterName))
 		}
-		if string(event.EventType) != "" {
-			parts = append(parts, fmt.Sprintf("Type: %s", string(event.EventType)))
-		}
 	}
 
 	if c.config.LogLevel >= 2 {
@@ -238,7 +235,6 @@ func (c *Consumer) logEventText(event metrics.MetricEvent) error {
 func (c *Consumer) createEventSummary(event metrics.MetricEvent) *MetricEventSummary {
 	summary := &MetricEventSummary{
 		MetricType:  string(event.MetricType), // Explicit conversion needed for struct field
-		EventType:   string(event.EventType),
 		Source:      event.Source,
 		NodeName:    event.NodeName,
 		ClusterName: event.ClusterName,
