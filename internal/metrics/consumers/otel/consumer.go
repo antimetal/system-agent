@@ -9,6 +9,7 @@ package otel
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -16,8 +17,10 @@ import (
 	"github.com/go-logr/logr"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/metric"
+	logSDK "go.opentelemetry.io/otel/sdk/log"
 	metricSDK "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
@@ -42,11 +45,16 @@ type Consumer struct {
 	config Config
 	logger logr.Logger
 
-	// OpenTelemetry components
+	// OpenTelemetry metrics components
 	exporter    metricSDK.Exporter
 	provider    *metricSDK.MeterProvider
 	meter       metric.Meter
 	transformer *Transformer
+
+	// OpenTelemetry logs components
+	logExporter    logSDK.Exporter
+	logProvider    *logSDK.LoggerProvider
+	logTransformer *LogTransformer
 
 	// Internal buffering
 	buffer *MetricsBuffer
@@ -91,44 +99,54 @@ func NewConsumer(config Config, logger logr.Logger) (*Consumer, error) {
 
 // initOpenTelemetry initializes the OpenTelemetry components
 func (c *Consumer) initOpenTelemetry(ctx context.Context) error {
-	// Create OTLP gRPC exporter
+	res := resource.NewWithAttributes(
+		"",
+		semconv.ServiceName(c.config.ServiceName),
+		semconv.ServiceVersion(c.config.ServiceVersion),
+		attribute.String("telemetry.distro.name", "antimetal-agent"),
+	)
+
+	if err := c.initMetricsExporter(ctx, res); err != nil {
+		return fmt.Errorf("failed to initialize metrics exporter: %w", err)
+	}
+
+	if err := c.initLogsExporter(ctx, res); err != nil {
+		return fmt.Errorf("failed to initialize logs exporter: %w", err)
+	}
+
+	return nil
+}
+
+func (c *Consumer) initMetricsExporter(ctx context.Context, res *resource.Resource) error {
 	opts := []otlpmetricgrpc.Option{
 		otlpmetricgrpc.WithEndpoint(c.config.Endpoint),
 		otlpmetricgrpc.WithTimeout(c.config.Timeout),
 	}
 
-	// Configure TLS
 	if c.config.Insecure {
 		opts = append(opts, otlpmetricgrpc.WithTLSCredentials(insecure.NewCredentials()))
 	}
 
-	// Add headers
 	if len(c.config.Headers) > 0 {
 		opts = append(opts, otlpmetricgrpc.WithHeaders(c.config.Headers))
 	}
 
-	// Configure compression
 	if c.config.Compression != "" {
 		switch c.config.Compression {
 		case CompressionGZip:
 			opts = append(opts, otlpmetricgrpc.WithCompressor(c.config.Compression.String()))
 		case CompressionNone:
-			// No compression
 		default:
 			c.logger.V(1).Info("Unknown compression type, using default", "compression", c.config.Compression)
 		}
 	}
 
-	// Add retry configuration
 	if c.config.RetryConfig.Enabled {
-		// Calculate MaxElapsedTime safely to prevent overflow
 		maxElapsed := c.config.RetryConfig.MaxBackoff
 		if c.config.RetryConfig.MaxRetries > 0 {
-			// Use safe multiplication with bounds checking
-			if c.config.RetryConfig.MaxRetries <= 100 { // reasonable upper limit
+			if c.config.RetryConfig.MaxRetries <= 100 {
 				maxElapsed = time.Duration(c.config.RetryConfig.MaxRetries) * c.config.RetryConfig.MaxBackoff
 			} else {
-				// For very large retry counts, use a sensible maximum (30 minutes)
 				maxElapsed = 30 * time.Minute
 			}
 		}
@@ -142,22 +160,12 @@ func (c *Consumer) initOpenTelemetry(ctx context.Context) error {
 		opts = append(opts, otlpmetricgrpc.WithRetry(retryConfig))
 	}
 
-	// Create the exporter
 	exporter, err := otlpmetricgrpc.New(ctx, opts...)
 	if err != nil {
 		return err
 	}
 	c.exporter = exporter
 
-	// Create resource with service information
-	res := resource.NewWithAttributes(
-		"",
-		semconv.ServiceName(c.config.ServiceName),
-		semconv.ServiceVersion(c.config.ServiceVersion),
-		attribute.String("telemetry.distro.name", "antimetal-agent"),
-	)
-
-	// Create meter provider
 	c.provider = metricSDK.NewMeterProvider(
 		metricSDK.WithReader(metricSDK.NewPeriodicReader(
 			exporter,
@@ -166,17 +174,80 @@ func (c *Consumer) initOpenTelemetry(ctx context.Context) error {
 		metricSDK.WithResource(res),
 	)
 
-	// Set global meter provider
 	otel.SetMeterProvider(c.provider)
 
-	// Create meter
 	c.meter = c.provider.Meter(
 		"github.com/antimetal/agent",
 		metric.WithInstrumentationVersion("1.0.0"),
 	)
 
-	// Create transformer with service version for attributes
 	c.transformer = NewTransformer(c.meter, c.logger, c.config.ServiceVersion)
+
+	return nil
+}
+
+func (c *Consumer) initLogsExporter(ctx context.Context, res *resource.Resource) error {
+	opts := []otlploggrpc.Option{
+		otlploggrpc.WithEndpoint(c.config.Endpoint),
+		otlploggrpc.WithTimeout(c.config.Timeout),
+	}
+
+	if c.config.Insecure {
+		opts = append(opts, otlploggrpc.WithTLSCredentials(insecure.NewCredentials()))
+	}
+
+	if len(c.config.Headers) > 0 {
+		opts = append(opts, otlploggrpc.WithHeaders(c.config.Headers))
+	}
+
+	if c.config.Compression != "" {
+		switch c.config.Compression {
+		case CompressionGZip:
+			opts = append(opts, otlploggrpc.WithCompressor(c.config.Compression.String()))
+		case CompressionNone:
+		default:
+			c.logger.V(1).Info("Unknown compression type for logs, using default", "compression", c.config.Compression)
+		}
+	}
+
+	if c.config.RetryConfig.Enabled {
+		maxElapsed := c.config.RetryConfig.MaxBackoff
+		if c.config.RetryConfig.MaxRetries > 0 {
+			if c.config.RetryConfig.MaxRetries <= 100 {
+				maxElapsed = time.Duration(c.config.RetryConfig.MaxRetries) * c.config.RetryConfig.MaxBackoff
+			} else {
+				maxElapsed = 30 * time.Minute
+			}
+		}
+
+		retryConfig := otlploggrpc.RetryConfig{
+			Enabled:         true,
+			InitialInterval: c.config.RetryConfig.InitialBackoff,
+			MaxInterval:     c.config.RetryConfig.MaxBackoff,
+			MaxElapsedTime:  maxElapsed,
+		}
+		opts = append(opts, otlploggrpc.WithRetry(retryConfig))
+	}
+
+	logExporter, err := otlploggrpc.New(ctx, opts...)
+	if err != nil {
+		return err
+	}
+	c.logExporter = logExporter
+
+	c.logProvider = logSDK.NewLoggerProvider(
+		logSDK.WithResource(res),
+		logSDK.WithProcessor(
+			logSDK.NewBatchProcessor(
+				logExporter,
+				logSDK.WithExportTimeout(c.config.Timeout),
+				logSDK.WithExportInterval(c.config.BatchTimeout),
+				logSDK.WithExportMaxBatchSize(c.config.ExportBatchSize),
+			),
+		),
+	)
+
+	c.logTransformer = NewLogTransformer(c.logProvider, c.logger, c.config.ServiceVersion)
 
 	return nil
 }
@@ -214,16 +285,20 @@ func (c *Consumer) Start(ctx context.Context) error {
 	return nil
 }
 
-// shutdown gracefully shuts down the meter provider.
-// This is called when the context is cancelled.
+// shutdown gracefully shuts down the meter and logger providers.
 func (c *Consumer) shutdown(ctx context.Context) {
-	// Shutdown the meter provider with a timeout
-	if c.provider != nil {
-		shutdownCtx, shutdownCancel := context.WithTimeout(ctx, 30*time.Second)
-		defer shutdownCancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer shutdownCancel()
 
+	if c.provider != nil {
 		if err := c.provider.Shutdown(shutdownCtx); err != nil {
 			c.logger.Error(err, "Error shutting down meter provider")
+		}
+	}
+
+	if c.logProvider != nil {
+		if err := c.logProvider.Shutdown(shutdownCtx); err != nil {
+			c.logger.Error(err, "Error shutting down logger provider")
 		}
 	}
 
@@ -333,7 +408,6 @@ func (c *Consumer) processBatch(batch []metrics.MetricEvent) {
 
 // processEvent processes a single metrics event
 func (c *Consumer) processEvent(event metrics.MetricEvent) error {
-	// Log detailed event information at debug level
 	c.logger.V(2).Info("Processing metrics event",
 		"metric_type", event.MetricType,
 		"source", event.Source,
@@ -341,11 +415,19 @@ func (c *Consumer) processEvent(event metrics.MetricEvent) error {
 		"cluster", event.ClusterName,
 		"timestamp", event.Timestamp)
 
+	// Transform to metrics
 	if err := c.transformer.TransformAndRecord(event); err != nil {
 		return err
 	}
 
-	// Log heartbeat periodically
+	// Also emit kernel messages as logs
+	if event.MetricType == metrics.MetricTypeKernel && c.logTransformer != nil {
+		ctx := context.Background()
+		if err := c.logTransformer.TransformAndEmit(ctx, event); err != nil {
+			c.logger.V(1).Info("Failed to emit kernel logs", "error", err)
+		}
+	}
+
 	if c.eventsProcessed.Load()%HeartbeatInterval == 0 {
 		c.logger.V(1).Info("OpenTelemetry consumer heartbeat",
 			"events_processed", c.eventsProcessed.Load(),
