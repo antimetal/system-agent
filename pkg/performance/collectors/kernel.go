@@ -9,7 +9,6 @@ package collectors
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -20,7 +19,6 @@ import (
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/antimetal/agent/pkg/performance/capabilities"
 	"github.com/antimetal/agent/pkg/proc"
-	"github.com/antimetal/agent/pkg/ringbuffer"
 	"github.com/go-logr/logr"
 )
 
@@ -32,16 +30,10 @@ func init() {
 	)
 }
 
-// Compile-time interface checks
-var (
-	_ performance.PointCollector      = (*KernelCollector)(nil)
-	_ performance.ContinuousCollector = (*KernelCollector)(nil)
-)
+// Compile-time interface check
+var _ performance.ContinuousCollector = (*KernelCollector)(nil)
 
 const (
-	// Default number of kernel messages to return
-	defaultMessageLimit = 50
-
 	// Buffer size for reading from /dev/kmsg
 	kmsgBufferSize = 8192
 
@@ -54,13 +46,14 @@ const (
 )
 
 // KernelCollector collects kernel messages from /dev/kmsg
+// It operates as a continuous collector that emits all available messages
+// on startup and then streams new messages in real-time.
 // Reference: https://www.kernel.org/doc/Documentation/ABI/testing/dev-kmsg
 type KernelCollector struct {
 	performance.BaseCollector
-	logger       logr.Logger
-	kmsgPath     string
-	messageLimit int
-	procPath     string
+	logger   logr.Logger
+	kmsgPath string
+	procPath string
 
 	// Continuous collection state
 	continuousMu   sync.Mutex
@@ -69,26 +62,13 @@ type KernelCollector struct {
 	lastError      error
 }
 
-// Compile-time interface check
-var _ performance.PointCollector = (*KernelCollector)(nil)
-
-type KernelCollectorOption func(*KernelCollector)
-
-func WithMessageLimit(limit int) KernelCollectorOption {
-	return func(c *KernelCollector) {
-		if limit > 0 {
-			c.messageLimit = limit
-		}
-	}
-}
-
-func NewKernelCollector(logger logr.Logger, config performance.CollectionConfig, opts ...KernelCollectorOption) (*KernelCollector, error) {
+func NewKernelCollector(logger logr.Logger, config performance.CollectionConfig) (*KernelCollector, error) {
 	if err := config.Validate(performance.ValidateOptions{RequireHostProcPath: true, RequireHostDevPath: true}); err != nil {
 		return nil, err
 	}
 
 	capabilities := performance.CollectorCapabilities{
-		SupportsOneShot:      true,
+		SupportsOneShot:      false, // Continuous-only collector
 		SupportsContinuous:   true,
 		RequiredCapabilities: []capabilities.Capability{capabilities.CAP_SYSLOG},
 		MinKernelVersion:     "3.5.0", // /dev/kmsg was introduced in 3.5
@@ -102,114 +82,12 @@ func NewKernelCollector(logger logr.Logger, config performance.CollectionConfig,
 			config,
 			capabilities,
 		),
-		logger:       logger.WithName("kernel"),
-		kmsgPath:     filepath.Join(config.HostDevPath, "kmsg"),
-		messageLimit: defaultMessageLimit,
-		procPath:     config.HostProcPath,
-	}
-
-	for _, opt := range opts {
-		opt(collector)
+		logger:   logger.WithName("kernel"),
+		kmsgPath: filepath.Join(config.HostDevPath, "kmsg"),
+		procPath: config.HostProcPath,
 	}
 
 	return collector, nil
-}
-
-func (c *KernelCollector) Collect(ctx context.Context) (performance.Event, error) {
-	messages, err := c.collectKernelMessages(ctx)
-	if err != nil {
-		if os.IsPermission(err) {
-			c.logger.V(1).Info("Permission denied reading kernel messages", "path", c.kmsgPath)
-			return performance.Event{Metric: performance.MetricTypeKernel, Data: []*performance.KernelMessage{}}, nil
-		}
-		return performance.Event{}, err
-	}
-	return performance.Event{Metric: performance.MetricTypeKernel, Data: messages}, nil
-}
-
-func (c *KernelCollector) collectKernelMessages(ctx context.Context) ([]*performance.KernelMessage, error) {
-	bootTime, err := proc.BootTime(c.procPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get boot time: %w", err)
-	}
-
-	// Open /dev/kmsg with O_RDONLY | O_NONBLOCK
-	// O_NONBLOCK is critical to avoid blocking when no messages are available
-	fd, err := syscall.Open(c.kmsgPath, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open %s: %w", c.kmsgPath, err)
-	}
-	defer syscall.Close(fd)
-
-	// Note: We don't seek to the end because:
-	// 1. Each reader of /dev/kmsg gets their own view of the ring buffer
-	// 2. The first read will give us the oldest available message
-	// 3. We limit the number of messages returned via messageLimit
-
-	// Ring buffer to store raw message strings
-	ringBuf, err := ringbuffer.New[string](c.messageLimit)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create ring buffer: %w", err)
-	}
-	buf := make([]byte, kmsgBufferSize)
-
-	// Read all messages first, store raw strings
-	for {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-		}
-
-		// Every read call to /dev/kmsg returns a single full message
-		n, err := syscall.Read(fd, buf)
-		if err != nil {
-			// EAGAIN means no more messages available (expected)
-			if err == syscall.EAGAIN {
-				break
-			}
-			// EPIPE can occur if we miss messages due to buffer overrun
-			if err == syscall.EPIPE {
-				// XXX This might be useful signal to an investigator on its own
-				c.logger.V(1).Info("Kernel ring buffer overrun, some messages lost")
-				continue
-			}
-			return nil, fmt.Errorf("error reading kmsg: %w", err)
-		}
-
-		// Store raw message in ring buffer
-		ringBuf.Push(string(buf[:n]))
-	}
-
-	// Get all messages in chronological order from ring buffer
-	rawMessages := ringBuf.GetAll()
-	messages, err := c.parseMessages(rawMessages, bootTime)
-	if err == nil {
-		c.logger.V(1).Info("Collected kernel messages", "count", len(messages), "limit", c.messageLimit)
-	}
-	return messages, err
-}
-
-// parseMessages parses raw kernel messages
-func (c *KernelCollector) parseMessages(rawMessages []string, bootTime time.Time) ([]*performance.KernelMessage, error) {
-	if len(rawMessages) == 0 {
-		return []*performance.KernelMessage{}, nil
-	}
-
-	// Allocate result slice - may be smaller if some messages fail to parse
-	result := make([]*performance.KernelMessage, 0, len(rawMessages))
-
-	// Parse messages in order
-	for _, rawMsg := range rawMessages {
-		msg, err := c.parseKmsgLine(rawMsg, bootTime)
-		if err != nil {
-			c.logger.V(2).Info("Failed to parse kmsg line", "error", err)
-			continue // Skip unparseable messages
-		}
-		result = append(result, msg)
-	}
-
-	return result, nil
 }
 
 // parseKmsgLine parses a line from /dev/kmsg
@@ -402,14 +280,50 @@ func (c *KernelCollector) continuousCollectionLoop(ctx context.Context, bootTime
 	}
 	defer syscall.Close(fd)
 
-	// Seek to the end to only get new messages
-	_, err = syscall.Seek(fd, 0, 2) // SEEK_END
-	if err != nil {
-		c.logger.V(1).Info("Failed to seek to end of kmsg, will read from beginning", "error", err)
-	}
-
 	buf := make([]byte, kmsgBufferSize)
 
+	// First, emit all available messages
+	messageCount := 0
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		n, err := syscall.Read(fd, buf)
+		if err != nil {
+			if err == syscall.EAGAIN {
+				// No more messages available, we've read them all
+				break
+			}
+			if err == syscall.EPIPE {
+				c.logger.V(1).Info("Kernel ring buffer overrun during initial read")
+				continue
+			}
+			c.continuousMu.Lock()
+			c.lastError = fmt.Errorf("error reading initial kmsg: %w", err)
+			c.continuousMu.Unlock()
+			return
+		}
+
+		msg, err := c.parseKmsgLine(string(buf[:n]), bootTime)
+		if err != nil {
+			c.logger.V(2).Info("Failed to parse kmsg line", "error", err)
+			continue
+		}
+
+		select {
+		case c.continuousChan <- performance.Event{Metric: performance.MetricTypeKernel, Data: msg}:
+			messageCount++
+		case <-ctx.Done():
+			return
+		}
+	}
+
+	c.logger.Info("Emitted all available kernel messages", "count", messageCount)
+
+	// Now continue tailing for new messages
 	for {
 		select {
 		case <-ctx.Done():
