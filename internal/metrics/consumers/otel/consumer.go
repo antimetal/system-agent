@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/metric"
 	metricSDK "go.opentelemetry.io/otel/sdk/metric"
@@ -153,6 +154,7 @@ func (c *Consumer) initOpenTelemetry(ctx context.Context) error {
 		"",
 		semconv.ServiceName(c.config.ServiceName),
 		semconv.ServiceVersion(c.config.ServiceVersion),
+		attribute.String("telemetry.distro.name", "antimetal-agent"),
 	)
 
 	// Create meter provider
