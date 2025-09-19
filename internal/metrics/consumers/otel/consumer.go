@@ -154,7 +154,7 @@ func (c *Consumer) initOpenTelemetry(ctx context.Context) error {
 		"",
 		semconv.ServiceName(c.config.ServiceName),
 		semconv.ServiceVersion(c.config.ServiceVersion),
-		attribute.String("antimetal", "true"),
+		attribute.String("telemetry.distro.name", "antimetal-agent"),
 	)
 
 	// Create meter provider
