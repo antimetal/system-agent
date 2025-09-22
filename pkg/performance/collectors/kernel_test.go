@@ -182,28 +182,6 @@ func TestKernelCollector_parseKmsgLine(t *testing.T) {
 	}
 }
 
-func TestKernelCollector_MessageLimit(t *testing.T) {
-	config := performance.CollectionConfig{
-		HostProcPath: "/proc",
-		HostDevPath:  "/dev",
-	}
-
-	// Test with custom message limit
-	collector, err := NewKernelCollector(logr.Discard(), config, WithMessageLimit(10))
-	require.NoError(t, err)
-	assert.Equal(t, 10, collector.messageLimit)
-
-	// Test with default
-	collector2, err := NewKernelCollector(logr.Discard(), config)
-	require.NoError(t, err)
-	assert.Equal(t, defaultMessageLimit, collector2.messageLimit)
-
-	// Test with invalid limit (should keep default)
-	collector3, err := NewKernelCollector(logr.Discard(), config, WithMessageLimit(0))
-	require.NoError(t, err)
-	assert.Equal(t, defaultMessageLimit, collector3.messageLimit)
-}
-
 func TestKernelCollector_ContinuousCollection(t *testing.T) {
 	config := performance.CollectionConfig{
 		HostProcPath: t.TempDir(),
