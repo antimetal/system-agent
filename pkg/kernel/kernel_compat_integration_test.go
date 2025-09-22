@@ -100,11 +100,9 @@ func TestCollectorCompatibility(t *testing.T) {
 	require.NoError(t, err, "Failed to get current kernel version")
 
 	config := performance.CollectionConfig{
-		HostProcPath: "/proc",
-		HostSysPath:  "/sys",
-		HostDevPath:  "/dev",
-		Interval:     time.Second, // Set a default interval for continuous collectors
+		Interval: time.Second, // Set a default interval for continuous collectors
 	}
+	config.ApplyDefaults()
 
 	logger := logr.Discard()
 

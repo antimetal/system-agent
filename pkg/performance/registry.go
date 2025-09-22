@@ -49,11 +49,8 @@ func Register(metricType MetricType, collector NewContinuousCollector) {
 	}
 
 	// Create a temporary collector instance to check capabilities
-	config := CollectionConfig{
-		HostProcPath: "/proc",
-		HostSysPath:  "/sys",
-		HostDevPath:  "/dev",
-	}
+	config := CollectionConfig{}
+	config.ApplyDefaults()
 	tempLogger := registryLogger.WithName(string(metricType))
 
 	tempCollector, err := collector(tempLogger, config)
