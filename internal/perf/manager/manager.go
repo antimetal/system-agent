@@ -9,6 +9,7 @@ package manager
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -19,11 +20,18 @@ import (
 	"github.com/antimetal/agent/internal/metrics"
 	agentv1 "github.com/antimetal/agent/pkg/api/antimetal/agent/v1"
 	"github.com/antimetal/agent/pkg/channel"
-	"github.com/antimetal/agent/pkg/config/environment"
 	"github.com/antimetal/agent/pkg/performance"
 	// register all collectors to the registry
 	_ "github.com/antimetal/agent/pkg/performance/collectors"
 )
+
+// getEnvOrDefault returns the value of the environment variable or a default value
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
 
 type collectorInstance struct {
 	version string
@@ -79,17 +87,15 @@ func New(configLoader config.Loader, router metrics.Router, opts ...Option) (*ma
 
 	perfEvents := channel.NewMerger[performance.Event]()
 
-	// Get host paths from environment
-	hostPaths := environment.GetHostPaths()
-
+	// Use default paths, can be overridden with options
 	m := &manager{
 		configLoader:      configLoader,
 		router:            router,
 		perfEvents:        perfEvents,
 		runningCollectors: make(map[string]*collectorInstance),
-		procPath:          hostPaths.Proc,
-		sysPath:           hostPaths.Sys,
-		devPath:           hostPaths.Dev,
+		procPath:          getEnvOrDefault("HOST_PROC", "/proc"),
+		sysPath:           getEnvOrDefault("HOST_SYS", "/sys"),
+		devPath:           getEnvOrDefault("HOST_DEV", "/dev"),
 	}
 	for _, opt := range opts {
 		opt(m)
