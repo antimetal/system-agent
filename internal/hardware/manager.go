@@ -55,16 +55,8 @@ func NewManager(logger logr.Logger, config ManagerConfig) (*Manager, error) {
 		return nil, fmt.Errorf("resource store is required")
 	}
 
-	// Apply defaults to collection config if needed
-	if config.CollectionConfig.HostProcPath == "" {
-		config.CollectionConfig.HostProcPath = "/proc"
-	}
-	if config.CollectionConfig.HostSysPath == "" {
-		config.CollectionConfig.HostSysPath = "/sys"
-	}
-	if config.CollectionConfig.HostDevPath == "" {
-		config.CollectionConfig.HostDevPath = "/dev"
-	}
+	// Apply defaults to collection config
+	config.CollectionConfig.ApplyDefaults()
 
 	// Default to 5 minute update interval
 	interval := config.UpdateInterval
