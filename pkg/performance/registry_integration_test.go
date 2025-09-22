@@ -129,11 +129,8 @@ func TestLinuxCollectorStatus(t *testing.T) {
 }
 
 func TestLinuxCollectorCreation(t *testing.T) {
-	config := performance.CollectionConfig{
-		HostProcPath: "/proc",
-		HostSysPath:  "/sys",
-		HostDevPath:  "/dev",
-	}
+	config := performance.CollectionConfig{}
+	config.ApplyDefaults()
 
 	available := performance.GetAvailableCollectors()
 	require.NotEmpty(t, available, "Should have at least some collectors available")
