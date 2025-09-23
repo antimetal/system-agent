@@ -75,7 +75,7 @@ type Config struct {
 	// Advanced options
 	BatchTimeout    time.Duration // Max time between batches
 	ExportBatchSize int           // Number of metrics to accumulate before export
-	MaxQueueSize    int           // Maximum queued metrics
+	MaxQueueSize    int           // Maximum queued metrics in ring buffer
 }
 
 // RetryConfig configures retry behavior for failed exports
@@ -109,7 +109,7 @@ func DefaultConfig() Config {
 		},
 		BatchTimeout:    10 * time.Second,
 		ExportBatchSize: 500,
-		MaxQueueSize:    10000,
+		MaxQueueSize:    1000,
 	}
 }
 
@@ -156,6 +156,20 @@ func (c *Config) ApplyEnvironmentVariables() {
 	// OTEL_SERVICE_VERSION
 	if serviceVersion := os.Getenv("OTEL_SERVICE_VERSION"); serviceVersion != "" {
 		c.ServiceVersion = serviceVersion
+	}
+
+	// OTEL_EXPORTER_METRICS_MAX_QUEUE_SIZE - custom env var for queue size
+	if queueSize := os.Getenv("OTEL_EXPORTER_METRICS_MAX_QUEUE_SIZE"); queueSize != "" {
+		if size, err := strconv.Atoi(queueSize); err == nil && size > 0 {
+			c.MaxQueueSize = size
+		}
+	}
+
+	// OTEL_EXPORTER_METRICS_EXPORT_BATCH_SIZE - custom env var for batch size
+	if batchSize := os.Getenv("OTEL_EXPORTER_METRICS_EXPORT_BATCH_SIZE"); batchSize != "" {
+		if size, err := strconv.Atoi(batchSize); err == nil && size > 0 {
+			c.ExportBatchSize = size
+		}
 	}
 }
 
@@ -220,7 +234,7 @@ func (c *Config) Validate() error {
 	}
 
 	if c.MaxQueueSize <= 0 {
-		c.MaxQueueSize = 10000
+		c.MaxQueueSize = 1000
 	} else if c.MaxQueueSize > MaxSafeQueueSize {
 		return ErrQueueSizeTooLarge
 	}

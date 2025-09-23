@@ -68,6 +68,8 @@ type Consumer struct {
 	eventsProcessed atomic.Uint64
 	eventsDropped   atomic.Uint64
 	errorsCount     atomic.Uint64
+	bufferHighWater atomic.Uint64 // Track maximum buffer usage
+	bufferOverflows atomic.Uint64 // Track buffer overflow events
 	startTime       time.Time
 }
 
@@ -261,6 +263,21 @@ func (c *Consumer) Name() string {
 // This method is non-blocking. The ring buffer automatically overwrites the
 // oldest event when full, implementing a natural drop-oldest policy.
 func (c *Consumer) HandleEvent(event metrics.MetricEvent) error {
+	// Check if buffer is at capacity before pushing
+	bufferLen := c.buffer.Len()
+	if bufferLen >= c.buffer.Cap() {
+		c.bufferOverflows.Add(1)
+		c.eventsDropped.Add(1)
+	}
+
+	// Track high water mark - simple atomic max without loop
+	// We accept that under extreme concurrency we might miss some updates,
+	// but this is just for monitoring/debugging so approximate is fine
+	currentMax := c.bufferHighWater.Load()
+	if uint64(bufferLen) > currentMax {
+		c.bufferHighWater.Store(uint64(bufferLen))
+	}
+
 	// Push to ring buffer (never blocks, overwrites oldest if full)
 	c.buffer.Push(event)
 	return nil
@@ -304,7 +321,11 @@ func (c *Consumer) shutdown(ctx context.Context) {
 
 	c.logger.Info("OpenTelemetry consumer stopped",
 		"events_processed", c.eventsProcessed.Load(),
+		"events_dropped", c.eventsDropped.Load(),
 		"errors", c.errorsCount.Load(),
+		"buffer_high_water", c.bufferHighWater.Load(),
+		"buffer_overflows", c.bufferOverflows.Load(),
+		"buffer_capacity", c.buffer.Cap(),
 		"uptime", time.Since(c.startTime))
 }
 
@@ -431,7 +452,11 @@ func (c *Consumer) processEvent(event metrics.MetricEvent) error {
 	if c.eventsProcessed.Load()%HeartbeatInterval == 0 {
 		c.logger.V(1).Info("OpenTelemetry consumer heartbeat",
 			"events_processed", c.eventsProcessed.Load(),
-			"errors", c.errorsCount.Load())
+			"events_dropped", c.eventsDropped.Load(),
+			"errors", c.errorsCount.Load(),
+			"buffer_usage", c.buffer.Len(),
+			"buffer_capacity", c.buffer.Cap(),
+			"buffer_high_water", c.bufferHighWater.Load())
 	}
 
 	return nil
