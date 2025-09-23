@@ -109,7 +109,7 @@ func getLinuxRuntime() (*runtimev1.Linux, error) {
 
 func getCgroupInfo() (*runtimev1.CgroupInfo, error) {
 	hostSysPath := os.Getenv("HOST_SYS")
-	if hostSysPath != "" {
+	if hostSysPath == "" {
 		hostSysPath = "/sys"
 	}
 	cgroupPath := filepath.Join(hostSysPath, "fs", "cgroup")
