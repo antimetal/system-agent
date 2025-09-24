@@ -3,7 +3,9 @@ kind: Kustomization
 
 # Test workloads for cgroup collectors and load simulation
 resources:
-  - cgroup-test-workloads.yaml
+  - workloads/cgroup-test-workloads.yaml
+  - workloads/cpu-pinned-workload.yaml
+  - workloads/init-container-workload.yaml
 
 # Label all resources for easy cleanup
 labels:
