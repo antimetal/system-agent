@@ -6,7 +6,7 @@
 
 //go:build !linux
 
-package graph
+package hardwaregraph
 
 import (
 	"crypto/md5"
