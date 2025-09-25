@@ -24,7 +24,6 @@ type Snapshot struct {
 	MemoryInfo  *performance.MemoryInfo
 	DiskInfo    []*performance.DiskInfo
 	NetworkInfo []*performance.NetworkInfo
-	NUMAStats   *performance.NUMAStatistics
 
 	// Collection metadata
 	CollectorRun performance.CollectorRunInfo

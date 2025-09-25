@@ -164,7 +164,6 @@ func (m *Manager) collectHardwareSnapshot(ctx context.Context) (*types.Snapshot,
 		performance.MetricTypeMemoryInfo,
 		performance.MetricTypeDiskInfo,
 		performance.MetricTypeNetworkInfo,
-		performance.MetricTypeNUMAStats,
 	}
 
 	// Collect from each available collector using the registry
@@ -199,6 +198,18 @@ func (m *Manager) collectHardwareSnapshot(ctx context.Context) (*types.Snapshot,
 			continue
 		}
 
+		// Verify that hardware collectors are OnceContinuousCollectors
+		if _, ok := collector.(*performance.OnceContinuousCollector); !ok {
+			m.logger.Error(nil, "Hardware collector is not an OnceContinuousCollector",
+				"metric_type", metricType, "collector_type", fmt.Sprintf("%T", collector))
+			snapshot.CollectorRun.CollectorStats[metricType] = performance.CollectorStat{
+				Status:   performance.CollectorStatusFailed,
+				Duration: time.Since(collectorStartTime),
+				Error:    fmt.Errorf("expected OnceContinuousCollector, got %T", collector),
+			}
+			continue
+		}
+
 		// Start the collector - for OnceContinuousCollector this does a one-shot collection
 		dataChan, err := collector.Start(ctx)
 		if err != nil {
@@ -225,8 +236,6 @@ func (m *Manager) collectHardwareSnapshot(ctx context.Context) (*types.Snapshot,
 			snapshot.DiskInfo = data.Data.([]*performance.DiskInfo)
 		case performance.MetricTypeNetworkInfo:
 			snapshot.NetworkInfo = data.Data.([]*performance.NetworkInfo)
-		case performance.MetricTypeNUMAStats:
-			snapshot.NUMAStats = data.Data.(*performance.NUMAStatistics)
 		}
 
 		snapshot.CollectorRun.CollectorStats[metricType] = performance.CollectorStat{
