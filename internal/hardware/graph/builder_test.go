@@ -4,14 +4,14 @@
 // LICENSE file or at:
 // https://polyformproject.org/wp-content/uploads/2020/06/PolyForm-Shield-1.0.0.txt
 
-package graph_test
+package hardwaregraph_test
 
 import (
 	"context"
 	"testing"
 	"time"
 
-	"github.com/antimetal/agent/internal/hardware/graph"
+	hardwaregraph "github.com/antimetal/agent/internal/hardware/graph"
 	"github.com/antimetal/agent/internal/hardware/types"
 	"github.com/antimetal/agent/internal/resource"
 	"github.com/antimetal/agent/internal/resource/store"
@@ -85,7 +85,7 @@ func TestBuilder_BuildFromSnapshot(t *testing.T) {
 	testStore := newTestStore(t)
 	defer testStore.Close()
 
-	builder := graph.NewBuilder(logger, testStore)
+	builder := hardwaregraph.NewBuilder(logger, testStore)
 
 	// Create a test snapshot with sample data
 	snapshot := &types.Snapshot{
@@ -238,7 +238,7 @@ func TestBuilder_BuildFromSnapshot_EmptySnapshot(t *testing.T) {
 	testStore := newTestStore(t)
 	defer testStore.Close()
 
-	builder := graph.NewBuilder(logger, testStore)
+	builder := hardwaregraph.NewBuilder(logger, testStore)
 
 	// Create an empty snapshot
 	snapshot := &types.Snapshot{
@@ -260,7 +260,7 @@ func TestBuilder_BuildFromSnapshot_PartialData(t *testing.T) {
 	testStore := newTestStore(t)
 	defer testStore.Close()
 
-	builder := graph.NewBuilder(logger, testStore)
+	builder := hardwaregraph.NewBuilder(logger, testStore)
 
 	// Create a snapshot with only CPU data
 	snapshot := &types.Snapshot{

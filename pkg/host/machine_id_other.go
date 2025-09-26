@@ -6,7 +6,8 @@
 
 //go:build !linux
 
-package hardwaregraph
+// Package host provides utilities for host and machine identification
+package host
 
 import (
 	"crypto/md5"
@@ -14,10 +15,13 @@ import (
 	"os"
 )
 
-// getMachineID returns a mock machine ID for non-Linux systems.
+// MachineID returns a mock machine ID for non-Linux systems.
 // This is primarily used for testing on macOS and other platforms.
 // It generates a deterministic ID based on hostname for consistency in tests.
-func getMachineID() string {
+//
+// This function is used to ensure resource uniqueness across multi-node clusters,
+// as container IDs and process PIDs are only unique within a single host.
+func MachineID() string {
 	hostname, err := os.Hostname()
 	if err != nil {
 		// Return a default mock ID if we can't get hostname
@@ -30,9 +34,9 @@ func getMachineID() string {
 	return fmt.Sprintf("%x", hash)
 }
 
-// getSystemUUID returns a mock system UUID for non-Linux systems.
+// SystemUUID returns a mock system UUID for non-Linux systems.
 // This is primarily used for testing on macOS and other platforms.
-func getSystemUUID() string {
+func SystemUUID() string {
 	hostname, err := os.Hostname()
 	if err != nil {
 		// Return a default mock UUID if we can't get hostname

@@ -30,6 +30,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/antimetal/agent/internal/config"
+	"github.com/antimetal/agent/internal/containers"
 	"github.com/antimetal/agent/internal/hardware"
 	"github.com/antimetal/agent/internal/intake"
 	k8sagent "github.com/antimetal/agent/internal/kubernetes/agent"
@@ -49,34 +50,35 @@ import (
 var (
 	setupLog logr.Logger
 
-	// CLI Options
-	configLoader           string
-	configFSPath           string
-	configAMSAddr          string
-	configAMSSecure        bool
-	configAMSAPIKey        string
-	dataDir                string
-	eksAccountID           string
-	eksRegion              string
-	eksClusterName         string
-	eksAutodiscover        bool
-	enableHTTP2            bool
-	enableK8sController    bool
-	enableLeaderElection   bool
-	enablePerfCollectors   bool
-	hardwareUpdateInterval time.Duration
-	intakeAddr             string
-	intakeAPIKey           string
-	intakeSecure           bool
-	kubernetesProvider     string
-	maxStreamAge           time.Duration
-	metricsAddr            string
-	metricsSecure          bool
-	metricsCertDir         string
-	metricsCertName        string
-	metricsKeyName         string
-	pprofAddr              string
-	probeAddr              string
+	// CLI Options (alphabetical order)
+	configAMSAddr            string
+	configAMSAPIKey          string
+	configAMSSecure          bool
+	configFSPath             string
+	configLoader             string
+	containersUpdateInterval time.Duration
+	dataDir                  string
+	eksAccountID             string
+	eksAutodiscover          bool
+	eksClusterName           string
+	eksRegion                string
+	enableHTTP2              bool
+	enableK8sController      bool
+	enableLeaderElection     bool
+	enablePerfCollectors     bool
+	hardwareUpdateInterval   time.Duration
+	intakeAddr               string
+	intakeAPIKey             string
+	intakeSecure             bool
+	kubernetesProvider       string
+	maxStreamAge             time.Duration
+	metricsAddr              string
+	metricsCertDir           string
+	metricsCertName          string
+	metricsKeyName           string
+	metricsSecure            bool
+	pprofAddr                string
+	probeAddr                string
 )
 
 func init() {
@@ -128,6 +130,8 @@ func init() {
 		"The directory where the agent will place its persistent data files. Set to empty string for in-memory mode.")
 	flag.DurationVar(&hardwareUpdateInterval, "hardware-update-interval", 5*time.Minute,
 		"Interval for hardware topology discovery updates")
+	flag.DurationVar(&containersUpdateInterval, "containers-update-interval", 30*time.Second,
+		"Interval for container and process discovery updates")
 	flag.BoolVar(&enablePerfCollectors, "enable-performance-collectors", false,
 		"Enable continuous performance collectors for testing (CPU, memory, disk, network, process)")
 	flag.StringVar(&configLoader, "config-loader", "fs",
@@ -401,6 +405,23 @@ func main() {
 			setupLog.Error(err, "unable to register performance manager")
 			os.Exit(1)
 		}
+	}
+
+	// Setup Containers Manager (for container/process discovery)
+	containersManager, err := containers.NewManager(
+		mgr.GetLogger(),
+		containers.ManagerConfig{
+			Store:          rsrcStore,
+			UpdateInterval: containersUpdateInterval,
+		},
+	)
+	if err != nil {
+		setupLog.Error(err, "unable to create containers manager")
+		os.Exit(1)
+	}
+	if err := mgr.Add(containersManager); err != nil {
+		setupLog.Error(err, "unable to register containers manager")
+		os.Exit(1)
 	}
 
 	// Setup Kubernetes Collector Controller
