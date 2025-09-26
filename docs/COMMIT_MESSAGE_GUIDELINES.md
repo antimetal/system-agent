@@ -52,6 +52,7 @@ The following is the list of supported scopes:
 - **`resource`** - Resource store
 - **`k8s`** - Kubernetes controller, agent, indexer, handler changes
 - **`hardware`** - Hardware agent
+- **`container`** - Container & Process agent
 
 #### **Performance Monitoring Agent**
 - **`perf`** - Performance monitoring system and collectors
