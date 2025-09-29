@@ -281,6 +281,7 @@ type ProcessStats struct {
 	PGID    int32  `json:"pgid"`    // Process group ID (field 5 in stat)
 	SID     int32  `json:"sid"`     // Session ID (field 6 in stat)
 	Command string `json:"command"` // Command name from /proc/[pid]/comm or stat field 2
+	Cmdline string `json:"cmdline"` // Command line with arguments from /proc/[pid]/cmdline
 	State   string `json:"state"`   // Process state (field 3 in stat: R, S, D, Z, T, etc.)
 	// CPU stats from /proc/[pid]/stat
 	CPUTime    uint64  `json:"cpu_time"`    // Total CPU time: utime + stime (fields 14+15)
@@ -306,6 +307,12 @@ type ProcessStats struct {
 	// Context switches from /proc/[pid]/status
 	VoluntaryCtxt   uint64 `json:"voluntary_ctxt"`   // voluntary_ctxt_switches
 	InvoluntaryCtxt uint64 `json:"involuntary_ctxt"` // nonvoluntary_ctxt_switches
+}
+
+// ProcessSnapshot contains a collection of process statistics at a specific point in time
+type ProcessSnapshot struct {
+	Timestamp time.Time      `json:"timestamp"` // When the snapshot was taken
+	Processes []ProcessStats `json:"processes"` // All processes in the snapshot
 }
 
 // DiskStats represents disk I/O statistics from /proc/diskstats
