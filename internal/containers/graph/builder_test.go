@@ -62,7 +62,7 @@ func (m *mockStore) AddRelationships(rels ...*resourcev1.Relationship) error {
 }
 
 // Implement other required Store interface methods as no-ops for testing
-func (m *mockStore) UpdateResource(rsrc *resourcev1.Resource) error   {
+func (m *mockStore) UpdateResource(rsrc *resourcev1.Resource) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.resources = append(m.resources, rsrc)
