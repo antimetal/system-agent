@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/antimetal/agent/internal/hardware/graph"
+	hardwaregraph "github.com/antimetal/agent/internal/hardware/graph"
 	"github.com/antimetal/agent/internal/hardware/types"
 	"github.com/antimetal/agent/internal/resource"
 	"github.com/antimetal/agent/pkg/performance"
@@ -23,7 +23,7 @@ import (
 type Manager struct {
 	logger  logr.Logger
 	store   resource.Store
-	builder *graph.Builder
+	builder *hardwaregraph.Builder
 
 	// Configuration
 	collectionConfig performance.CollectionConfig
@@ -67,7 +67,7 @@ func NewManager(logger logr.Logger, config ManagerConfig) (*Manager, error) {
 	return &Manager{
 		logger:           logger.WithName("hardware-manager"),
 		store:            config.Store,
-		builder:          graph.NewBuilder(logger, config.Store),
+		builder:          hardwaregraph.NewBuilder(logger, config.Store),
 		collectionConfig: config.CollectionConfig,
 		nodeName:         config.NodeName,
 		clusterName:      config.ClusterName,

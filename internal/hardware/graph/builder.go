@@ -4,7 +4,7 @@
 // LICENSE file or at:
 // https://polyformproject.org/wp-content/uploads/2020/06/PolyForm-Shield-1.0.0.txt
 
-package graph
+package hardwaregraph
 
 import (
 	"context"
