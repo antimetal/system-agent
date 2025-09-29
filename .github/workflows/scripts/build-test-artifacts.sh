@@ -58,7 +58,14 @@ echo "Found packages with integration tests: $packages_with_tests"
 # Build integration test binaries for packages with integration tests
 echo "Creating integration test binaries"
 mkdir -p integration-tests
-GOOS=linux GOARCH=amd64 go test -c -tags integration -o integration-tests $packages_with_tests
+
+# Build each package separately (go test -c only supports one package at a time)
+for pkg in $packages_with_tests; do
+    # Create a simple name for each test binary based on the package path
+    pkg_name=$(echo "$pkg" | sed 's|github.com/antimetal/agent/||' | sed 's|/|_|g')
+    echo "Building test binary for $pkg -> integration-tests/${pkg_name}.test"
+    GOOS=linux GOARCH=amd64 go test -c -tags integration -o "integration-tests/${pkg_name}.test" "$pkg"
+done
 
 if [ ! -d "integration-tests" ] || [ -z "$(ls -A integration-tests)" ]; then
     echo "ERROR: Failed to build integration test binaries"
