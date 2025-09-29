@@ -8,6 +8,7 @@ package containergraph
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/antimetal/agent/internal/resource"
@@ -38,6 +39,7 @@ func (m *mockSnapshot) GetProcesses() []ProcessInfo {
 
 // mockStore implements a simple in-memory store for testing
 type mockStore struct {
+	mu            sync.Mutex
 	resources     []*resourcev1.Resource
 	relationships []*resourcev1.Relationship
 }
@@ -60,7 +62,12 @@ func (m *mockStore) AddRelationships(rels ...*resourcev1.Relationship) error {
 }
 
 // Implement other required Store interface methods as no-ops for testing
-func (m *mockStore) UpdateResource(rsrc *resourcev1.Resource) error   { return nil }
+func (m *mockStore) UpdateResource(rsrc *resourcev1.Resource) error   {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.resources = append(m.resources, rsrc)
+	return nil
+}
 func (m *mockStore) DeleteResource(ref *resourcev1.ResourceRef) error { return nil }
 func (m *mockStore) GetResource(ref *resourcev1.ResourceRef) (*resourcev1.Resource, error) {
 	return nil, nil
