@@ -1,0 +1,154 @@
+# Copyright Antimetal, Inc. All rights reserved.
+#
+# Multi-container pod workload for container relationship testing
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: antimetal-test
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: multi-container-app
+  namespace: antimetal-test
+  labels:
+    test.antimetal.io/type: "topology"
+    test.antimetal.io/component: "multi-container"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: multi-container-app
+  template:
+    metadata:
+      labels:
+        app: multi-container-app
+        test.antimetal.io/workload: "multi-container"
+    spec:
+      containers:
+      # Main application container
+      - name: app
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "64Mi"
+          limits:
+            cpu: "200m"
+            memory: "128Mi"
+        volumeMounts:
+        - name: shared-data
+          mountPath: /usr/share/nginx/html
+      
+      # Sidecar container generating content
+      - name: content-generator
+        image: busybox:latest
+        command: ["/bin/sh"]
+        args:
+        - -c
+        - |
+          while true; do
+            echo "<html><body><h1>Generated at $(date)</h1></body></html>" > /html/index.html
+            sleep 30
+          done
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "32Mi"
+          limits:
+            cpu: "100m"
+            memory: "64Mi"
+        volumeMounts:
+        - name: shared-data
+          mountPath: /html
+      
+      # Monitoring sidecar
+      - name: monitor
+        image: busybox:latest
+        command: ["/bin/sh"]
+        args:
+        - -c
+        - |
+          while true; do
+            echo "Monitoring at $(date)"
+            # Simulate some monitoring activity
+            ps aux
+            sleep 60
+          done
+        resources:
+          requests:
+            cpu: "25m"
+            memory: "32Mi"
+          limits:
+            cpu: "50m"
+            memory: "64Mi"
+      
+      volumes:
+      - name: shared-data
+        emptyDir: {}
+---
+# Pod with init containers for process hierarchy testing
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: init-container-app
+  namespace: antimetal-test
+  labels:
+    test.antimetal.io/type: "topology"
+    test.antimetal.io/component: "init-containers"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: init-container-app
+  template:
+    metadata:
+      labels:
+        app: init-container-app
+        test.antimetal.io/workload: "init-containers"
+    spec:
+      initContainers:
+      - name: init-setup
+        image: busybox:latest
+        command: ['sh', '-c', 'echo "Initializing..." && sleep 5']
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "32Mi"
+          limits:
+            cpu: "100m"
+            memory: "64Mi"
+      
+      - name: init-config
+        image: busybox:latest
+        command: ['sh', '-c', 'echo "Configuring..." && sleep 3']
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "32Mi"
+          limits:
+            cpu: "100m"
+            memory: "64Mi"
+      
+      containers:
+      - name: main-app
+        image: busybox:latest
+        command: ["/bin/sh"]
+        args:
+        - -c
+        - |
+          echo "Main application running"
+          while true; do
+            date
+            sleep 30
+          done
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "64Mi"
+          limits:
+            cpu: "200m"
+            memory: "128Mi"

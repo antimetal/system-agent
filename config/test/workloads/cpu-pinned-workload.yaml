@@ -1,0 +1,41 @@
+# Copyright Antimetal, Inc. All rights reserved.
+#
+# CPU pinned workload for testing cpuset constraints and NUMA affinity
+---
+# CPU stress with cpuset pinning (Guaranteed QoS)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cpu-stress-pinned
+  namespace: antimetal-test
+  labels:
+    test.antimetal.io/type: "performance"
+    test.antimetal.io/component: "cpu-pinned"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cpu-stress-pinned
+  template:
+    metadata:
+      labels:
+        app: cpu-stress-pinned
+        test.antimetal.io/workload: "cpu-pinned"
+    spec:
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""  # Pin to control-plane node
+      containers:
+      - name: stress-pinned
+        image: progrium/stress:latest
+        args:
+        - "--cpu"
+        - "1"
+        - "--timeout"
+        - "0"
+        resources:
+          requests:
+            cpu: "1000m"
+            memory: "128Mi"
+          limits:
+            cpu: "1000m"  # Guaranteed QoS for CPU pinning
+            memory: "128Mi"

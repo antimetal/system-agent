@@ -10,6 +10,7 @@ package containers
 
 import (
 	"fmt"
+	runtimev1 "github.com/antimetal/agent/pkg/api/antimetal/runtime/v1"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,13 +21,31 @@ const (
 	minContainerIDLength = 12
 )
 
+// ParseContainerRuntime converts a runtime string to a ContainerRuntime enum value
+func ParseContainerRuntime(runtime string) runtimev1.ContainerRuntime {
+	switch strings.ToLower(runtime) {
+	case "docker":
+		return runtimev1.ContainerRuntime_CONTAINER_RUNTIME_DOCKER
+	case "containerd":
+		return runtimev1.ContainerRuntime_CONTAINER_RUNTIME_CONTAINERD
+	case "cri-containerd":
+		return runtimev1.ContainerRuntime_CONTAINER_RUNTIME_CRI_CONTAINERD
+	case "cri-o", "crio":
+		return runtimev1.ContainerRuntime_CONTAINER_RUNTIME_CRI_O
+	case "podman":
+		return runtimev1.ContainerRuntime_CONTAINER_RUNTIME_PODMAN
+	default:
+		return runtimev1.ContainerRuntime_CONTAINER_RUNTIME_UNKNOWN
+	}
+}
+
 // Container represents a discovered container with its cgroup location and runtime information.
 // This structure provides the necessary information to collect resource metrics for a container.
 type Container struct {
 	// ID is the container identifier (may be truncated for some runtimes)
 	ID string
 	// Runtime is the detected container runtime (docker, containerd, crio, etc.)
-	Runtime string
+	Runtime runtimev1.ContainerRuntime
 	// CgroupPath is the full path to the container's cgroup directory
 	CgroupPath string
 	// CgroupVersion indicates whether this container uses cgroup v1 or v2
@@ -103,25 +122,61 @@ func (d *Discovery) DiscoverAllContainers() ([]Container, error) {
 	v2Containers := d.scanCgroupV2Directory(d.cgroupPath, 2)
 	allContainers = append(allContainers, v2Containers...)
 
-	// Try cgroup v1 (check cpu subsystem as it's most commonly used)
-	v1Path := filepath.Join(d.cgroupPath, "cpu")
-	if _, err := os.Stat(v1Path); err == nil {
-		v1Containers := d.scanCgroupV1Directory(v1Path, 1)
-		// Deduplicate based on container ID
-		seen := make(map[string]bool)
-		for _, c := range allContainers {
-			seen[c.ID] = true
-		}
-		for _, c := range v1Containers {
-			if !seen[c.ID] {
-				allContainers = append(allContainers, c)
+	// Try cgroup v1 - look for available subsystems instead of assuming "cpu"
+	v1Subsystems := []string{"cpu", "memory", "cpuacct", "blkio", "devices"}
+	for _, subsystem := range v1Subsystems {
+		v1Path := filepath.Join(d.cgroupPath, subsystem)
+		if _, err := os.Stat(v1Path); err == nil {
+			v1Containers := d.scanCgroupV1Directory(v1Path, 1)
+
+			// Deduplicate based on container ID
+			seen := make(map[string]bool)
+			for _, c := range allContainers {
+				seen[c.ID] = true
 			}
+			for _, c := range v1Containers {
+				if !seen[c.ID] {
+					allContainers = append(allContainers, c)
+				}
+			}
+			break // Found a valid subsystem, no need to check others
 		}
 	}
 
 	return allContainers, nil
 }
 
+// scanCgroupV1Directory discovers containers in cgroup v1 hierarchies.
+//
+// Cgroup v1 container organization is complex because different container runtimes
+// organize their cgroup hierarchies differently:
+//
+// Docker:
+//   - Path: /sys/fs/cgroup/*/docker/<container_id>
+//   - Full 64-char hex IDs
+//
+// Containerd (including Kubernetes):
+//   - Path: /sys/fs/cgroup/*/system.slice/containerd-<container_id>.scope
+//   - Or: /sys/fs/cgroup/*/kubepods.slice/kubepods-<qos>/pod<pod_uid>/<container_id>
+//   - Truncated 12-char hex IDs for non-k8s, full IDs for k8s
+//
+// CRI-O:
+//   - Path: /sys/fs/cgroup/*/crio-<container_id>.scope
+//   - Or: /sys/fs/cgroup/*/machine.slice/crio-<container_id>.scope
+//   - Full 64-char hex IDs
+//
+// Podman:
+//   - Path: /sys/fs/cgroup/*/machine.slice/libpod-<container_id>.scope
+//   - Or: /sys/fs/cgroup/*/user.slice/user-<uid>.slice/user@<uid>.service/libpod-<container_id>.scope
+//   - Full 64-char hex IDs
+//
+// The function handles these variations by:
+// 1. Searching known runtime-specific paths
+// 2. Extracting container IDs using pattern matching
+// 3. Detecting runtime from path structure
+//
+// For detailed documentation on cgroup hierarchies and container runtime
+// differences, see: https://github.com/antimetal/system-agent-wiki/blob/main/Cgroup/Container-Discovery.md
 func (d *Discovery) scanCgroupV1Directory(basePath string, cgroupVersion int) []Container {
 	var containers []Container
 
@@ -186,6 +241,42 @@ func (d *Discovery) scanCgroupV1Directory(basePath string, cgroupVersion int) []
 	return containers
 }
 
+// scanCgroupV2Directory discovers containers in cgroup v2 unified hierarchy.
+//
+// Cgroup v2 uses a unified hierarchy which simplifies container discovery compared to v1,
+// but different runtimes still organize containers differently:
+//
+// Docker:
+//   - Path: /sys/fs/cgroup/docker/<container_id>
+//   - Or: /sys/fs/cgroup/system.slice/docker-<container_id>.scope
+//   - Full 64-char hex IDs
+//
+// Containerd (including Kubernetes):
+//   - Path: /sys/fs/cgroup/system.slice/containerd-<container_id>.scope
+//   - K8s: /sys/fs/cgroup/kubepods.slice/kubepods-<qos>.slice/kubepods-<qos>-pod<pod_uid>.slice/<runtime>-<container_id>.scope
+//   - Where <runtime> is "cri-containerd", "containerd", or "crio"
+//   - Truncated or full IDs depending on context
+//
+// CRI-O:
+//   - Path: /sys/fs/cgroup/machine.slice/crio-<container_id>.scope
+//   - K8s: Similar to containerd but with "crio" prefix
+//   - Full 64-char hex IDs
+//
+// Podman (rootless):
+//   - Path: /sys/fs/cgroup/user.slice/user-<uid>.slice/user@<uid>.service/user.slice/libpod-<container_id>.scope
+//   - Rootful: /sys/fs/cgroup/machine.slice/libpod-<container_id>.scope
+//   - Full 64-char hex IDs
+//
+// Systemd-nspawn:
+//   - Path: /sys/fs/cgroup/machine.slice/machine-<name>.scope
+//   - Names instead of hex IDs
+//
+// The unified hierarchy means we can walk the entire tree once instead of checking
+// multiple subsystem directories like in v1. Container cgroup directories typically
+// contain a "cgroup.controllers" file listing available controllers.
+//
+// For detailed documentation on cgroup v2 unified hierarchy and container organization,
+// see: https://github.com/antimetal/system-agent-wiki/blob/main/Cgroup/Container-Discovery-v2.md
 func (d *Discovery) scanCgroupV2Directory(basePath string, cgroupVersion int) []Container {
 	var containers []Container
 
@@ -221,28 +312,28 @@ func (d *Discovery) scanCgroupV2Directory(basePath string, cgroupVersion int) []
 }
 
 // detectRuntimeFromPath attempts to identify the container runtime from the cgroup path
-func detectRuntimeFromPath(path string) string {
+func detectRuntimeFromPath(path string) runtimev1.ContainerRuntime {
 	path = strings.ToLower(path)
 
 	// Check for CRI (Container Runtime Interface) prefixes first
 	// These indicate Kubernetes-managed containers
 	if strings.Contains(path, "cri-containerd") {
-		return "cri-containerd"
+		return runtimev1.ContainerRuntime_CONTAINER_RUNTIME_CRI_CONTAINERD
 	}
 	if strings.Contains(path, "cri-o") || strings.Contains(path, "crio") {
-		return "cri-o"
+		return runtimev1.ContainerRuntime_CONTAINER_RUNTIME_CRI_O
 	}
 
 	// Check for standalone runtimes
 	switch {
 	case strings.Contains(path, "docker"):
-		return "docker"
+		return runtimev1.ContainerRuntime_CONTAINER_RUNTIME_DOCKER
 	case strings.Contains(path, "containerd"):
-		return "containerd"
+		return runtimev1.ContainerRuntime_CONTAINER_RUNTIME_CONTAINERD
 	case strings.Contains(path, "podman"):
-		return "podman"
+		return runtimev1.ContainerRuntime_CONTAINER_RUNTIME_PODMAN
 	default:
-		return "unknown"
+		return runtimev1.ContainerRuntime_CONTAINER_RUNTIME_UNKNOWN
 	}
 }
 
