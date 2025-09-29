@@ -331,6 +331,82 @@ func (*ClaimsFrom) Descriptor() ([]byte, []int) {
 	return file_kubernetes_v1_relationships_proto_rawDescGZIP(), []int{7}
 }
 
+// Used to identify a machine, either physical or a VM, that is registered as a
+// Node.
+type RegisteredAs struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisteredAs) Reset() {
+	*x = RegisteredAs{}
+	mi := &file_kubernetes_v1_relationships_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisteredAs) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisteredAs) ProtoMessage() {}
+
+func (x *RegisteredAs) ProtoReflect() protoreflect.Message {
+	mi := &file_kubernetes_v1_relationships_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisteredAs.ProtoReflect.Descriptor instead.
+func (*RegisteredAs) Descriptor() ([]byte, []int) {
+	return file_kubernetes_v1_relationships_proto_rawDescGZIP(), []int{8}
+}
+
+// Points to the resource that underlyings a Kubernetes Resources (e.g. underlying machine
+// for a K8s node).
+type Underlying struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Underlying) Reset() {
+	*x = Underlying{}
+	mi := &file_kubernetes_v1_relationships_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Underlying) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Underlying) ProtoMessage() {}
+
+func (x *Underlying) ProtoReflect() protoreflect.Message {
+	mi := &file_kubernetes_v1_relationships_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Underlying.ProtoReflect.Descriptor instead.
+func (*Underlying) Descriptor() ([]byte, []int) {
+	return file_kubernetes_v1_relationships_proto_rawDescGZIP(), []int{9}
+}
+
 var File_kubernetes_v1_relationships_proto protoreflect.FileDescriptor
 
 const file_kubernetes_v1_relationships_proto_rawDesc = "" +
@@ -346,7 +422,10 @@ const file_kubernetes_v1_relationships_proto_rawDesc = "" +
 	"\vContainedBy\"\t\n" +
 	"\aBoundBy\"\f\n" +
 	"\n" +
-	"ClaimsFromB\xbb\x01\n" +
+	"ClaimsFrom\"\x0e\n" +
+	"\fRegisteredAs\"\f\n" +
+	"\n" +
+	"UnderlyingB\xbb\x01\n" +
 	"\x11com.kubernetes.v1B\x12RelationshipsProtoP\x01Z=github.com/antimetal/agent/pkg/api/kubernetes/v1;kubernetesv1\xa2\x02\x03KXX\xaa\x02\rKubernetes.V1\xca\x02\rKubernetes\\V1\xe2\x02\x19Kubernetes\\V1\\GPBMetadata\xea\x02\x0eKubernetes::V1b\x06proto3"
 
 var (
@@ -361,16 +440,18 @@ func file_kubernetes_v1_relationships_proto_rawDescGZIP() []byte {
 	return file_kubernetes_v1_relationships_proto_rawDescData
 }
 
-var file_kubernetes_v1_relationships_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_kubernetes_v1_relationships_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_kubernetes_v1_relationships_proto_goTypes = []any{
-	(*Owns)(nil),        // 0: kubernetes.v1.Owns
-	(*OwnedBy)(nil),     // 1: kubernetes.v1.OwnedBy
-	(*VolumeMount)(nil), // 2: kubernetes.v1.VolumeMount
-	(*AttachedTo)(nil),  // 3: kubernetes.v1.AttachedTo
-	(*Contains)(nil),    // 4: kubernetes.v1.Contains
-	(*ContainedBy)(nil), // 5: kubernetes.v1.ContainedBy
-	(*BoundBy)(nil),     // 6: kubernetes.v1.BoundBy
-	(*ClaimsFrom)(nil),  // 7: kubernetes.v1.ClaimsFrom
+	(*Owns)(nil),         // 0: kubernetes.v1.Owns
+	(*OwnedBy)(nil),      // 1: kubernetes.v1.OwnedBy
+	(*VolumeMount)(nil),  // 2: kubernetes.v1.VolumeMount
+	(*AttachedTo)(nil),   // 3: kubernetes.v1.AttachedTo
+	(*Contains)(nil),     // 4: kubernetes.v1.Contains
+	(*ContainedBy)(nil),  // 5: kubernetes.v1.ContainedBy
+	(*BoundBy)(nil),      // 6: kubernetes.v1.BoundBy
+	(*ClaimsFrom)(nil),   // 7: kubernetes.v1.ClaimsFrom
+	(*RegisteredAs)(nil), // 8: kubernetes.v1.RegisteredAs
+	(*Underlying)(nil),   // 9: kubernetes.v1.Underlying
 }
 var file_kubernetes_v1_relationships_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
@@ -391,7 +472,7 @@ func file_kubernetes_v1_relationships_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_kubernetes_v1_relationships_proto_rawDesc), len(file_kubernetes_v1_relationships_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
