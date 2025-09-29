@@ -375,6 +375,14 @@ func (c *ProcessCollector) collectFullProcessData(pid int32, minimal *MinimalPro
 		c.ParseStatus(stats, string(statusData))
 	}
 
+	// Read command line arguments from /proc/[pid]/cmdline (optional)
+	cmdlinePath := filepath.Join(c.ProcPath, strconv.Itoa(int(pid)), "cmdline")
+	if cmdlineData, err := os.ReadFile(cmdlinePath); err == nil {
+		c.ParseCmdline(stats, string(cmdlineData))
+	} else {
+		c.Logger().Error(err, "Failed to read cmdline", "pid", pid)
+	}
+
 	// Count file descriptors
 	fdPath := filepath.Join(c.ProcPath, strconv.Itoa(int(pid)), "fd")
 	if entries, err := os.ReadDir(fdPath); err == nil {
@@ -622,5 +630,20 @@ func (c *ProcessCollector) updateLastCPUTimesFromMinimal(minimalStats []*Minimal
 	if len(c.lastCPUTimes) > 20000 {
 		c.Logger().V(1).Info("Large number of processes being tracked",
 			"count", len(c.lastCPUTimes))
+	}
+}
+
+// ParseCmdline parses /proc/[pid]/cmdline and sets the command line arguments
+// The cmdline file contains null-separated arguments, which we join with spaces
+func (c *ProcessCollector) ParseCmdline(stats *performance.ProcessStats, cmdlineData string) {
+	if len(cmdlineData) == 0 {
+		return
+	}
+
+	// Remove trailing nulls and split by null bytes
+	cmdlineData = strings.TrimRight(cmdlineData, "\x00")
+	if len(cmdlineData) > 0 {
+		args := strings.Split(cmdlineData, "\x00")
+		stats.Cmdline = strings.Join(args, " ")
 	}
 }
