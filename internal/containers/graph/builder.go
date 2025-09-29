@@ -83,13 +83,13 @@ type Builder struct {
 // NewBuilder creates a new runtime graph builder
 func NewBuilder(logger logr.Logger, store resource.Store) *Builder {
 	// Get machine ID as primary identifier
-	machineID, err := host.MachineID()
+	machineID := host.MachineID()
 	systemID := machineID
 
-	if err != nil || systemID == "" {
+	if systemID == "" {
 		logger.V(1).Info("Machine ID not available, trying system UUID")
-		systemUUID, err := host.SystemUUID()
-		if err == nil && systemUUID != "" {
+		systemUUID := host.SystemUUID()
+		if systemUUID != "" {
 			systemID = systemUUID
 		}
 	}
