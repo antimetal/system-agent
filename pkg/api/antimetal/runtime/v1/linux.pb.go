@@ -276,6 +276,53 @@ func (ProcessState) EnumDescriptor() ([]byte, []int) {
 	return file_antimetal_runtime_v1_linux_proto_rawDescGZIP(), []int{3}
 }
 
+// ContainmentType represents types of containment relationships
+type ContainmentType int32
+
+const (
+	ContainmentType_CONTAINMENT_TYPE_UNKNOWN ContainmentType = 0
+	ContainmentType_CONTAINMENT_TYPE_RUNTIME ContainmentType = 1 // Runtime containment (e.g., container contains process)
+)
+
+// Enum value maps for ContainmentType.
+var (
+	ContainmentType_name = map[int32]string{
+		0: "CONTAINMENT_TYPE_UNKNOWN",
+		1: "CONTAINMENT_TYPE_RUNTIME",
+	}
+	ContainmentType_value = map[string]int32{
+		"CONTAINMENT_TYPE_UNKNOWN": 0,
+		"CONTAINMENT_TYPE_RUNTIME": 1,
+	}
+)
+
+func (x ContainmentType) Enum() *ContainmentType {
+	p := new(ContainmentType)
+	*p = x
+	return p
+}
+
+func (x ContainmentType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ContainmentType) Descriptor() protoreflect.EnumDescriptor {
+	return file_antimetal_runtime_v1_linux_proto_enumTypes[4].Descriptor()
+}
+
+func (ContainmentType) Type() protoreflect.EnumType {
+	return &file_antimetal_runtime_v1_linux_proto_enumTypes[4]
+}
+
+func (x ContainmentType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ContainmentType.Descriptor instead.
+func (ContainmentType) EnumDescriptor() ([]byte, []int) {
+	return file_antimetal_runtime_v1_linux_proto_rawDescGZIP(), []int{4}
+}
+
 // Linux contains Linux-specific runtime information reported by agents.
 // This information helps the management server optimize configuration
 // delivery and ensure compatibility with the agent's runtime environment.
@@ -682,6 +729,100 @@ func (x *ProcessNode) GetStartTime() *timestamppb.Timestamp {
 	return nil
 }
 
+// Contains represents hierarchical containment relationship
+// Inverse of ContainedBy.
+type Contains struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Type of containment
+	Type          ContainmentType `protobuf:"varint,1,opt,name=type,proto3,enum=antimetal.runtime.v1.ContainmentType" json:"type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Contains) Reset() {
+	*x = Contains{}
+	mi := &file_antimetal_runtime_v1_linux_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Contains) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Contains) ProtoMessage() {}
+
+func (x *Contains) ProtoReflect() protoreflect.Message {
+	mi := &file_antimetal_runtime_v1_linux_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Contains.ProtoReflect.Descriptor instead.
+func (*Contains) Descriptor() ([]byte, []int) {
+	return file_antimetal_runtime_v1_linux_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *Contains) GetType() ContainmentType {
+	if x != nil {
+		return x.Type
+	}
+	return ContainmentType_CONTAINMENT_TYPE_UNKNOWN
+}
+
+// ContainedBy represents being contained within another component
+// Inverse of Contains.
+type ContainedBy struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Type of containment
+	Type          ContainmentType `protobuf:"varint,1,opt,name=type,proto3,enum=antimetal.runtime.v1.ContainmentType" json:"type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ContainedBy) Reset() {
+	*x = ContainedBy{}
+	mi := &file_antimetal_runtime_v1_linux_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ContainedBy) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ContainedBy) ProtoMessage() {}
+
+func (x *ContainedBy) ProtoReflect() protoreflect.Message {
+	mi := &file_antimetal_runtime_v1_linux_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ContainedBy.ProtoReflect.Descriptor instead.
+func (*ContainedBy) Descriptor() ([]byte, []int) {
+	return file_antimetal_runtime_v1_linux_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ContainedBy) GetType() ContainmentType {
+	if x != nil {
+		return x.Type
+	}
+	return ContainmentType_CONTAINMENT_TYPE_UNKNOWN
+}
+
 var File_antimetal_runtime_v1_linux_proto protoreflect.FileDescriptor
 
 const file_antimetal_runtime_v1_linux_proto_rawDesc = "" +
@@ -736,7 +877,11 @@ const file_antimetal_runtime_v1_linux_proto_rawDesc = "" +
 	"\acmdline\x18\x06 \x01(\tR\acmdline\x128\n" +
 	"\x05state\x18\a \x01(\x0e2\".antimetal.runtime.v1.ProcessStateR\x05state\x129\n" +
 	"\n" +
-	"start_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime*X\n" +
+	"start_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\"E\n" +
+	"\bContains\x129\n" +
+	"\x04type\x18\x01 \x01(\x0e2%.antimetal.runtime.v1.ContainmentTypeR\x04type\"H\n" +
+	"\vContainedBy\x129\n" +
+	"\x04type\x18\x01 \x01(\x0e2%.antimetal.runtime.v1.ContainmentTypeR\x04type*X\n" +
 	"\rCgroupVersion\x12\x15\n" +
 	"\x11CGROUP_VERSION_V1\x10\x00\x12\x15\n" +
 	"\x11CGROUP_VERSION_V2\x10\x01\x12\x19\n" +
@@ -764,7 +909,10 @@ const file_antimetal_runtime_v1_linux_proto_rawDesc = "" +
 	"\x16PROCESS_STATE_WAKEKILL\x10\t\x12\x18\n" +
 	"\x14PROCESS_STATE_WAKING\x10\n" +
 	"\x12\x18\n" +
-	"\x14PROCESS_STATE_PARKED\x10\vB\xdb\x01\n" +
+	"\x14PROCESS_STATE_PARKED\x10\v*M\n" +
+	"\x0fContainmentType\x12\x1c\n" +
+	"\x18CONTAINMENT_TYPE_UNKNOWN\x10\x00\x12\x1c\n" +
+	"\x18CONTAINMENT_TYPE_RUNTIME\x10\x01B\xdb\x01\n" +
 	"\x18com.antimetal.runtime.v1B\n" +
 	"LinuxProtoP\x01ZAgithub.com/antimetal/agent/pkg/api/antimetal/runtime/v1;runtimev1\xa2\x02\x03ARX\xaa\x02\x14Antimetal.Runtime.V1\xca\x02\x14Antimetal\\Runtime\\V1\xe2\x02 Antimetal\\Runtime\\V1\\GPBMetadata\xea\x02\x16Antimetal::Runtime::V1b\x06proto3"
 
@@ -780,36 +928,41 @@ func file_antimetal_runtime_v1_linux_proto_rawDescGZIP() []byte {
 	return file_antimetal_runtime_v1_linux_proto_rawDescData
 }
 
-var file_antimetal_runtime_v1_linux_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_antimetal_runtime_v1_linux_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_antimetal_runtime_v1_linux_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_antimetal_runtime_v1_linux_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_antimetal_runtime_v1_linux_proto_goTypes = []any{
 	(CgroupVersion)(0),            // 0: antimetal.runtime.v1.CgroupVersion
 	(CgroupDriver)(0),             // 1: antimetal.runtime.v1.CgroupDriver
 	(ContainerRuntime)(0),         // 2: antimetal.runtime.v1.ContainerRuntime
 	(ProcessState)(0),             // 3: antimetal.runtime.v1.ProcessState
-	(*Linux)(nil),                 // 4: antimetal.runtime.v1.Linux
-	(*CgroupInfo)(nil),            // 5: antimetal.runtime.v1.CgroupInfo
-	(*ContainerNode)(nil),         // 6: antimetal.runtime.v1.ContainerNode
-	(*ProcessNode)(nil),           // 7: antimetal.runtime.v1.ProcessNode
-	nil,                           // 8: antimetal.runtime.v1.ContainerNode.LabelsEntry
-	(*timestamppb.Timestamp)(nil), // 9: google.protobuf.Timestamp
+	(ContainmentType)(0),          // 4: antimetal.runtime.v1.ContainmentType
+	(*Linux)(nil),                 // 5: antimetal.runtime.v1.Linux
+	(*CgroupInfo)(nil),            // 6: antimetal.runtime.v1.CgroupInfo
+	(*ContainerNode)(nil),         // 7: antimetal.runtime.v1.ContainerNode
+	(*ProcessNode)(nil),           // 8: antimetal.runtime.v1.ProcessNode
+	(*Contains)(nil),              // 9: antimetal.runtime.v1.Contains
+	(*ContainedBy)(nil),           // 10: antimetal.runtime.v1.ContainedBy
+	nil,                           // 11: antimetal.runtime.v1.ContainerNode.LabelsEntry
+	(*timestamppb.Timestamp)(nil), // 12: google.protobuf.Timestamp
 }
 var file_antimetal_runtime_v1_linux_proto_depIdxs = []int32{
-	5,  // 0: antimetal.runtime.v1.Linux.cgroup_info:type_name -> antimetal.runtime.v1.CgroupInfo
+	6,  // 0: antimetal.runtime.v1.Linux.cgroup_info:type_name -> antimetal.runtime.v1.CgroupInfo
 	0,  // 1: antimetal.runtime.v1.CgroupInfo.version:type_name -> antimetal.runtime.v1.CgroupVersion
 	1,  // 2: antimetal.runtime.v1.CgroupInfo.driver:type_name -> antimetal.runtime.v1.CgroupDriver
 	2,  // 3: antimetal.runtime.v1.ContainerNode.runtime:type_name -> antimetal.runtime.v1.ContainerRuntime
 	0,  // 4: antimetal.runtime.v1.ContainerNode.cgroup_version:type_name -> antimetal.runtime.v1.CgroupVersion
-	8,  // 5: antimetal.runtime.v1.ContainerNode.labels:type_name -> antimetal.runtime.v1.ContainerNode.LabelsEntry
-	9,  // 6: antimetal.runtime.v1.ContainerNode.created_at:type_name -> google.protobuf.Timestamp
-	9,  // 7: antimetal.runtime.v1.ContainerNode.started_at:type_name -> google.protobuf.Timestamp
+	11, // 5: antimetal.runtime.v1.ContainerNode.labels:type_name -> antimetal.runtime.v1.ContainerNode.LabelsEntry
+	12, // 6: antimetal.runtime.v1.ContainerNode.created_at:type_name -> google.protobuf.Timestamp
+	12, // 7: antimetal.runtime.v1.ContainerNode.started_at:type_name -> google.protobuf.Timestamp
 	3,  // 8: antimetal.runtime.v1.ProcessNode.state:type_name -> antimetal.runtime.v1.ProcessState
-	9,  // 9: antimetal.runtime.v1.ProcessNode.start_time:type_name -> google.protobuf.Timestamp
-	10, // [10:10] is the sub-list for method output_type
-	10, // [10:10] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	12, // 9: antimetal.runtime.v1.ProcessNode.start_time:type_name -> google.protobuf.Timestamp
+	4,  // 10: antimetal.runtime.v1.Contains.type:type_name -> antimetal.runtime.v1.ContainmentType
+	4,  // 11: antimetal.runtime.v1.ContainedBy.type:type_name -> antimetal.runtime.v1.ContainmentType
+	12, // [12:12] is the sub-list for method output_type
+	12, // [12:12] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_antimetal_runtime_v1_linux_proto_init() }
@@ -823,8 +976,8 @@ func file_antimetal_runtime_v1_linux_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_antimetal_runtime_v1_linux_proto_rawDesc), len(file_antimetal_runtime_v1_linux_proto_rawDesc)),
-			NumEnums:      4,
-			NumMessages:   5,
+			NumEnums:      5,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

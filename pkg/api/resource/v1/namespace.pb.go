@@ -35,6 +35,7 @@ type Namespace struct {
 	//
 	//	*Namespace_Cloud
 	//	*Namespace_Kube
+	//	*Namespace_Host
 	Namespace     isNamespace_Namespace `protobuf_oneof:"namespace"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -95,6 +96,15 @@ func (x *Namespace) GetKube() *KubernetesNamespace {
 	return nil
 }
 
+func (x *Namespace) GetHost() *HostNamespace {
+	if x != nil {
+		if x, ok := x.Namespace.(*Namespace_Host); ok {
+			return x.Host
+		}
+	}
+	return nil
+}
+
 type isNamespace_Namespace interface {
 	isNamespace_Namespace()
 }
@@ -107,9 +117,15 @@ type Namespace_Kube struct {
 	Kube *KubernetesNamespace `protobuf:"bytes,2,opt,name=kube,proto3,oneof"`
 }
 
+type Namespace_Host struct {
+	Host *HostNamespace `protobuf:"bytes,3,opt,name=host,proto3,oneof"`
+}
+
 func (*Namespace_Cloud) isNamespace_Namespace() {}
 
 func (*Namespace_Kube) isNamespace_Namespace() {}
+
+func (*Namespace_Host) isNamespace_Namespace() {}
 
 // CloudNamespace specifies the namespace scope for cloud resources.
 type CloudNamespace struct {
@@ -225,14 +241,68 @@ func (x *KubernetesNamespace) GetNamespace() string {
 	return ""
 }
 
+// HostNamespace specifies the namespace scope for a resource located on a host machine.
+type HostNamespace struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Host          string                 `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
+	Container     string                 `protobuf:"bytes,2,opt,name=container,proto3" json:"container,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HostNamespace) Reset() {
+	*x = HostNamespace{}
+	mi := &file_resource_v1_namespace_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HostNamespace) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HostNamespace) ProtoMessage() {}
+
+func (x *HostNamespace) ProtoReflect() protoreflect.Message {
+	mi := &file_resource_v1_namespace_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HostNamespace.ProtoReflect.Descriptor instead.
+func (*HostNamespace) Descriptor() ([]byte, []int) {
+	return file_resource_v1_namespace_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *HostNamespace) GetHost() string {
+	if x != nil {
+		return x.Host
+	}
+	return ""
+}
+
+func (x *HostNamespace) GetContainer() string {
+	if x != nil {
+		return x.Container
+	}
+	return ""
+}
+
 var File_resource_v1_namespace_proto protoreflect.FileDescriptor
 
 const file_resource_v1_namespace_proto_rawDesc = "" +
 	"\n" +
-	"\x1bresource/v1/namespace.proto\x12\vresource.v1\x1a\x1aresource/v1/provider.proto\"\x85\x01\n" +
+	"\x1bresource/v1/namespace.proto\x12\vresource.v1\x1a\x1aresource/v1/provider.proto\"\xb7\x01\n" +
 	"\tNamespace\x123\n" +
 	"\x05cloud\x18\x01 \x01(\v2\x1b.resource.v1.CloudNamespaceH\x00R\x05cloud\x126\n" +
-	"\x04kube\x18\x02 \x01(\v2 .resource.v1.KubernetesNamespaceH\x00R\x04kubeB\v\n" +
+	"\x04kube\x18\x02 \x01(\v2 .resource.v1.KubernetesNamespaceH\x00R\x04kube\x120\n" +
+	"\x04host\x18\x03 \x01(\v2\x1a.resource.v1.HostNamespaceH\x00R\x04hostB\v\n" +
 	"\tnamespace\"v\n" +
 	"\x0eCloudNamespace\x126\n" +
 	"\aaccount\x18\x01 \x01(\v2\x1c.resource.v1.ProviderAccountR\aaccount\x12\x16\n" +
@@ -240,7 +310,10 @@ const file_resource_v1_namespace_proto_rawDesc = "" +
 	"\x05group\x18\x03 \x01(\tR\x05group\"M\n" +
 	"\x13KubernetesNamespace\x12\x18\n" +
 	"\acluster\x18\x01 \x01(\tR\acluster\x12\x1c\n" +
-	"\tnamespace\x18\x02 \x01(\tR\tnamespaceB\xa9\x01\n" +
+	"\tnamespace\x18\x02 \x01(\tR\tnamespace\"A\n" +
+	"\rHostNamespace\x12\x12\n" +
+	"\x04host\x18\x01 \x01(\tR\x04host\x12\x1c\n" +
+	"\tcontainer\x18\x02 \x01(\tR\tcontainerB\xa9\x01\n" +
 	"\x0fcom.resource.v1B\x0eNamespaceProtoP\x01Z9github.com/antimetal/agent/pkg/api/resource/v1;resourcev1\xa2\x02\x03RXX\xaa\x02\vResource.V1\xca\x02\vResource\\V1\xe2\x02\x17Resource\\V1\\GPBMetadata\xea\x02\fResource::V1b\x06proto3"
 
 var (
@@ -255,22 +328,24 @@ func file_resource_v1_namespace_proto_rawDescGZIP() []byte {
 	return file_resource_v1_namespace_proto_rawDescData
 }
 
-var file_resource_v1_namespace_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_resource_v1_namespace_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_resource_v1_namespace_proto_goTypes = []any{
 	(*Namespace)(nil),           // 0: resource.v1.Namespace
 	(*CloudNamespace)(nil),      // 1: resource.v1.CloudNamespace
 	(*KubernetesNamespace)(nil), // 2: resource.v1.KubernetesNamespace
-	(*ProviderAccount)(nil),     // 3: resource.v1.ProviderAccount
+	(*HostNamespace)(nil),       // 3: resource.v1.HostNamespace
+	(*ProviderAccount)(nil),     // 4: resource.v1.ProviderAccount
 }
 var file_resource_v1_namespace_proto_depIdxs = []int32{
 	1, // 0: resource.v1.Namespace.cloud:type_name -> resource.v1.CloudNamespace
 	2, // 1: resource.v1.Namespace.kube:type_name -> resource.v1.KubernetesNamespace
-	3, // 2: resource.v1.CloudNamespace.account:type_name -> resource.v1.ProviderAccount
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	3, // 2: resource.v1.Namespace.host:type_name -> resource.v1.HostNamespace
+	4, // 3: resource.v1.CloudNamespace.account:type_name -> resource.v1.ProviderAccount
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_resource_v1_namespace_proto_init() }
@@ -282,6 +357,7 @@ func file_resource_v1_namespace_proto_init() {
 	file_resource_v1_namespace_proto_msgTypes[0].OneofWrappers = []any{
 		(*Namespace_Cloud)(nil),
 		(*Namespace_Kube)(nil),
+		(*Namespace_Host)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -289,7 +365,7 @@ func file_resource_v1_namespace_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_resource_v1_namespace_proto_rawDesc), len(file_resource_v1_namespace_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
