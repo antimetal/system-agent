@@ -46,7 +46,6 @@ var (
 	containersUpdateInterval time.Duration
 	enableHTTP2              bool
 	enableLeaderElection     bool
-	hardwareUpdateInterval   time.Duration
 	metricsAddr              string
 	metricsCertDir           string
 	metricsCertName          string
@@ -79,8 +78,6 @@ func init() {
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	flag.StringVar(&pprofAddr, "pprof-address", "0",
 		"The address the pprof server binds to. Set this to '0' to disable the pprof server")
-	flag.DurationVar(&hardwareUpdateInterval, "hardware-update-interval", 5*time.Minute,
-		"Interval for hardware topology discovery updates")
 	flag.DurationVar(&containersUpdateInterval, "containers-update-interval", 30*time.Second,
 		"Interval for container and process discovery updates")
 
@@ -294,23 +291,24 @@ func main() {
 	collectionConfig.HostDevPath = hostPaths.Dev
 
 	// Setup Hardware Manager
-	hwManager, err := hardware.NewManager(
-		mgr.GetLogger().WithName("hardware-manager"),
-		hardware.ManagerConfig{
-			Store:            rsrcStore,
-			CollectionConfig: collectionConfig,
-			NodeName:         nodeName,
-			ClusterName:      clusterName,
-			UpdateInterval:   hardwareUpdateInterval,
-		},
-	)
-	if err != nil {
-		setupLog.Error(err, "unable to create hardware manager")
-		os.Exit(1)
-	}
-	if err := mgr.Add(hwManager); err != nil {
-		setupLog.Error(err, "unable to register hardware manager")
-		os.Exit(1)
+	if hardware.Enabled() {
+		hwManager, err := hardware.NewManager(
+			mgr.GetLogger().WithName("hardware-manager"),
+			hardware.ManagerConfig{
+				Store:            rsrcStore,
+				CollectionConfig: collectionConfig,
+				NodeName:         nodeName,
+				ClusterName:      clusterName,
+			},
+		)
+		if err != nil {
+			setupLog.Error(err, "unable to create hardware manager")
+			os.Exit(1)
+		}
+		if err := mgr.Add(hwManager); err != nil {
+			setupLog.Error(err, "unable to register hardware manager")
+			os.Exit(1)
+		}
 	}
 
 	// Setup Performance Manager
