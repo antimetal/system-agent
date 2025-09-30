@@ -15,7 +15,6 @@ import (
 	"github.com/antimetal/agent/internal/resource/store"
 	runtimev1 "github.com/antimetal/agent/pkg/api/antimetal/runtime/v1"
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
-	"github.com/go-logr/logr"
 	"github.com/go-logr/zapr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -220,7 +219,9 @@ func TestBuilder_BuildFromSnapshot_CompleteTopology(t *testing.T) {
 	logger := zapr.NewLogger(zapLog)
 
 	// Use real in-memory store for more complete testing
-	realStore, err := store.New("", logr.Discard())
+	realStore, err := store.New(
+		store.WithDataDir(""),
+	)
 	require.NoError(t, err)
 
 	builder := NewBuilder(logger, realStore)

@@ -33,8 +33,10 @@ type testStore struct {
 }
 
 func newTestStore(t *testing.T) *testStore {
-	// Create an in-memory store (passing empty string for dataDir makes it in-memory)
-	s, err := store.New("", logr.Discard())
+	// Create an in-memory store
+	s, err := store.New(
+		store.WithDataDir(""),
+	)
 	require.NoError(t, err, "Failed to create in-memory store")
 
 	return &testStore{

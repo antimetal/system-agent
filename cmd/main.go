@@ -11,7 +11,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -57,7 +56,6 @@ var (
 	configFSPath             string
 	configLoader             string
 	containersUpdateInterval time.Duration
-	dataDir                  string
 	eksAccountID             string
 	eksAutodiscover          bool
 	eksClusterName           string
@@ -126,8 +124,6 @@ func init() {
 		"Maximum age of the gRPC stream before it is reset")
 	flag.StringVar(&pprofAddr, "pprof-address", "0",
 		"The address the pprof server binds to. Set this to '0' to disable the pprof server")
-	flag.StringVar(&dataDir, "data-directory", "/var/lib/antimetal",
-		"The directory where the agent will place its persistent data files. Set to empty string for in-memory mode.")
 	flag.DurationVar(&hardwareUpdateInterval, "hardware-update-interval", 5*time.Minute,
 		"Interval for hardware topology discovery updates")
 	flag.DurationVar(&containersUpdateInterval, "containers-update-interval", 30*time.Second,
@@ -213,14 +209,9 @@ func main() {
 	}
 
 	// Shared resources
-	var rsrcDataDir string
-	if dataDir != "" {
-		rsrcDataDir = filepath.Join(dataDir, "resource")
-		setupLog.V(1).Info("using disk storage for resource store", "path", rsrcDataDir)
-	} else {
-		setupLog.V(1).Info("using in-memory storage for resource store")
-	}
-	rsrcStore, err := store.New(rsrcDataDir, setupLog.WithName("store"))
+	rsrcStore, err := store.New(
+		store.WithLogger(setupLog.WithName("store")),
+	)
 	if err != nil {
 		setupLog.Error(err, "unable to create resource inventory")
 		os.Exit(1)
