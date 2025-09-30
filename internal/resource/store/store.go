@@ -119,17 +119,34 @@ type store struct {
 }
 
 // New creates a new Store.
-func New(dataDir string, log logr.Logger) (*store, error) {
+func New(opts ...Option) (*store, error) {
+	// Apply options with defaults from flags
+	cfg := &options{
+		dataDir: defaultDataDir,
+		logger:  logr.Discard(),
+	}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
 	// Create a debug-level logger for badger
-	badgerLog := newBadgerLogger(log.V(1).WithName("badger"))
+	badgerLog := newBadgerLogger(cfg.logger.V(1).WithName("badger"))
+
+	path := cfg.dataDir
+	if path != "" {
+		path = path + "/resource"
+		cfg.logger.V(1).Info("using disk storage for resource store", "path", path)
+	} else {
+		cfg.logger.V(1).Info("using in-memory storage for resource store")
+	}
 
 	db, err := badger.Open(
-		badger.DefaultOptions(dataDir).
-			WithInMemory(dataDir == "").
+		badger.DefaultOptions(path).
+			WithInMemory(path == "").
 			WithNumMemtables(3).
 			WithBlockCacheSize(128 << 20).
 			WithIndexCacheSize(64 << 20).
-			WithLogger(badgerLog), // Use debug-level logger for badger
+			WithLogger(badgerLog),
 	)
 	if err != nil {
 		return nil, err

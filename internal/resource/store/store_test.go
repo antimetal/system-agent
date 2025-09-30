@@ -16,13 +16,12 @@ import (
 	"github.com/antimetal/agent/internal/resource"
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"github.com/antimetal/agent/pkg/errors"
-	"github.com/go-logr/logr"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
 func TestStore_AddResource(t *testing.T) {
-	inv, err := New("", logr.Discard())
+	inv, err := New(WithDataDir(""))
 	if err != nil {
 		t.Fatalf("failed to create inventory: %v", err)
 	}
@@ -66,7 +65,7 @@ func TestStore_AddResource(t *testing.T) {
 }
 
 func TestStore_UpdateResourceNewResource(t *testing.T) {
-	inv, err := New("", logr.Discard())
+	inv, err := New(WithDataDir(""))
 	if err != nil {
 		t.Fatalf("failed to create inventory: %v", err)
 	}
@@ -110,7 +109,7 @@ func TestStore_UpdateResourceNewResource(t *testing.T) {
 }
 
 func TestStore_UpdateResource(t *testing.T) {
-	inv, err := New("", logr.Discard())
+	inv, err := New(WithDataDir(""))
 	if err != nil {
 		t.Fatalf("failed to create inventory: %v", err)
 	}
@@ -182,7 +181,7 @@ func TestStore_GetRelationships(t *testing.T) {
 		expectedNumResult int
 	}
 
-	inv, err := New("", logr.Discard())
+	inv, err := New(WithDataDir(""))
 	if err != nil {
 		t.Fatalf("failed to create inventory: %v", err)
 	}
@@ -386,7 +385,7 @@ func TestStore_GetRelationships(t *testing.T) {
 }
 
 func TestStore_DeleteResource_CascadeDelete(t *testing.T) {
-	inv, err := New("", logr.Discard())
+	inv, err := New(WithDataDir(""))
 	if err != nil {
 		t.Fatalf("failed to create inventory: %v", err)
 	}
@@ -483,7 +482,7 @@ func TestStore_DeleteResource_CascadeDelete(t *testing.T) {
 }
 
 func TestStore_DeleteResource_NoRelationships(t *testing.T) {
-	inv, err := New("", logr.Discard())
+	inv, err := New(WithDataDir(""))
 	if err != nil {
 		t.Fatalf("failed to create inventory: %v", err)
 	}
@@ -595,7 +594,7 @@ func TestStore_Subscribe_PackageLongestPathMatch(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			store, err := New("", logr.Discard())
+			store, err := New(WithDataDir(""))
 			if err != nil {
 				t.Fatalf("failed to create store: %v", err)
 			}
