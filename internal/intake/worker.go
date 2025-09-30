@@ -157,6 +157,7 @@ func NewWorker(store resource.Store, opts ...WorkerOpts) (*worker, error) {
 	batch := newDeltasBatch([]*intakev1.Delta{})
 
 	w := &worker{
+		apiKey:          defaultAPIKey,
 		store:           store,
 		queue:           queue,
 		maxStreamAge:    10 * time.Minute,
