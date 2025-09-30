@@ -33,7 +33,6 @@ import (
 	"github.com/antimetal/agent/internal/hardware"
 	"github.com/antimetal/agent/internal/intake"
 	k8sagent "github.com/antimetal/agent/internal/kubernetes/agent"
-	"github.com/antimetal/agent/internal/kubernetes/cluster"
 	"github.com/antimetal/agent/internal/kubernetes/scheme"
 	"github.com/antimetal/agent/internal/metrics"
 	"github.com/antimetal/agent/internal/metrics/consumers/debug"
@@ -56,19 +55,13 @@ var (
 	configFSPath             string
 	configLoader             string
 	containersUpdateInterval time.Duration
-	eksAccountID             string
-	eksAutodiscover          bool
-	eksClusterName           string
-	eksRegion                string
 	enableHTTP2              bool
-	enableK8sController      bool
 	enableLeaderElection     bool
 	enablePerfCollectors     bool
 	hardwareUpdateInterval   time.Duration
 	intakeAddr               string
 	intakeAPIKey             string
 	intakeSecure             bool
-	kubernetesProvider       string
 	maxStreamAge             time.Duration
 	metricsAddr              string
 	metricsCertDir           string
@@ -109,17 +102,6 @@ func init() {
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
-	flag.BoolVar(&enableK8sController, "enable-kubernetes-controller", true,
-		"Enable Kubernetes cluster snapshot collector")
-	flag.StringVar(&kubernetesProvider, "kubernetes-provider", "kind", "The Kubernetes provider")
-	flag.StringVar(&eksAccountID, "kubernetes-provider-eks-account-id", "",
-		"The AWS account ID the EKS cluster is deployed in")
-	flag.StringVar(&eksRegion, "kubernetes-provider-eks-region", "",
-		"The AWS region the EKS cluster is deployed in")
-	flag.StringVar(&eksClusterName, "kubernetes-provider-eks-cluster-name", "",
-		"The name of the EKS cluster")
-	flag.BoolVar(&eksAutodiscover, "kubernetes-provider-eks-autodiscover", true,
-		"Autodiscover EKS cluster name")
 	flag.DurationVar(&maxStreamAge, "max-stream-age", 10*time.Minute,
 		"Maximum age of the gRPC stream before it is reset")
 	flag.StringVar(&pprofAddr, "pprof-address", "0",
@@ -416,18 +398,11 @@ func main() {
 	}
 
 	// Setup Kubernetes Collector Controller
-	if enableK8sController {
-		providerOpts := getProviderOptions(setupLog.WithName("cluster-provider"))
-		provider, err := cluster.GetProvider(ctx, kubernetesProvider, providerOpts)
-		if err != nil {
-			setupLog.Error(err, "unable to determine cluster provider")
-			os.Exit(1)
-		}
+	if k8sagent.Enabled() {
 		ctrl := &k8sagent.Controller{
-			Provider: provider,
-			Store:    rsrcStore,
+			Store: rsrcStore,
 		}
-		if err := ctrl.SetupWithManager(mgr); err != nil {
+		if err := ctrl.SetupWithManager(ctx, mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "K8sCollector")
 			os.Exit(1)
 		}
@@ -497,16 +472,4 @@ func createConfigManager(logger logr.Logger) (*config.Manager, error) {
 		config.WithLoader(loader),
 		config.WithLogger(logger),
 	)
-}
-
-func getProviderOptions(logger logr.Logger) cluster.ProviderOptions {
-	return cluster.ProviderOptions{
-		Logger: logger,
-		EKS: cluster.EKSOptions{
-			Autodiscover: eksAutodiscover,
-			AccountID:    eksAccountID,
-			Region:       eksRegion,
-			ClusterName:  eksClusterName,
-		},
-	}
 }
