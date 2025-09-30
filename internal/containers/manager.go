@@ -24,8 +24,6 @@ import (
 	"github.com/go-logr/logr"
 )
 
-const defaultInterval = 30 * time.Second
-
 // Manager coordinates runtime (container/process) discovery and graph building
 type Manager struct {
 	logger    logr.Logger
@@ -66,7 +64,7 @@ func NewManager(logger logr.Logger, config ManagerConfig) (*Manager, error) {
 
 	interval := config.UpdateInterval
 	if interval == 0 {
-		interval = defaultInterval
+		interval = defaultUpdateInterval
 	}
 
 	// Determine cgroup path using proper host path utilities

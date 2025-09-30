@@ -43,16 +43,15 @@ var (
 	setupLog logr.Logger
 
 	// CLI Options (alphabetical order)
-	containersUpdateInterval time.Duration
-	enableHTTP2              bool
-	enableLeaderElection     bool
-	metricsAddr              string
-	metricsCertDir           string
-	metricsCertName          string
-	metricsKeyName           string
-	metricsSecure            bool
-	pprofAddr                string
-	probeAddr                string
+	enableHTTP2          bool
+	enableLeaderElection bool
+	metricsAddr          string
+	metricsCertDir       string
+	metricsCertName      string
+	metricsKeyName       string
+	metricsSecure        bool
+	pprofAddr            string
+	probeAddr            string
 )
 
 func init() {
@@ -78,8 +77,6 @@ func init() {
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	flag.StringVar(&pprofAddr, "pprof-address", "0",
 		"The address the pprof server binds to. Set this to '0' to disable the pprof server")
-	flag.DurationVar(&containersUpdateInterval, "containers-update-interval", 30*time.Second,
-		"Interval for container and process discovery updates")
 
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
@@ -329,20 +326,21 @@ func main() {
 	}
 
 	// Setup Containers Manager (for container/process discovery)
-	containersManager, err := containers.NewManager(
-		mgr.GetLogger(),
-		containers.ManagerConfig{
-			Store:          rsrcStore,
-			UpdateInterval: containersUpdateInterval,
-		},
-	)
-	if err != nil {
-		setupLog.Error(err, "unable to create containers manager")
-		os.Exit(1)
-	}
-	if err := mgr.Add(containersManager); err != nil {
-		setupLog.Error(err, "unable to register containers manager")
-		os.Exit(1)
+	if containers.Enabled() {
+		containersManager, err := containers.NewManager(
+			mgr.GetLogger(),
+			containers.ManagerConfig{
+				Store: rsrcStore,
+			},
+		)
+		if err != nil {
+			setupLog.Error(err, "unable to create containers manager")
+			os.Exit(1)
+		}
+		if err := mgr.Add(containersManager); err != nil {
+			setupLog.Error(err, "unable to register containers manager")
+			os.Exit(1)
+		}
 	}
 
 	// Setup Kubernetes Collector Controller
