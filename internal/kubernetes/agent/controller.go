@@ -83,19 +83,29 @@ type Controller struct {
 }
 
 // SetupWithManger registers the Controller to the provided manager
-func (c *Controller) SetupWithManager(mgr manager.Manager) error {
+func (c *Controller) SetupWithManager(ctx context.Context, mgr manager.Manager) error {
 	if mgr == nil {
 		return fmt.Errorf("must provide a non-nil Manager")
 	}
+
 	if c.Store == nil {
 		return fmt.Errorf("Controller must be configured with a non-nil Store")
 	}
+
 	if c.K8sClient == nil {
 		c.K8sClient = mgr.GetClient()
 	}
 
 	if c.Config == nil {
 		c.Config = mgr.GetConfig()
+	}
+
+	if c.Provider == nil {
+		defaultProvider, err := getDefaultProvider(ctx, mgr.GetLogger().WithName("cluster-provider"))
+		if err != nil {
+			return fmt.Errorf("encountered error getting cluster provider: %w", err)
+		}
+		c.Provider = defaultProvider
 	}
 
 	cacheSyncTimeout := mgr.GetControllerOptions().CacheSyncTimeout
