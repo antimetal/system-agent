@@ -23,6 +23,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"github.com/antimetal/agent/internal/resource"
 	"github.com/antimetal/agent/pkg/errors"
@@ -44,6 +45,10 @@ var (
 	subjectIdx      = keyPart("rel-subj")
 	objectIdx       = keyPart("rel-obj")
 	predicateIdx    = keyPart("rel-predicate")
+
+	_ manager.Runnable               = (*store)(nil)
+	_ manager.LeaderElectionRunnable = (*store)(nil)
+	_ resource.Store                 = (*store)(nil)
 )
 
 type subscriber struct {
@@ -743,6 +748,12 @@ func (s *store) Close() error {
 func (s *store) Start(ctx context.Context) error {
 	<-ctx.Done()
 	return s.Close()
+}
+
+// Implements sigs.k8s.io/controller-runtime/pkg/manager.LeaderElectionRunnable interface
+// Always returns false so that store runs on every node.
+func (m *store) NeedLeaderElection() bool {
+	return false
 }
 
 func (s *store) startEventRouter() {
