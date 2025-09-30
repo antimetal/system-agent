@@ -8,11 +8,10 @@ package config
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
 )
-
-const defaultConfigPath = "/etc/antimetal/agent"
 
 // ManagerOption configures Manager
 type ManagerOption func(m *Manager)
@@ -40,11 +39,11 @@ func NewManager(opts ...ManagerOption) (*Manager, error) {
 	}
 
 	if m.loader == nil {
-		fsLoader, err := NewFSLoader(defaultConfigPath, m.logger)
+		loader, err := getDefaultLoader(m.logger)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to create config loader: %w", err)
 		}
-		m.loader = fsLoader
+		m.loader = loader
 	}
 
 	m.logger = m.logger.WithName("config.manager")

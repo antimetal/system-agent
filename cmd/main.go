@@ -9,15 +9,9 @@ package main
 import (
 	"crypto/tls"
 	"flag"
-	"fmt"
 	"os"
-	"time"
 
 	"github.com/go-logr/logr"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
-
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -49,11 +43,6 @@ var (
 	setupLog logr.Logger
 
 	// CLI Options (alphabetical order)
-	configAMSAddr            string
-	configAMSAPIKey          string
-	configAMSSecure          bool
-	configFSPath             string
-	configLoader             string
 	containersUpdateInterval time.Duration
 	enableHTTP2              bool
 	enableLeaderElection     bool
@@ -97,16 +86,6 @@ func init() {
 		"Interval for container and process discovery updates")
 	flag.BoolVar(&enablePerfCollectors, "enable-performance-collectors", false,
 		"Enable continuous performance collectors for testing (CPU, memory, disk, network, process)")
-	flag.StringVar(&configLoader, "config-loader", "fs",
-		"Config loader type: 'fs' for filesystem loader, 'ams' for AMS gRPC loader")
-	flag.StringVar(&configFSPath, "config-fs-path", "/etc/antimetal/agent",
-		"Path to configuration directory (used with fs loader)")
-	flag.StringVar(&configAMSAddr, "config-ams-addr", "",
-		"AMS service address for configuration (used with ams loader)")
-	flag.BoolVar(&configAMSSecure, "config-ams-secure", true,
-		"Use secure connection to the AMS service")
-	flag.StringVar(&configAMSAPIKey, "config-ams-api-key", "",
-		"API key for AMS service authentication")
 
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
@@ -189,7 +168,9 @@ func main() {
 	}
 
 	// Setup Config Manager
-	configMgr, err := createConfigManager(mgr.GetLogger())
+	configMgr, err := config.NewManager(
+		config.WithLogger(mgr.GetLogger()),
+	)
 	if err != nil {
 		setupLog.Error(err, "unable to create config manager")
 		os.Exit(1)
@@ -395,53 +376,4 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
-}
-
-func createConfigManager(logger logr.Logger) (*config.Manager, error) {
-	var loader config.Loader
-	var err error
-
-	switch configLoader {
-	case "fs":
-		loader, err = config.NewFSLoader(configFSPath, logger)
-		if err != nil {
-			return nil, fmt.Errorf("unable to create filesystem config loader: %w", err)
-		}
-
-	case "ams":
-		if configAMSAddr == "" {
-			return nil, fmt.Errorf("config-ams-addr is required when using ams loader")
-		}
-		var creds credentials.TransportCredentials
-		if configAMSSecure {
-			creds = credentials.NewTLS(&tls.Config{})
-		} else {
-			creds = insecure.NewCredentials()
-		}
-		amsConn, err := grpc.NewClient(configAMSAddr, grpc.WithTransportCredentials(creds))
-		if err != nil {
-			return nil, fmt.Errorf("unable to connect to AMS service: %w", err)
-		}
-
-		amsOpts := []config.AMSLoaderOpts{
-			config.WithAMSLogger(logger),
-			config.WithMaxStreamAge(maxStreamAge),
-		}
-		if configAMSAPIKey != "" {
-			amsOpts = append(amsOpts, config.WithAMSAPIKey(configAMSAPIKey))
-		}
-
-		loader, err = config.NewAMSLoader(amsConn, amsOpts...)
-		if err != nil {
-			return nil, fmt.Errorf("unable to create AMS config loader: %w", err)
-		}
-
-	default:
-		return nil, fmt.Errorf("unknown config loader: %s", configLoader)
-	}
-
-	return config.NewManager(
-		config.WithLoader(loader),
-		config.WithLogger(logger),
-	)
 }
