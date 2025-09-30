@@ -17,7 +17,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/keepalive"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -30,6 +29,7 @@ import (
 
 	"github.com/antimetal/agent/internal/config"
 	"github.com/antimetal/agent/internal/containers"
+	"github.com/antimetal/agent/internal/endpoints"
 	"github.com/antimetal/agent/internal/hardware"
 	"github.com/antimetal/agent/internal/intake"
 	k8sagent "github.com/antimetal/agent/internal/kubernetes/agent"
@@ -59,10 +59,6 @@ var (
 	enableLeaderElection     bool
 	enablePerfCollectors     bool
 	hardwareUpdateInterval   time.Duration
-	intakeAddr               string
-	intakeAPIKey             string
-	intakeSecure             bool
-	maxStreamAge             time.Duration
 	metricsAddr              string
 	metricsCertDir           string
 	metricsCertName          string
@@ -73,15 +69,6 @@ var (
 )
 
 func init() {
-	flag.StringVar(&intakeAddr, "intake-address", "intake.antimetal.com:443",
-		"The address of the intake service",
-	)
-	flag.StringVar(&intakeAPIKey, "intake-api-key", "",
-		"The API key to use upload resources",
-	)
-	flag.BoolVar(&intakeSecure, "intake-secure", true,
-		"Use secure connection to the Antimetal intake service",
-	)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080",
 		"The address the metric endpoint binds to. Set this to '0' to disable the metrics server")
 	flag.BoolVar(&metricsSecure, "metrics-secure", false,
@@ -102,8 +89,6 @@ func init() {
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
-	flag.DurationVar(&maxStreamAge, "max-stream-age", 10*time.Minute,
-		"Maximum age of the gRPC stream before it is reset")
 	flag.StringVar(&pprofAddr, "pprof-address", "0",
 		"The address the pprof server binds to. Set this to '0' to disable the pprof server")
 	flag.DurationVar(&hardwareUpdateInterval, "hardware-update-interval", 5*time.Minute,
@@ -214,18 +199,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	var creds credentials.TransportCredentials
-	if intakeSecure {
-		creds = credentials.NewTLS(&tls.Config{})
-	} else {
-		creds = insecure.NewCredentials()
-	}
-	intakeConn, err := grpc.NewClient(intakeAddr,
-		grpc.WithTransportCredentials(creds),
-		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time: 5 * time.Minute,
-		}),
-	)
+	intakeConn, err := endpoints.Intake()
 	if err != nil {
 		setupLog.Error(err, "unable to connect to intake service")
 		os.Exit(1)
@@ -240,8 +214,7 @@ func main() {
 	k8sIntakeWorker, err := intake.NewWorker(rsrcStore,
 		intake.WithLogger(mgr.GetLogger().WithName("k8s-intake-worker")),
 		intake.WithGRPCConn(intakeConn),
-		intake.WithAPIKey(intakeAPIKey),
-		intake.WithMaxStreamAge(maxStreamAge),
+		intake.WithMaxStreamAge(endpoints.MaxStreamAge()),
 		intake.WithResourceFilter(&resourcev1.TypeDescriptor{Type: "kubernetes"}),
 		intake.WithResourceFilter(&resourcev1.TypeDescriptor{Type: "k8s.io"}),
 		intake.WithLeaderElection(true),
@@ -259,8 +232,7 @@ func main() {
 	instanceIntakeWorker, err := intake.NewWorker(rsrcStore,
 		intake.WithLogger(mgr.GetLogger().WithName("instance-intake-worker")),
 		intake.WithGRPCConn(intakeConn),
-		intake.WithAPIKey(intakeAPIKey),
-		intake.WithMaxStreamAge(maxStreamAge),
+		intake.WithMaxStreamAge(endpoints.MaxStreamAge()),
 		intake.WithResourceFilter(&resourcev1.TypeDescriptor{Type: "antimetal"}),
 		intake.WithLeaderElection(false),
 	)
