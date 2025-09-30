@@ -61,7 +61,7 @@ func NewManager(logger logr.Logger, config ManagerConfig) (*Manager, error) {
 	// Default to 5 minute update interval
 	interval := config.UpdateInterval
 	if interval == 0 {
-		interval = 5 * time.Minute
+		interval = defaultUpdateInterval
 	}
 
 	return &Manager{
