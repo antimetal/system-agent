@@ -46,7 +46,6 @@ var (
 	containersUpdateInterval time.Duration
 	enableHTTP2              bool
 	enableLeaderElection     bool
-	enablePerfCollectors     bool
 	hardwareUpdateInterval   time.Duration
 	metricsAddr              string
 	metricsCertDir           string
@@ -84,8 +83,6 @@ func init() {
 		"Interval for hardware topology discovery updates")
 	flag.DurationVar(&containersUpdateInterval, "containers-update-interval", 30*time.Second,
 		"Interval for container and process discovery updates")
-	flag.BoolVar(&enablePerfCollectors, "enable-performance-collectors", false,
-		"Enable continuous performance collectors for testing (CPU, memory, disk, network, process)")
 
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
@@ -228,7 +225,7 @@ func main() {
 
 	// Setup Metrics Router (if any consumer is enabled)
 	var metricsRouter metrics.Router
-	enableMetricsPipeline := otel.IsEnabled() || debug.IsEnabled() || enablePerfCollectors
+	enableMetricsPipeline := otel.IsEnabled() || debug.IsEnabled() || perfmanager.Enabled()
 
 	if enableMetricsPipeline {
 		router := metrics.NewMetricsRouter(mgr.GetLogger())
@@ -317,7 +314,7 @@ func main() {
 	}
 
 	// Setup Performance Manager
-	if enablePerfCollectors && metricsRouter != nil {
+	if perfmanager.Enabled() && metricsRouter != nil {
 		perfMgr, err := perfmanager.New(
 			configMgr,
 			metricsRouter,
