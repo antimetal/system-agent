@@ -482,13 +482,99 @@ func (t *Transformer) transformTCPStats(ctx context.Context, data any, attrs []a
 		return fmt.Errorf("invalid TCP stats data type")
 	}
 
-	// TCP connection counts by state
+	// TCP connection counts by state (gauge - instantaneous values)
 	if gauge, err := t.getOrCreateInt64Gauge("system.network.connections", "Network connections by protocol and state", "1"); err == nil {
 		tcpAttrs := append(attrs, attribute.String("protocol", "tcp"))
 		for state, count := range stats.ConnectionsByState {
 			stateAttrs := append(tcpAttrs, attribute.String("state", state))
 			gauge.Record(ctx, int64(count), metric.WithAttributes(stateAttrs...))
 		}
+	}
+
+	// Current established connections (gauge - instantaneous value)
+	if gauge, err := t.getOrCreateInt64Gauge("system.network.tcp.connection.established", "Current established TCP connections", "1"); err == nil {
+		gauge.Record(ctx, int64(stats.CurrEstab), metric.WithAttributes(attrs...))
+	}
+
+	// Counter metrics require delta calculations
+	// Skip if delta data is not available (first collection or delta mode disabled)
+	if stats.Delta == nil {
+		t.logger.V(2).Info("TCP delta data not available, skipping counter metrics")
+		return nil
+	}
+
+	// TCP connection establishment metrics (using deltas)
+	if counter, err := t.getOrCreateInt64Counter("system.network.tcp.connection.opens", "TCP connection openings by type", "1"); err == nil {
+		activeAttrs := append(attrs, attribute.String("type", "active"))
+		passiveAttrs := append(attrs, attribute.String("type", "passive"))
+		counter.Add(ctx, int64(stats.Delta.ActiveOpens), metric.WithAttributes(activeAttrs...))
+		counter.Add(ctx, int64(stats.Delta.PassiveOpens), metric.WithAttributes(passiveAttrs...))
+	}
+
+	// TCP connection failures (using deltas)
+	if counter, err := t.getOrCreateInt64Counter("system.network.tcp.connection.attempt_fails", "Failed TCP connection attempts", "1"); err == nil {
+		counter.Add(ctx, int64(stats.Delta.AttemptFails), metric.WithAttributes(attrs...))
+	}
+
+	// TCP connection resets from established state (using deltas)
+	if counter, err := t.getOrCreateInt64Counter("system.network.tcp.connection.estab_resets", "TCP resets from established state", "1"); err == nil {
+		counter.Add(ctx, int64(stats.Delta.EstabResets), metric.WithAttributes(attrs...))
+	}
+
+	// TCP segments (using deltas)
+	if counter, err := t.getOrCreateInt64Counter("system.network.tcp.segments", "TCP segments by direction", "1"); err == nil {
+		inAttrs := append(attrs, attribute.String("direction", "in"))
+		outAttrs := append(attrs, attribute.String("direction", "out"))
+		counter.Add(ctx, int64(stats.Delta.InSegs), metric.WithAttributes(inAttrs...))
+		counter.Add(ctx, int64(stats.Delta.OutSegs), metric.WithAttributes(outAttrs...))
+	}
+
+	// TCP retransmissions (using deltas)
+	if counter, err := t.getOrCreateInt64Counter("system.network.tcp.retrans_segs", "TCP segments retransmitted", "1"); err == nil {
+		counter.Add(ctx, int64(stats.Delta.RetransSegs), metric.WithAttributes(attrs...))
+	}
+
+	// TCP errors (using deltas)
+	if counter, err := t.getOrCreateInt64Counter("system.network.tcp.errors", "TCP errors by type", "1"); err == nil {
+		inErrAttrs := append(attrs, attribute.String("type", "in_errors"))
+		outRstAttrs := append(attrs, attribute.String("type", "out_resets"))
+		csumAttrs := append(attrs, attribute.String("type", "checksum_errors"))
+		counter.Add(ctx, int64(stats.Delta.InErrs), metric.WithAttributes(inErrAttrs...))
+		counter.Add(ctx, int64(stats.Delta.OutRsts), metric.WithAttributes(outRstAttrs...))
+		counter.Add(ctx, int64(stats.Delta.InCsumErrors), metric.WithAttributes(csumAttrs...))
+	}
+
+	// SYN cookies (using deltas)
+	if counter, err := t.getOrCreateInt64Counter("system.network.tcp.syncookies", "SYN cookies by result", "1"); err == nil {
+		sentAttrs := append(attrs, attribute.String("result", "sent"))
+		recvAttrs := append(attrs, attribute.String("result", "received"))
+		failedAttrs := append(attrs, attribute.String("result", "failed"))
+		counter.Add(ctx, int64(stats.Delta.SyncookiesSent), metric.WithAttributes(sentAttrs...))
+		counter.Add(ctx, int64(stats.Delta.SyncookiesRecv), metric.WithAttributes(recvAttrs...))
+		counter.Add(ctx, int64(stats.Delta.SyncookiesFailed), metric.WithAttributes(failedAttrs...))
+	}
+
+	// Listen queue issues (using deltas)
+	if counter, err := t.getOrCreateInt64Counter("system.network.tcp.listen_issues", "TCP listen queue issues by type", "1"); err == nil {
+		overflowAttrs := append(attrs, attribute.String("type", "overflows"))
+		dropAttrs := append(attrs, attribute.String("type", "drops"))
+		counter.Add(ctx, int64(stats.Delta.ListenOverflows), metric.WithAttributes(overflowAttrs...))
+		counter.Add(ctx, int64(stats.Delta.ListenDrops), metric.WithAttributes(dropAttrs...))
+	}
+
+	// TCP retransmission details (using deltas)
+	if counter, err := t.getOrCreateInt64Counter("system.network.tcp.retrans_detail", "TCP retransmissions by type", "1"); err == nil {
+		lostAttrs := append(attrs, attribute.String("type", "lost"))
+		fastAttrs := append(attrs, attribute.String("type", "fast"))
+		slowStartAttrs := append(attrs, attribute.String("type", "slow_start"))
+		counter.Add(ctx, int64(stats.Delta.TCPLostRetransmit), metric.WithAttributes(lostAttrs...))
+		counter.Add(ctx, int64(stats.Delta.TCPFastRetrans), metric.WithAttributes(fastAttrs...))
+		counter.Add(ctx, int64(stats.Delta.TCPSlowStartRetrans), metric.WithAttributes(slowStartAttrs...))
+	}
+
+	// TCP timeouts (using deltas)
+	if counter, err := t.getOrCreateInt64Counter("system.network.tcp.timeouts", "TCP retransmission timeouts", "1"); err == nil {
+		counter.Add(ctx, int64(stats.Delta.TCPTimeouts), metric.WithAttributes(attrs...))
 	}
 
 	return nil
