@@ -6,7 +6,6 @@
 
 //go:build !linux
 
-// Package host provides utilities for host and machine identification
 package host
 
 import (
@@ -15,42 +14,39 @@ import (
 	"os"
 )
 
-// MachineID returns a mock machine ID for non-Linux systems.
-// This is primarily used for testing on macOS and other platforms.
-// It generates a deterministic ID based on hostname for consistency in tests.
-//
-// This function is used to ensure resource uniqueness across multi-node clusters,
-// as container IDs and process PIDs are only unique within a single host.
-func MachineID() string {
-	hostname, err := os.Hostname()
-	if err != nil {
-		// Return a default mock ID if we can't get hostname
-		return "mock-machine-id-123456789"
-	}
-
-	// Generate a deterministic hash based on hostname
-	// This ensures consistent IDs across test runs on the same machine
-	hash := md5.Sum([]byte("machine-" + hostname))
-	return fmt.Sprintf("%x", hash)
+func hostname() (string, error) {
+	return os.Hostname()
 }
 
-// SystemUUID returns a mock system UUID for non-Linux systems.
+// machineID returns a mock machine ID for non-Linux systems.
 // This is primarily used for testing on macOS and other platforms.
-func SystemUUID() string {
+// It generates a deterministic ID based on hostname for consistency in tests.
+func machineID() (string, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
-		// Return a default mock UUID if we can't get hostname
-		return "mock-uuid-987654321"
+		return "", err
 	}
 
-	// Generate a deterministic UUID-like string based on hostname
+	hash := md5.Sum([]byte("machine-" + hostname))
+	return fmt.Sprintf("%x", hash), nil
+}
+
+// systemUUID returns a mock system UUID for non-Linux systems.
+// This is primarily used for testing on macOS and other platforms.
+func systemUUID() (string, error) {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return "", err
+	}
+
 	hash := md5.Sum([]byte("system-" + hostname))
 	// Format as a UUID-like string (8-4-4-4-12)
 	hashStr := fmt.Sprintf("%x", hash)
-	return fmt.Sprintf("%s-%s-%s-%s-%s",
+	id := fmt.Sprintf("%s-%s-%s-%s-%s",
 		hashStr[0:8],
 		hashStr[8:12],
 		hashStr[12:16],
 		hashStr[16:20],
 		hashStr[20:32])
+	return id, nil
 }
