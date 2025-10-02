@@ -28,6 +28,9 @@ type Client interface {
 
 	// GetEKSClusterName returns the name of the EKS cluster
 	GetEKSClusterName(ctx context.Context) (string, error)
+
+	// GetEC2InstanceID returns the EC2 instance ID
+	GetEC2InstanceID(ctx context.Context) (string, error)
 }
 
 var (
@@ -122,6 +125,7 @@ type client struct {
 	accountID      string
 	region         string
 	eksClusterName string
+	instanceID     string
 }
 
 func (c *client) GetRegion(ctx context.Context) (string, error) {
@@ -240,6 +244,25 @@ func (c *client) getMetadata(ctx context.Context, path string) (string, error) {
 		return "", fmt.Errorf("cannot read metadata content: %w", err)
 	}
 	return string(bytes), nil
+}
+
+func (c *client) GetEC2InstanceID(ctx context.Context) (string, error) {
+	if c.instanceID != "" {
+		return c.instanceID, nil
+	}
+
+	if c.imdsClient == nil {
+		return "", fmt.Errorf("cannot auto-discover EC2 instance ID: " +
+			"initialize Client with WithAutoDiscovery")
+	}
+
+	instanceID, err := c.getMetadata(ctx, "instance-id")
+	if err != nil {
+		return "", fmt.Errorf("cannot auto-discover EC2 instance ID: %w", err)
+	}
+
+	c.instanceID = instanceID
+	return c.instanceID, nil
 }
 
 func (c *client) findClusterNameFromTags(tags []ec2Types.Tag) string {
