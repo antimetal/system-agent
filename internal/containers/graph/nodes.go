@@ -62,6 +62,13 @@ func (b *Builder) createContainerNode(container *ContainerInfo) (*resourcev1.Res
 		Metadata: &resourcev1.ResourceMeta{
 			Provider: resourcev1.Provider_PROVIDER_ANTIMETAL,
 			Name:     container.ID,
+			Namespace: &resourcev1.Namespace{
+				Namespace: &resourcev1.Namespace_Host{
+					Host: &resourcev1.HostNamespace{
+						Host: b.systemID,
+					},
+				},
+			},
 		},
 		Spec: specAny,
 	}

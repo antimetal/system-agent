@@ -82,31 +82,9 @@ type Builder struct {
 
 // NewBuilder creates a new runtime graph builder
 func NewBuilder(logger logr.Logger, store resource.Store) *Builder {
-	var systemID string
-
-	machineID, err := host.MachineID()
-	if err == nil && machineID != "" {
-		systemID = machineID
-	}
-
-	if systemID == "" {
-		logger.V(1).Info("Machine ID not available, trying system UUID")
-		systemUUID, err := host.SystemUUID()
-		if err == nil && systemUUID != "" {
-			systemID = systemUUID
-		}
-	}
-
-	if systemID == "" {
-		logger.V(1).Info("System UUID not available, trying hostname")
-		hostname, err := os.Hostname()
-		if err == nil && hostname != "" {
-			systemID = hostname
-		}
-	}
-
-	if systemID == "" {
-		logger.Error(nil, "All system identifiers failed, using 'unknown'")
+	systemID, err := host.CanonicalName()
+	if err != nil {
+		logger.Error(err, "Failed to get canonical name, using 'unknown'")
 		systemID = "unknown"
 	}
 
