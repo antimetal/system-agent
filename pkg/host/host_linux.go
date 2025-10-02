@@ -75,3 +75,54 @@ func systemUUID() (string, error) {
 	}
 	return "", fmt.Errorf("system uuid not found")
 }
+
+func machineInfo() (*MachineInformation, error) {
+	hostPaths := environment.GetHostPaths()
+	machineInfoPath := filepath.Join(hostPaths.Etc, "machine-info")
+
+	data, err := os.ReadFile(machineInfoPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read /etc/machine-info: %w", err)
+	}
+
+	info := &MachineInformation{}
+	lines := strings.Split(string(data), "\n")
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.Trim(strings.TrimSpace(parts[1]), `"`)
+
+		switch key {
+		case "PRETTY_HOSTNAME":
+			info.PrettyHostname = value
+		case "ICON_NAME":
+			info.IconName = value
+		case "CHASSIS":
+			info.Chassis = value
+		case "DEPLOYMENT":
+			info.Deployment = value
+		case "LOCATION":
+			info.Location = value
+		case "HARDWARE_VENDOR":
+			info.HardwareVendor = value
+		case "HARDWARE_MODEL":
+			info.HardwareModel = value
+		case "HARDWARE_SKU":
+			info.HardwareSKU = value
+		case "HARDWARE_VERSION":
+			info.HardwareVersion = value
+		}
+	}
+
+	return info, nil
+}
