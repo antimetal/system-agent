@@ -50,3 +50,7 @@ func systemUUID() (string, error) {
 		hashStr[20:32])
 	return id, nil
 }
+
+func machineInfo() (*MachineInformation, error) {
+	return nil, fmt.Errorf("machine-info not available on non-Linux systems")
+}
