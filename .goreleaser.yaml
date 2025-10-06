@@ -93,14 +93,16 @@ changelog:
     - title: "Bug fixes"
       regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
       order: 1
-    - title: Others
-      order: 999
-
+    - title: "Changes"
+      regexp: '^.*?(refactor|build|deps|license|perf)(\([[:word:]]+\))??!?:.+$'
+      order: 2
   filters:
     exclude:
       - "^docs:"
       - "^test:"
       - "^ci:"
+      - "^chore:"
+      - "^style:"
 
 release:
   name_template: "v{{ .Version }}"
