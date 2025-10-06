@@ -485,29 +485,71 @@ func (t *Transformer) transformNetworkStats(ctx context.Context, data any, attrs
 	for _, iface := range interfaces {
 		ifaceAttrs := append(attrs, attribute.String("device", iface.Interface))
 
-		// Network I/O bytes
+		// Interface state gauges (instantaneous values)
+		if gauge, err := t.getOrCreateInt64Gauge("system.network.interface.speed", "Network interface link speed", "Mbit/s"); err == nil {
+			gauge.Record(ctx, int64(iface.Speed), metric.WithAttributes(ifaceAttrs...))
+		}
+
+		if gauge, err := t.getOrCreateInt64Gauge("system.network.interface.up", "Network interface operational state", "1"); err == nil {
+			// 1 if interface is up, 0 otherwise
+			operState := int64(0)
+			if iface.OperState == "up" {
+				operState = 1
+			}
+			gauge.Record(ctx, operState, metric.WithAttributes(ifaceAttrs...))
+		}
+
+		if gauge, err := t.getOrCreateInt64Gauge("system.network.interface.carrier", "Network interface carrier detection", "1"); err == nil {
+			// 1 if carrier detected, 0 otherwise
+			carrier := int64(0)
+			if iface.LinkDetected {
+				carrier = 1
+			}
+			gauge.Record(ctx, carrier, metric.WithAttributes(ifaceAttrs...))
+		}
+
+		// Counter metrics require delta calculations
+		// Skip if delta data is not available (first collection or delta mode disabled)
+		if iface.Delta == nil {
+			t.logger.V(2).Info("Network delta data not available, skipping counter metrics", "interface", iface.Interface)
+			continue
+		}
+
+		// Network I/O bytes (using deltas)
 		if counter, err := t.getOrCreateInt64Counter("system.network.io", "Network I/O bytes", "By"); err == nil {
 			rxAttrs := append(ifaceAttrs, attribute.String("direction", "receive"))
 			txAttrs := append(ifaceAttrs, attribute.String("direction", "transmit"))
-			counter.Add(ctx, int64(iface.RxBytes), metric.WithAttributes(rxAttrs...))
-			counter.Add(ctx, int64(iface.TxBytes), metric.WithAttributes(txAttrs...))
+			counter.Add(ctx, int64(iface.Delta.RxBytes), metric.WithAttributes(rxAttrs...))
+			counter.Add(ctx, int64(iface.Delta.TxBytes), metric.WithAttributes(txAttrs...))
 		}
 
-		// Network packets
+		// Network packets (using deltas)
 		if counter, err := t.getOrCreateInt64Counter("system.network.packets", "Network packets", "1"); err == nil {
 			rxAttrs := append(ifaceAttrs, attribute.String("direction", "receive"))
 			txAttrs := append(ifaceAttrs, attribute.String("direction", "transmit"))
-			counter.Add(ctx, int64(iface.RxPackets), metric.WithAttributes(rxAttrs...))
-			counter.Add(ctx, int64(iface.TxPackets), metric.WithAttributes(txAttrs...))
+			counter.Add(ctx, int64(iface.Delta.RxPackets), metric.WithAttributes(rxAttrs...))
+			counter.Add(ctx, int64(iface.Delta.TxPackets), metric.WithAttributes(txAttrs...))
 		}
 
-		// Network errors
-		if counter, err := t.getOrCreateInt64Counter("system.network.errors", "Network errors", "1"); err == nil {
+		// Network errors (using deltas)
+		if counter, err := t.getOrCreateInt64Counter("system.network.errors", "Network transmission errors", "1"); err == nil {
 			rxAttrs := append(ifaceAttrs, attribute.String("direction", "receive"))
 			txAttrs := append(ifaceAttrs, attribute.String("direction", "transmit"))
-			counter.Add(ctx, int64(iface.RxErrors), metric.WithAttributes(rxAttrs...))
-			counter.Add(ctx, int64(iface.TxErrors), metric.WithAttributes(txAttrs...))
+			counter.Add(ctx, int64(iface.Delta.RxErrors), metric.WithAttributes(rxAttrs...))
+			counter.Add(ctx, int64(iface.Delta.TxErrors), metric.WithAttributes(txAttrs...))
 		}
+
+		// Network dropped packets (using deltas)
+		if counter, err := t.getOrCreateInt64Counter("system.network.dropped", "Network packets dropped", "1"); err == nil {
+			rxAttrs := append(ifaceAttrs, attribute.String("direction", "receive"))
+			txAttrs := append(ifaceAttrs, attribute.String("direction", "transmit"))
+			counter.Add(ctx, int64(iface.Delta.RxDropped), metric.WithAttributes(rxAttrs...))
+			counter.Add(ctx, int64(iface.Delta.TxDropped), metric.WithAttributes(txAttrs...))
+		}
+
+		// Note: Additional error types (FIFO, Frame, Compressed, Multicast, Collisions, Carrier)
+		// are not yet exported because NetworkDeltaData doesn't include delta calculations for them.
+		// These should be added to NetworkDeltaData in pkg/performance/types.go first.
 	}
 
 	return nil
