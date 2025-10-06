@@ -417,20 +417,58 @@ func (t *Transformer) transformDiskStats(ctx context.Context, data any, attrs []
 	for _, disk := range disks {
 		diskAttrs := append(attrs, attribute.String("device", disk.Device))
 
-		// I/O operations
-		if counter, err := t.getOrCreateInt64Counter("system.disk.operations", "Disk I/O operations", "1"); err == nil {
-			readAttrs := append(diskAttrs, attribute.String("direction", "read"))
-			writeAttrs := append(diskAttrs, attribute.String("direction", "write"))
-			counter.Add(ctx, int64(disk.ReadsCompleted), metric.WithAttributes(readAttrs...))
-			counter.Add(ctx, int64(disk.WritesCompleted), metric.WithAttributes(writeAttrs...))
+		// I/O operations in progress (gauge - instantaneous value)
+		if gauge, err := t.getOrCreateInt64Gauge("system.disk.io.in_progress", "I/O operations currently in progress", "1"); err == nil {
+			gauge.Record(ctx, int64(disk.IOsInProgress), metric.WithAttributes(diskAttrs...))
 		}
 
-		// I/O bytes
+		// Counter metrics require delta calculations
+		// Skip if delta data is not available (first collection or delta mode disabled)
+		if disk.Delta == nil {
+			t.logger.V(2).Info("Disk delta data not available, skipping counter metrics", "device", disk.Device)
+			continue
+		}
+
+		// I/O operations completed (using deltas)
+		if counter, err := t.getOrCreateInt64Counter("system.disk.operations", "Disk I/O operations completed", "1"); err == nil {
+			readAttrs := append(diskAttrs, attribute.String("direction", "read"))
+			writeAttrs := append(diskAttrs, attribute.String("direction", "write"))
+			counter.Add(ctx, int64(disk.Delta.ReadsCompleted), metric.WithAttributes(readAttrs...))
+			counter.Add(ctx, int64(disk.Delta.WritesCompleted), metric.WithAttributes(writeAttrs...))
+		}
+
+		// I/O operations merged (using deltas)
+		if counter, err := t.getOrCreateInt64Counter("system.disk.operations.merged", "Disk I/O operations merged before queuing", "1"); err == nil {
+			readAttrs := append(diskAttrs, attribute.String("direction", "read"))
+			writeAttrs := append(diskAttrs, attribute.String("direction", "write"))
+			counter.Add(ctx, int64(disk.Delta.ReadsMerged), metric.WithAttributes(readAttrs...))
+			counter.Add(ctx, int64(disk.Delta.WritesMerged), metric.WithAttributes(writeAttrs...))
+		}
+
+		// I/O bytes (using deltas)
 		if counter, err := t.getOrCreateInt64Counter("system.disk.io", "Disk I/O bytes", "By"); err == nil {
 			readAttrs := append(diskAttrs, attribute.String("direction", "read"))
 			writeAttrs := append(diskAttrs, attribute.String("direction", "write"))
-			counter.Add(ctx, int64(disk.SectorsRead*DefaultSectorSize), metric.WithAttributes(readAttrs...))
-			counter.Add(ctx, int64(disk.SectorsWritten*DefaultSectorSize), metric.WithAttributes(writeAttrs...))
+			counter.Add(ctx, int64(disk.Delta.SectorsRead*DefaultSectorSize), metric.WithAttributes(readAttrs...))
+			counter.Add(ctx, int64(disk.Delta.SectorsWritten*DefaultSectorSize), metric.WithAttributes(writeAttrs...))
+		}
+
+		// I/O operation time (using deltas - these are cumulative milliseconds)
+		if counter, err := t.getOrCreateInt64Counter("system.disk.io.time", "Time spent on disk I/O operations", "ms"); err == nil {
+			readAttrs := append(diskAttrs, attribute.String("direction", "read"))
+			writeAttrs := append(diskAttrs, attribute.String("direction", "write"))
+			counter.Add(ctx, int64(disk.Delta.ReadTime), metric.WithAttributes(readAttrs...))
+			counter.Add(ctx, int64(disk.Delta.WriteTime), metric.WithAttributes(writeAttrs...))
+		}
+
+		// Active I/O time (using deltas - cumulative milliseconds)
+		if counter, err := t.getOrCreateInt64Counter("system.disk.io.active_time", "Time disk was active doing I/O", "ms"); err == nil {
+			counter.Add(ctx, int64(disk.Delta.IOTime), metric.WithAttributes(diskAttrs...))
+		}
+
+		// Weighted I/O time (using deltas - cumulative milliseconds)
+		if counter, err := t.getOrCreateInt64Counter("system.disk.io.weighted_time", "Weighted time spent on disk I/O", "ms"); err == nil {
+			counter.Add(ctx, int64(disk.Delta.WeightedIOTime), metric.WithAttributes(diskAttrs...))
 		}
 	}
 
