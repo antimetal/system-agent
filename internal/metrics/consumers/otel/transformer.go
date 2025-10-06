@@ -294,7 +294,7 @@ func (t *Transformer) transformMemoryStats(ctx context.Context, data any, attrs 
 		return fmt.Errorf("invalid memory stats data type")
 	}
 
-	// Memory usage by state
+	// Memory usage by state (existing metric - kept for compatibility)
 	memStates := map[string]uint64{
 		"free":      stats.MemFree * 1024, // Convert kB to bytes
 		"used":      (stats.MemTotal - stats.MemAvailable) * 1024,
@@ -310,7 +310,7 @@ func (t *Transformer) transformMemoryStats(ctx context.Context, data any, attrs 
 		}
 	}
 
-	// Swap usage
+	// Swap usage (existing metric - kept for compatibility)
 	if stats.SwapTotal > 0 {
 		if gauge, err := t.getOrCreateInt64Gauge("system.memory.swap_usage", "Swap usage", "By"); err == nil {
 			freeAttrs := append(attrs, attribute.String("state", "free"))
@@ -318,6 +318,109 @@ func (t *Transformer) transformMemoryStats(ctx context.Context, data any, attrs 
 			gauge.Record(ctx, int64(stats.SwapFree*1024), metric.WithAttributes(freeAttrs...))
 			gauge.Record(ctx, int64((stats.SwapTotal-stats.SwapFree)*1024), metric.WithAttributes(usedAttrs...))
 		}
+	}
+
+	// Swap cached memory (gauge - instantaneous value)
+	if gauge, err := t.getOrCreateInt64Gauge("system.memory.swap.cached", "Memory that was swapped out and is back in RAM", "By"); err == nil {
+		gauge.Record(ctx, int64(stats.SwapCached*1024), metric.WithAttributes(attrs...))
+	}
+
+	// Active/Inactive memory (gauges - instantaneous values)
+	if gauge, err := t.getOrCreateInt64Gauge("system.memory.active", "Memory used recently", "By"); err == nil {
+		gauge.Record(ctx, int64(stats.Active*1024), metric.WithAttributes(attrs...))
+	}
+
+	if gauge, err := t.getOrCreateInt64Gauge("system.memory.inactive", "Memory not used recently", "By"); err == nil {
+		gauge.Record(ctx, int64(stats.Inactive*1024), metric.WithAttributes(attrs...))
+	}
+
+	// Dirty/Writeback pages (gauges - instantaneous values)
+	if gauge, err := t.getOrCreateInt64Gauge("system.memory.dirty", "Memory waiting to be written back to disk", "By"); err == nil {
+		gauge.Record(ctx, int64(stats.Dirty*1024), metric.WithAttributes(attrs...))
+	}
+
+	if gauge, err := t.getOrCreateInt64Gauge("system.memory.writeback", "Memory actively being written back to disk", "By"); err == nil {
+		gauge.Record(ctx, int64(stats.Writeback*1024), metric.WithAttributes(attrs...))
+	}
+
+	// Anonymous and mapped memory (gauges - instantaneous values)
+	if gauge, err := t.getOrCreateInt64Gauge("system.memory.anon_pages", "Non-file backed pages mapped into userspace", "By"); err == nil {
+		gauge.Record(ctx, int64(stats.AnonPages*1024), metric.WithAttributes(attrs...))
+	}
+
+	if gauge, err := t.getOrCreateInt64Gauge("system.memory.mapped", "Files mapped into memory", "By"); err == nil {
+		gauge.Record(ctx, int64(stats.Mapped*1024), metric.WithAttributes(attrs...))
+	}
+
+	if gauge, err := t.getOrCreateInt64Gauge("system.memory.shmem", "Shared memory", "By"); err == nil {
+		gauge.Record(ctx, int64(stats.Shmem*1024), metric.WithAttributes(attrs...))
+	}
+
+	// Slab allocator (gauge - instantaneous values)
+	if gauge, err := t.getOrCreateInt64Gauge("system.memory.slab", "Kernel slab allocator memory by type", "By"); err == nil {
+		reclaimableAttrs := append(attrs, attribute.String("type", "reclaimable"))
+		unreclaimAttrs := append(attrs, attribute.String("type", "unreclaimable"))
+		gauge.Record(ctx, int64(stats.SReclaimable*1024), metric.WithAttributes(reclaimableAttrs...))
+		gauge.Record(ctx, int64(stats.SUnreclaim*1024), metric.WithAttributes(unreclaimAttrs...))
+	}
+
+	// Kernel memory (gauges - instantaneous values)
+	if gauge, err := t.getOrCreateInt64Gauge("system.memory.kernel_stack", "Memory used by kernel stacks", "By"); err == nil {
+		gauge.Record(ctx, int64(stats.KernelStack*1024), metric.WithAttributes(attrs...))
+	}
+
+	if gauge, err := t.getOrCreateInt64Gauge("system.memory.page_tables", "Memory used by page tables", "By"); err == nil {
+		gauge.Record(ctx, int64(stats.PageTables*1024), metric.WithAttributes(attrs...))
+	}
+
+	// Memory commit (gauges - instantaneous values)
+	if gauge, err := t.getOrCreateInt64Gauge("system.memory.commit", "Memory commit statistics by type", "By"); err == nil {
+		limitAttrs := append(attrs, attribute.String("type", "limit"))
+		committedAttrs := append(attrs, attribute.String("type", "committed_as"))
+		gauge.Record(ctx, int64(stats.CommitLimit*1024), metric.WithAttributes(limitAttrs...))
+		gauge.Record(ctx, int64(stats.CommittedAS*1024), metric.WithAttributes(committedAttrs...))
+	}
+
+	// Virtual memory allocator (gauges - instantaneous values)
+	if gauge, err := t.getOrCreateInt64Gauge("system.memory.vmalloc", "Virtual memory allocator statistics by type", "By"); err == nil {
+		totalAttrs := append(attrs, attribute.String("type", "total"))
+		usedAttrs := append(attrs, attribute.String("type", "used"))
+		gauge.Record(ctx, int64(stats.VmallocTotal*1024), metric.WithAttributes(totalAttrs...))
+		gauge.Record(ctx, int64(stats.VmallocUsed*1024), metric.WithAttributes(usedAttrs...))
+	}
+
+	// HugePages (gauges - instantaneous values)
+	if stats.HugePages_Total > 0 {
+		if gauge, err := t.getOrCreateInt64Gauge("system.memory.huge_pages", "HugePages by state", "1"); err == nil {
+			totalAttrs := append(attrs, attribute.String("state", "total"))
+			freeAttrs := append(attrs, attribute.String("state", "free"))
+			rsvdAttrs := append(attrs, attribute.String("state", "reserved"))
+			surpAttrs := append(attrs, attribute.String("state", "surplus"))
+			gauge.Record(ctx, int64(stats.HugePages_Total), metric.WithAttributes(totalAttrs...))
+			gauge.Record(ctx, int64(stats.HugePages_Free), metric.WithAttributes(freeAttrs...))
+			gauge.Record(ctx, int64(stats.HugePages_Rsvd), metric.WithAttributes(rsvdAttrs...))
+			gauge.Record(ctx, int64(stats.HugePages_Surp), metric.WithAttributes(surpAttrs...))
+		}
+
+		// HugeTLB total memory consumed (gauge - instantaneous value)
+		if gauge, err := t.getOrCreateInt64Gauge("system.memory.huge_pages.bytes", "Total memory consumed by huge pages", "By"); err == nil {
+			gauge.Record(ctx, int64(stats.Hugetlb*1024), metric.WithAttributes(attrs...))
+		}
+	}
+
+	// Counter metrics require delta calculations
+	// Skip if delta data is not available (first collection or delta mode disabled)
+	if stats.Delta == nil {
+		t.logger.V(2).Info("Memory delta data not available, skipping swap I/O counter metrics")
+		return nil
+	}
+
+	// Swap I/O activity (using deltas - these are page counts from /proc/vmstat)
+	if counter, err := t.getOrCreateInt64Counter("system.memory.swap.io", "Pages swapped in/out by direction", "1"); err == nil {
+		inAttrs := append(attrs, attribute.String("direction", "in"))
+		outAttrs := append(attrs, attribute.String("direction", "out"))
+		counter.Add(ctx, int64(stats.Delta.SwapIn), metric.WithAttributes(inAttrs...))
+		counter.Add(ctx, int64(stats.Delta.SwapOut), metric.WithAttributes(outAttrs...))
 	}
 
 	return nil
