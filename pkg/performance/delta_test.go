@@ -18,7 +18,7 @@ func TestDeltaConfig(t *testing.T) {
 	t.Run("default configuration", func(t *testing.T) {
 		config := DefaultDeltaConfig()
 
-		assert.Equal(t, DeltaModeDisabled, config.Mode)
+		assert.Equal(t, DeltaModeEnabled, config.Mode)
 		assert.Equal(t, 100*time.Millisecond, config.MinInterval)
 		assert.Equal(t, 5*time.Minute, config.MaxInterval)
 	})
