@@ -812,17 +812,55 @@ func (t *Transformer) transformNUMAStats(ctx context.Context, data any, attrs []
 		return fmt.Errorf("invalid NUMA stats data type")
 	}
 
+	// Skip if NUMA is not enabled on this system
 	if !stats.Enabled {
 		return nil
 	}
 
-	// NUMA node memory usage
-	if gauge, err := t.getOrCreateInt64Gauge("system.memory.usage", "NUMA memory usage", "By"); err == nil {
-		for _, node := range stats.Nodes {
-			nodeAttrs := append(attrs,
-				attribute.String("numa_node", strconv.Itoa(node.ID)),
-				attribute.String("state", "free"))
-			gauge.Record(ctx, int64(node.MemFree), metric.WithAttributes(nodeAttrs...))
+	for _, node := range stats.Nodes {
+		nodeAttrs := append(attrs, attribute.String("numa_node", strconv.Itoa(node.ID)))
+
+		// NUMA node memory usage by type (gauges - instantaneous values)
+		if gauge, err := t.getOrCreateInt64Gauge("system.memory.numa.usage", "NUMA node memory usage by type", "By"); err == nil {
+			freeAttrs := append(nodeAttrs, attribute.String("type", "free"))
+			usedAttrs := append(nodeAttrs, attribute.String("type", "used"))
+			gauge.Record(ctx, int64(node.MemFree), metric.WithAttributes(freeAttrs...))
+			gauge.Record(ctx, int64(node.MemUsed), metric.WithAttributes(usedAttrs...))
+		}
+
+		// NUMA node memory by page type (gauges - instantaneous values)
+		if gauge, err := t.getOrCreateInt64Gauge("system.memory.numa.pages", "NUMA node memory pages by type", "By"); err == nil {
+			fileAttrs := append(nodeAttrs, attribute.String("type", "file"))
+			anonAttrs := append(nodeAttrs, attribute.String("type", "anon"))
+			gauge.Record(ctx, int64(node.FilePages), metric.WithAttributes(fileAttrs...))
+			gauge.Record(ctx, int64(node.AnonPages), metric.WithAttributes(anonAttrs...))
+		}
+
+		// Counter metrics require delta calculations
+		// Skip if delta data is not available (first collection or delta mode disabled)
+		if node.Delta == nil {
+			t.logger.V(2).Info("NUMA delta data not available, skipping counter metrics", "node", node.ID)
+			continue
+		}
+
+		// NUMA allocation events by type (using deltas - page counts)
+		if counter, err := t.getOrCreateInt64Counter("system.memory.numa.events", "NUMA memory allocation events by type", "1"); err == nil {
+			hitAttrs := append(nodeAttrs, attribute.String("type", "hit"))
+			missAttrs := append(nodeAttrs, attribute.String("type", "miss"))
+			foreignAttrs := append(nodeAttrs, attribute.String("type", "foreign"))
+			interleaveAttrs := append(nodeAttrs, attribute.String("type", "interleave_hit"))
+			counter.Add(ctx, int64(node.Delta.NumaHit), metric.WithAttributes(hitAttrs...))
+			counter.Add(ctx, int64(node.Delta.NumaMiss), metric.WithAttributes(missAttrs...))
+			counter.Add(ctx, int64(node.Delta.NumaForeign), metric.WithAttributes(foreignAttrs...))
+			counter.Add(ctx, int64(node.Delta.InterleaveHit), metric.WithAttributes(interleaveAttrs...))
+		}
+
+		// NUMA memory locality (using deltas - page counts)
+		if counter, err := t.getOrCreateInt64Counter("system.memory.numa.locality", "NUMA memory allocation locality by type", "1"); err == nil {
+			localAttrs := append(nodeAttrs, attribute.String("type", "local_node"))
+			otherAttrs := append(nodeAttrs, attribute.String("type", "other_node"))
+			counter.Add(ctx, int64(node.Delta.LocalNode), metric.WithAttributes(localAttrs...))
+			counter.Add(ctx, int64(node.Delta.OtherNode), metric.WithAttributes(otherAttrs...))
 		}
 	}
 
