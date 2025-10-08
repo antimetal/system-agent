@@ -188,6 +188,22 @@ func (s *RuntimeSnapshot) GetContainers() []containergraph.ContainerInfo {
 			CgroupPath:    container.CgroupPath,
 		}
 
+		// Extract additional metadata (image, labels, resource limits)
+		// Use empty hostRoot since container paths are already absolute
+		if metadata, err := pkgcontainers.ExtractMetadata(&container, ""); err == nil {
+			containerInfo.ImageName = metadata.ImageName
+			containerInfo.ImageTag = metadata.ImageTag
+			containerInfo.Labels = metadata.Labels
+			containerInfo.CPUShares = metadata.CPUShares
+			containerInfo.CPUQuotaUs = metadata.CPUQuotaUs
+			containerInfo.CPUPeriodUs = metadata.CPUPeriodUs
+			containerInfo.MemoryLimitBytes = metadata.MemoryLimitBytes
+			containerInfo.CpusetCpus = metadata.CpusetCpus
+			containerInfo.CpusetMems = metadata.CpusetMems
+		}
+		// Note: Metadata extraction errors are silently ignored to allow
+		// container discovery to succeed even if metadata files are unavailable
+
 		containerInfos[i] = containerInfo
 	}
 
