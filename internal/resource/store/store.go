@@ -148,9 +148,10 @@ func New(opts ...Option) (*store, error) {
 	db, err := badger.Open(
 		badger.DefaultOptions(path).
 			WithInMemory(path == "").
-			WithNumMemtables(3).
-			WithBlockCacheSize(128 << 20).
-			WithIndexCacheSize(64 << 20).
+			WithMemTableSize(32 << 20).
+			WithNumMemtables(2).
+			WithBlockCacheSize(64 << 20).
+			WithIndexCacheSize(32 << 20).
 			WithLogger(badgerLog),
 	)
 	if err != nil {
