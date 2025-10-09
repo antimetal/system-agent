@@ -20,16 +20,16 @@ import (
 // Metadata represents all extractable metadata for a container
 type Metadata struct {
 	// Image information
-	ImageName        string
-	ImageTag         string
+	ImageName string
+	ImageTag  string
 
 	// Human-readable identifiers (container-specific only)
 	// Note: Pod-level fields (pod name, namespace, app) are available in K8s Pod resources
-	ContainerName    string  // "nginx", "web", "sidecar"
-	WorkloadName     string  // "web-server" (deployment name, hash stripped)
+	ContainerName string // "nginx", "web", "sidecar"
+	WorkloadName  string // "web-server" (deployment name, hash stripped)
 
 	// Full labels map (contains all K8s/Docker metadata)
-	Labels           map[string]string
+	Labels map[string]string
 
 	// Resource limits
 	CPUShares        *int32

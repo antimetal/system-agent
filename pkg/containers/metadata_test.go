@@ -275,8 +275,8 @@ func TestExtractHumanNames(t *testing.T) {
 				"io.kubernetes.pod.name": "worker-abc12",
 			},
 			imageName:             "busybox",
-			expectedContainerName: "busybox",    // Falls back to image name
-			expectedWorkloadName:  "worker",     // Strips hash from pod name
+			expectedContainerName: "busybox", // Falls back to image name
+			expectedWorkloadName:  "worker",  // Strips hash from pod name
 		},
 	}
 
