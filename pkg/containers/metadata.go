@@ -19,9 +19,19 @@ import (
 
 // Metadata represents all extractable metadata for a container
 type Metadata struct {
+	// Image information
 	ImageName        string
 	ImageTag         string
+
+	// Human-readable identifiers (container-specific only)
+	// Note: Pod-level fields (pod name, namespace, app) are available in K8s Pod resources
+	ContainerName    string  // "nginx", "web", "sidecar"
+	WorkloadName     string  // "web-server" (deployment name, hash stripped)
+
+	// Full labels map (contains all K8s/Docker metadata)
 	Labels           map[string]string
+
+	// Resource limits
 	CPUShares        *int32
 	CPUQuotaUs       *int32
 	CPUPeriodUs      *int32
@@ -50,6 +60,8 @@ func ExtractMetadata(container *Container, hostRoot string) (*Metadata, error) {
 	labels, err := extractLabels(container, hostRoot)
 	if err == nil {
 		metadata.Labels = labels
+		// Extract human-readable names from labels
+		extractHumanNames(labels, metadata)
 	}
 
 	return metadata, nil
@@ -551,4 +563,108 @@ func extractPodmanLabels(containerID, hostRoot string) (map[string]string, error
 	}
 
 	return nil, fmt.Errorf("podman labels not found")
+}
+
+// extractHumanNames extracts container-specific human-readable identifiers from labels
+// Note: Pod-level fields (pod name, namespace, app) are NOT extracted - they're available
+// in Kubernetes Pod resources to avoid duplication
+func extractHumanNames(labels map[string]string, metadata *Metadata) {
+	// Container name - most important identifier
+	// Priority: K8s container name > Docker Compose service > fallback to image name
+	if name := labels["io.kubernetes.container.name"]; name != "" {
+		metadata.ContainerName = name
+	} else if name := labels["com.docker.compose.service"]; name != "" {
+		metadata.ContainerName = name
+	} else if metadata.ImageName != "" {
+		// Fall back to image name if no explicit container name
+		metadata.ContainerName = metadata.ImageName
+	}
+
+	// Workload name - derived from pod name by stripping K8s-generated hashes
+	// Only extract if we have a pod name label (Kubernetes only)
+	if podName := labels["io.kubernetes.pod.name"]; podName != "" {
+		metadata.WorkloadName = stripPodHash(podName)
+	}
+}
+
+// stripPodHash removes the ReplicaSet hash suffix from a Kubernetes pod name
+// Examples:
+//   - "web-server-7d4f8bd9c-abc12" -> "web-server"
+//   - "nginx-deployment-abc123def" -> "nginx-deployment"
+//   - "standalone-pod" -> "standalone-pod" (no hash to strip)
+func stripPodHash(podName string) string {
+	// Kubernetes pod names from Deployments/StatefulSets have format:
+	// <workload-name>-<replicaset-hash>-<pod-hash>
+	// We want to strip both hashes to get the workload name
+
+	// Split by hyphens
+	parts := strings.Split(podName, "-")
+
+	// Need at least 2 parts to have any hash
+	if len(parts) < 2 {
+		return podName
+	}
+
+	// Check if last parts look like hashes
+	// Kubernetes hashes are lowercase alphanumeric, typically 3-10 chars
+	lastPart := parts[len(parts)-1]
+	secondLastPart := ""
+	if len(parts) >= 3 {
+		secondLastPart = parts[len(parts)-2]
+	}
+
+	lastIsHash := isKubernetesHash(lastPart)
+	secondLastIsHash := secondLastPart != "" && isKubernetesHash(secondLastPart)
+
+	if lastIsHash && secondLastIsHash {
+		// Strip both hashes (Deployment: name-replicaset-pod)
+		return strings.Join(parts[:len(parts)-2], "-")
+	} else if lastIsHash {
+		// Strip just the last hash
+		return strings.Join(parts[:len(parts)-1], "-")
+	}
+
+	// No recognizable hash pattern, return as-is
+	return podName
+}
+
+// isKubernetesHash checks if a string looks like a Kubernetes-generated hash
+// K8s hashes are lowercase alphanumeric, typically 5-10 characters, with both letters and numbers
+func isKubernetesHash(s string) bool {
+	length := len(s)
+	// Kubernetes hashes are typically 5-10 characters
+	// (ReplicaSet hash: 5-10 chars, Pod hash: 5 chars)
+	if length < 5 || length > 10 {
+		return false
+	}
+
+	if !isAlphanumeric(s) {
+		return false
+	}
+
+	// Must have BOTH letters and numbers to be a hash (not just "myapp" or "12345")
+	hasLetter := false
+	hasDigit := false
+	for _, c := range s {
+		if c >= 'a' && c <= 'z' {
+			hasLetter = true
+		} else if c >= '0' && c <= '9' {
+			hasDigit = true
+		}
+		if hasLetter && hasDigit {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isAlphanumeric checks if a string contains only lowercase alphanumeric characters
+func isAlphanumeric(s string) bool {
+	for _, c := range s {
+		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
+			return false
+		}
+	}
+	return true
 }

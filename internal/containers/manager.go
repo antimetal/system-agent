@@ -188,12 +188,23 @@ func (s *RuntimeSnapshot) GetContainers() []containergraph.ContainerInfo {
 			CgroupPath:    container.CgroupPath,
 		}
 
-		// Extract additional metadata (image, labels, resource limits)
+		// Extract additional metadata (image, labels, resource limits, human names)
 		// Use empty hostRoot since container paths are already absolute
 		if metadata, err := pkgcontainers.ExtractMetadata(&container, ""); err == nil {
+			// Image information
 			containerInfo.ImageName = metadata.ImageName
 			containerInfo.ImageTag = metadata.ImageTag
+
+			// Human-readable identifiers (container-specific only)
+			// Note: Pod-level fields (pod name, namespace, app) are available via
+			// Pod resources and Container→Pod relationships to avoid duplication
+			containerInfo.ContainerName = metadata.ContainerName
+			containerInfo.WorkloadName = metadata.WorkloadName
+
+			// Labels (full map includes all K8s/Docker metadata)
 			containerInfo.Labels = metadata.Labels
+
+			// Resource limits
 			containerInfo.CPUShares = metadata.CPUShares
 			containerInfo.CPUQuotaUs = metadata.CPUQuotaUs
 			containerInfo.CPUPeriodUs = metadata.CPUPeriodUs
@@ -244,6 +255,27 @@ func (m *Manager) collectRuntimeSnapshot(ctx context.Context) (*RuntimeSnapshot,
 	}
 
 	m.logger.V(1).Info("Discovered containers", "count", len(allContainers))
+
+	// Log extracted metadata for demonstration (first 3 containers)
+	for i, container := range allContainers {
+		if i >= 3 {
+			break
+		}
+		if metadata, err := pkgcontainers.ExtractMetadata(&container, ""); err == nil {
+			m.logger.Info("Container metadata sample",
+				"id", container.ID[:min(12, len(container.ID))],
+				"runtime", container.Runtime,
+				// Container-specific human names
+				"container_name", metadata.ContainerName,
+				"workload_name", metadata.WorkloadName,
+				// Image info
+				"image", metadata.ImageName,
+				"tag", metadata.ImageTag,
+				// Resource limits
+				"has_cpu_limit", metadata.CPUQuotaUs != nil,
+				"has_memory_limit", metadata.MemoryLimitBytes != nil)
+		}
+	}
 
 	// For now, we'll use an empty process snapshot
 	// TODO: Integrate with performance manager when process collection is available
