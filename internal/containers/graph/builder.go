@@ -44,6 +44,11 @@ type ContainerInfo struct {
 	ImageName     string
 	ImageTag      string
 	Labels        map[string]string
+
+	// Human-readable identifiers (container-specific only, not K8s Pod data)
+	ContainerName string // Container name (not pod name)
+	WorkloadName  string // Derived: workload name with hash stripped
+
 	// Resource limits
 	CPUShares        *int32
 	CPUQuotaUs       *int32
