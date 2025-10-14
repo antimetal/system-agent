@@ -180,40 +180,38 @@ var _ containergraph.RuntimeSnapshot = (*RuntimeSnapshot)(nil)
 func (s *RuntimeSnapshot) GetContainers() []containergraph.ContainerInfo {
 	containerInfos := make([]containergraph.ContainerInfo, len(s.Containers))
 
-	for i, container := range s.Containers {
+	for i := range s.Containers {
+		container := &s.Containers[i]
+		// Note: Metadata extraction errors are silently ignored to allow
+		// container discovery to succeed even if metadata files are unavailable
+		_ = pkgcontainers.ExtractMetadata(container, "")
+
 		containerInfo := containergraph.ContainerInfo{
+			// Discovery fields
 			ID:            container.ID,
 			Runtime:       container.Runtime,
 			CgroupVersion: container.CgroupVersion,
 			CgroupPath:    container.CgroupPath,
-		}
 
-		// Extract additional metadata (image, labels, resource limits, human names)
-		// Use empty hostRoot since container paths are already absolute
-		if metadata, err := pkgcontainers.ExtractMetadata(&container, ""); err == nil {
 			// Image information
-			containerInfo.ImageName = metadata.ImageName
-			containerInfo.ImageTag = metadata.ImageTag
+			ImageName: container.ImageName,
+			ImageTag:  container.ImageTag,
 
-			// Human-readable identifiers (container-specific only)
-			// Note: Pod-level fields (pod name, namespace, app) are available via
-			// Pod resources and Container→Pod relationships to avoid duplication
-			containerInfo.ContainerName = metadata.ContainerName
-			containerInfo.WorkloadName = metadata.WorkloadName
+			// Human-readable identifiers
+			ContainerName: container.ContainerName,
+			WorkloadName:  container.WorkloadName,
 
-			// Labels (full map includes all K8s/Docker metadata)
-			containerInfo.Labels = metadata.Labels
+			// Labels
+			Labels: container.Labels,
 
 			// Resource limits
-			containerInfo.CPUShares = metadata.CPUShares
-			containerInfo.CPUQuotaUs = metadata.CPUQuotaUs
-			containerInfo.CPUPeriodUs = metadata.CPUPeriodUs
-			containerInfo.MemoryLimitBytes = metadata.MemoryLimitBytes
-			containerInfo.CpusetCpus = metadata.CpusetCpus
-			containerInfo.CpusetMems = metadata.CpusetMems
+			CPUShares:        container.CPUShares,
+			CPUQuotaUs:       container.CPUQuotaUs,
+			CPUPeriodUs:      container.CPUPeriodUs,
+			MemoryLimitBytes: container.MemoryLimitBytes,
+			CpusetCpus:       container.CpusetCpus,
+			CpusetMems:       container.CpusetMems,
 		}
-		// Note: Metadata extraction errors are silently ignored to allow
-		// container discovery to succeed even if metadata files are unavailable
 
 		containerInfos[i] = containerInfo
 	}
@@ -257,23 +255,24 @@ func (m *Manager) collectRuntimeSnapshot(ctx context.Context) (*RuntimeSnapshot,
 	m.logger.V(1).Info("Discovered containers", "count", len(allContainers))
 
 	// Log extracted metadata for demonstration (first 3 containers)
-	for i, container := range allContainers {
+	for i := range allContainers {
 		if i >= 3 {
 			break
 		}
-		if metadata, err := pkgcontainers.ExtractMetadata(&container, ""); err == nil {
+		container := &allContainers[i]
+		if err := pkgcontainers.ExtractMetadata(container, ""); err == nil {
 			m.logger.Info("Container metadata sample",
 				"id", container.ID[:min(12, len(container.ID))],
 				"runtime", container.Runtime,
 				// Container-specific human names
-				"container_name", metadata.ContainerName,
-				"workload_name", metadata.WorkloadName,
+				"container_name", container.ContainerName,
+				"workload_name", container.WorkloadName,
 				// Image info
-				"image", metadata.ImageName,
-				"tag", metadata.ImageTag,
+				"image", container.ImageName,
+				"tag", container.ImageTag,
 				// Resource limits
-				"has_cpu_limit", metadata.CPUQuotaUs != nil,
-				"has_memory_limit", metadata.MemoryLimitBytes != nil)
+				"has_cpu_limit", container.CPUQuotaUs != nil,
+				"has_memory_limit", container.MemoryLimitBytes != nil)
 		}
 	}
 

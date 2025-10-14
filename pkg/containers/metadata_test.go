@@ -282,15 +282,15 @@ func TestExtractHumanNames(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			metadata := &Metadata{
+			container := &Container{
 				ImageName: tt.imageName,
 				Labels:    tt.labels,
 			}
 
-			extractHumanNames(tt.labels, metadata)
+			extractHumanNames(tt.labels, container)
 
-			assert.Equal(t, tt.expectedContainerName, metadata.ContainerName, "container name mismatch")
-			assert.Equal(t, tt.expectedWorkloadName, metadata.WorkloadName, "workload name mismatch")
+			assert.Equal(t, tt.expectedContainerName, container.ContainerName, "container name mismatch")
+			assert.Equal(t, tt.expectedWorkloadName, container.WorkloadName, "workload name mismatch")
 		})
 	}
 }
