@@ -17,54 +17,35 @@ import (
 	runtimev1 "github.com/antimetal/agent/pkg/api/antimetal/runtime/v1"
 )
 
-// Metadata represents all extractable metadata for a container
-type Metadata struct {
-	// Image information
-	ImageName string
-	ImageTag  string
-
-	// Human-readable identifiers (container-specific only)
-	// Note: Pod-level fields (pod name, namespace, app) are available in K8s Pod resources
-	ContainerName string // "nginx", "web", "sidecar"
-	WorkloadName  string // "web-server" (deployment name, hash stripped)
-
-	// Full labels map (contains all K8s/Docker metadata)
-	Labels map[string]string
-
-	// Resource limits
-	CPUShares        *int32
-	CPUQuotaUs       *int32
-	CPUPeriodUs      *int32
-	MemoryLimitBytes *uint64
-	CpusetCpus       string
-	CpusetMems       string
-}
-
-// ExtractMetadata extracts all available metadata for a container
-func ExtractMetadata(container *Container, hostRoot string) (*Metadata, error) {
-	metadata := &Metadata{
-		Labels: make(map[string]string),
+// ExtractMetadata extracts and populates all available metadata for a container.
+// This function enriches the Container struct with image information, labels, resource limits,
+// and human-readable names by reading runtime metadata files and cgroup settings.
+// Errors during extraction are returned but the container remains valid with partial metadata.
+func ExtractMetadata(container *Container, hostRoot string) error {
+	// Initialize labels map if not already present
+	if container.Labels == nil {
+		container.Labels = make(map[string]string)
 	}
 
 	// Extract image metadata
 	imageName, imageTag, err := extractImageMetadata(container, hostRoot)
 	if err == nil {
-		metadata.ImageName = imageName
-		metadata.ImageTag = imageTag
+		container.ImageName = imageName
+		container.ImageTag = imageTag
 	}
 
 	// Extract resource limits from cgroup files
-	extractResourceLimits(container, metadata)
+	extractResourceLimits(container)
 
 	// Extract labels from runtime metadata
 	labels, err := extractLabels(container, hostRoot)
 	if err == nil {
-		metadata.Labels = labels
+		container.Labels = labels
 		// Extract human-readable names from labels
-		extractHumanNames(labels, metadata)
+		extractHumanNames(labels, container)
 	}
 
-	return metadata, nil
+	return nil
 }
 
 // extractImageMetadata extracts image name and tag from runtime metadata files
@@ -309,19 +290,18 @@ func isValidTag(s string) bool {
 	return true
 }
 
-// extractResourceLimits reads cgroup resource limit files and populates the metadata
-func extractResourceLimits(container *Container, metadata *Metadata) {
-	cgroupPath := container.CgroupPath
-
+// extractResourceLimits reads cgroup resource limit files and populates the container
+func extractResourceLimits(container *Container) {
 	if container.CgroupVersion == 1 {
-		extractCgroupV1Limits(cgroupPath, metadata)
+		extractCgroupV1Limits(container)
 	} else if container.CgroupVersion == 2 {
-		extractCgroupV2Limits(cgroupPath, metadata)
+		extractCgroupV2Limits(container)
 	}
 }
 
 // extractCgroupV1Limits reads resource limits from cgroup v1 files
-func extractCgroupV1Limits(cgroupPath string, metadata *Metadata) {
+func extractCgroupV1Limits(container *Container) {
+	cgroupPath := container.CgroupPath
 	// CPU limits - need to read from cpu controller cgroup
 	// The cgroupPath might be from memory controller, so we need to find the cpu controller path
 	cpuPath := strings.Replace(cgroupPath, "/memory/", "/cpu,cpuacct/", 1)
@@ -331,7 +311,7 @@ func extractCgroupV1Limits(cgroupPath string, metadata *Metadata) {
 	if data, err := os.ReadFile(filepath.Join(cpuPath, "cpu.shares")); err == nil {
 		if val, err := strconv.ParseInt(strings.TrimSpace(string(data)), 10, 32); err == nil {
 			shares := int32(val)
-			metadata.CPUShares = &shares
+			container.CPUShares = &shares
 		}
 	}
 
@@ -339,7 +319,7 @@ func extractCgroupV1Limits(cgroupPath string, metadata *Metadata) {
 	if data, err := os.ReadFile(filepath.Join(cpuPath, "cpu.cfs_quota_us")); err == nil {
 		if val, err := strconv.ParseInt(strings.TrimSpace(string(data)), 10, 32); err == nil && val > 0 {
 			quota := int32(val)
-			metadata.CPUQuotaUs = &quota
+			container.CPUQuotaUs = &quota
 		}
 	}
 
@@ -347,17 +327,17 @@ func extractCgroupV1Limits(cgroupPath string, metadata *Metadata) {
 	if data, err := os.ReadFile(filepath.Join(cpuPath, "cpu.cfs_period_us")); err == nil {
 		if val, err := strconv.ParseInt(strings.TrimSpace(string(data)), 10, 32); err == nil {
 			period := int32(val)
-			metadata.CPUPeriodUs = &period
+			container.CPUPeriodUs = &period
 		}
 	}
 
 	// Cpuset limits
 	if data, err := os.ReadFile(filepath.Join(cpuPath, "cpuset.cpus")); err == nil {
-		metadata.CpusetCpus = strings.TrimSpace(string(data))
+		container.CpusetCpus = strings.TrimSpace(string(data))
 	}
 
 	if data, err := os.ReadFile(filepath.Join(cpuPath, "cpuset.mems")); err == nil {
-		metadata.CpusetMems = strings.TrimSpace(string(data))
+		container.CpusetMems = strings.TrimSpace(string(data))
 	}
 
 	// Memory limits
@@ -372,21 +352,22 @@ func extractCgroupV1Limits(cgroupPath string, metadata *Metadata) {
 		if val, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); err == nil {
 			// Check for max value (no limit)
 			if val < uint64(1)<<62 {
-				metadata.MemoryLimitBytes = &val
+				container.MemoryLimitBytes = &val
 			}
 		}
 	}
 }
 
 // extractCgroupV2Limits reads resource limits from cgroup v2 files
-func extractCgroupV2Limits(cgroupPath string, metadata *Metadata) {
+func extractCgroupV2Limits(container *Container) {
+	cgroupPath := container.CgroupPath
 	// CPU weight (cpu.weight) - cgroup v2 uses weight instead of shares
 	// Convert to shares-equivalent: shares = (weight - 1) * 1024 / 9999 + 2
 	if data, err := os.ReadFile(filepath.Join(cgroupPath, "cpu.weight")); err == nil {
 		if weight, err := strconv.ParseInt(strings.TrimSpace(string(data)), 10, 64); err == nil {
 			// Convert weight (1-10000) to shares-equivalent (2-262144)
 			shares := int32((weight-1)*1024/9999 + 2)
-			metadata.CPUShares = &shares
+			container.CPUShares = &shares
 		}
 	}
 
@@ -397,23 +378,23 @@ func extractCgroupV2Limits(cgroupPath string, metadata *Metadata) {
 			if parts[0] != "max" {
 				if quota, err := strconv.ParseInt(parts[0], 10, 32); err == nil {
 					q := int32(quota)
-					metadata.CPUQuotaUs = &q
+					container.CPUQuotaUs = &q
 				}
 			}
 			if period, err := strconv.ParseInt(parts[1], 10, 32); err == nil {
 				p := int32(period)
-				metadata.CPUPeriodUs = &p
+				container.CPUPeriodUs = &p
 			}
 		}
 	}
 
 	// Cpuset (cpuset.cpus and cpuset.mems)
 	if data, err := os.ReadFile(filepath.Join(cgroupPath, "cpuset.cpus")); err == nil {
-		metadata.CpusetCpus = strings.TrimSpace(string(data))
+		container.CpusetCpus = strings.TrimSpace(string(data))
 	}
 
 	if data, err := os.ReadFile(filepath.Join(cgroupPath, "cpuset.mems")); err == nil {
-		metadata.CpusetMems = strings.TrimSpace(string(data))
+		container.CpusetMems = strings.TrimSpace(string(data))
 	}
 
 	// Memory limit (memory.max)
@@ -421,7 +402,7 @@ func extractCgroupV2Limits(cgroupPath string, metadata *Metadata) {
 		limitStr := strings.TrimSpace(string(data))
 		if limitStr != "max" {
 			if val, err := strconv.ParseUint(limitStr, 10, 64); err == nil {
-				metadata.MemoryLimitBytes = &val
+				container.MemoryLimitBytes = &val
 			}
 		}
 	}
@@ -568,22 +549,22 @@ func extractPodmanLabels(containerID, hostRoot string) (map[string]string, error
 // extractHumanNames extracts container-specific human-readable identifiers from labels
 // Note: Pod-level fields (pod name, namespace, app) are NOT extracted - they're available
 // in Kubernetes Pod resources to avoid duplication
-func extractHumanNames(labels map[string]string, metadata *Metadata) {
+func extractHumanNames(labels map[string]string, container *Container) {
 	// Container name - most important identifier
 	// Priority: K8s container name > Docker Compose service > fallback to image name
 	if name := labels["io.kubernetes.container.name"]; name != "" {
-		metadata.ContainerName = name
+		container.ContainerName = name
 	} else if name := labels["com.docker.compose.service"]; name != "" {
-		metadata.ContainerName = name
-	} else if metadata.ImageName != "" {
+		container.ContainerName = name
+	} else if container.ImageName != "" {
 		// Fall back to image name if no explicit container name
-		metadata.ContainerName = metadata.ImageName
+		container.ContainerName = container.ImageName
 	}
 
 	// Workload name - derived from pod name by stripping K8s-generated hashes
 	// Only extract if we have a pod name label (Kubernetes only)
 	if podName := labels["io.kubernetes.pod.name"]; podName != "" {
-		metadata.WorkloadName = stripPodHash(podName)
+		container.WorkloadName = stripPodHash(podName)
 	}
 }
 
