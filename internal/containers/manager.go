@@ -180,12 +180,37 @@ var _ containergraph.RuntimeSnapshot = (*RuntimeSnapshot)(nil)
 func (s *RuntimeSnapshot) GetContainers() []containergraph.ContainerInfo {
 	containerInfos := make([]containergraph.ContainerInfo, len(s.Containers))
 
-	for i, container := range s.Containers {
+	for i := range s.Containers {
+		container := &s.Containers[i]
+		// Note: Metadata extraction errors are silently ignored to allow
+		// container discovery to succeed even if metadata files are unavailable
+		_ = pkgcontainers.ExtractMetadata(container, "")
+
 		containerInfo := containergraph.ContainerInfo{
+			// Discovery fields
 			ID:            container.ID,
 			Runtime:       container.Runtime,
 			CgroupVersion: container.CgroupVersion,
 			CgroupPath:    container.CgroupPath,
+
+			// Image information
+			ImageName: container.ImageName,
+			ImageTag:  container.ImageTag,
+
+			// Human-readable identifiers
+			ContainerName: container.ContainerName,
+			WorkloadName:  container.WorkloadName,
+
+			// Labels
+			Labels: container.Labels,
+
+			// Resource limits
+			CPUShares:        container.CPUShares,
+			CPUQuotaUs:       container.CPUQuotaUs,
+			CPUPeriodUs:      container.CPUPeriodUs,
+			MemoryLimitBytes: container.MemoryLimitBytes,
+			CpusetCpus:       container.CpusetCpus,
+			CpusetMems:       container.CpusetMems,
 		}
 
 		containerInfos[i] = containerInfo
@@ -228,6 +253,28 @@ func (m *Manager) collectRuntimeSnapshot(ctx context.Context) (*RuntimeSnapshot,
 	}
 
 	m.logger.V(1).Info("Discovered containers", "count", len(allContainers))
+
+	// Log extracted metadata for demonstration (first 3 containers)
+	for i := range allContainers {
+		if i >= 3 {
+			break
+		}
+		container := &allContainers[i]
+		if err := pkgcontainers.ExtractMetadata(container, ""); err == nil {
+			m.logger.Info("Container metadata sample",
+				"id", container.ID[:min(12, len(container.ID))],
+				"runtime", container.Runtime,
+				// Container-specific human names
+				"container_name", container.ContainerName,
+				"workload_name", container.WorkloadName,
+				// Image info
+				"image", container.ImageName,
+				"tag", container.ImageTag,
+				// Resource limits
+				"has_cpu_limit", container.CPUQuotaUs != nil,
+				"has_memory_limit", container.MemoryLimitBytes != nil)
+		}
+	}
 
 	// For now, we'll use an empty process snapshot
 	// TODO: Integrate with performance manager when process collection is available

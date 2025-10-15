@@ -39,6 +39,13 @@ func (b *Builder) createContainerNode(container *ContainerInfo) (*resourcev1.Res
 		// Timestamps would be set if we had them
 		// CreatedAt: container.CreatedAt,
 		// StartedAt: container.StartedAt,
+
+		// Human-readable identifiers (container-specific only)
+		// Pod-level fields available via Pod resources and Container→Pod relationships
+		ContainerName: container.ContainerName,
+		WorkloadName:  container.WorkloadName,
+
+		// Resource limits
 		CpuShares:        container.CPUShares,
 		CpuQuotaUs:       container.CPUQuotaUs,
 		CpuPeriodUs:      container.CPUPeriodUs,
