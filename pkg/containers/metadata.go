@@ -292,10 +292,10 @@ func isValidTag(s string) bool {
 
 // extractResourceLimits reads cgroup resource limit files and populates the container
 func extractResourceLimits(container *Container) {
-	if container.CgroupVersion == 1 {
-		extractCgroupV1Limits(container)
-	} else if container.CgroupVersion == 2 {
+	if container.CgroupVersion == 2 {
 		extractCgroupV2Limits(container)
+	} else if container.CgroupVersion == 1 {
+		extractCgroupV1Limits(container)
 	}
 }
 
