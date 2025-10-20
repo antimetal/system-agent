@@ -10,6 +10,8 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"google.golang.org/protobuf/proto"
@@ -22,7 +24,6 @@ import (
 	k8sv1 "github.com/antimetal/agent/pkg/api/kubernetes/v1"
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"github.com/antimetal/agent/pkg/config/environment"
-	"github.com/antimetal/agent/pkg/host"
 )
 
 var (
@@ -246,10 +247,30 @@ func createSystemNodeRelationships(instanceRef *resourcev1.ResourceRef, systemNo
 }
 
 func getSystemNodeID() (string, error) {
-	// Use existing host package function for machine ID
-	id := host.GetMachineID()
-	if id == "" {
-		return "", fmt.Errorf("could not determine system node ID")
+	// Get machine ID from system files
+	// This logic matches pkg/host/machine_id_linux.go but is inlined
+	// to avoid CI build issues with the host package
+	id, err := getMachineID()
+	if err != nil {
+		return "", fmt.Errorf("could not determine system node ID: %w", err)
 	}
 	return id, nil
+}
+
+func getMachineID() (string, error) {
+	// Try /etc/machine-id (systemd standard, most reliable)
+	if data, err := os.ReadFile("/etc/machine-id"); err == nil {
+		if id := strings.TrimSpace(string(data)); id != "" {
+			return id, nil
+		}
+	}
+
+	// Try /var/lib/dbus/machine-id as fallback
+	if data, err := os.ReadFile("/var/lib/dbus/machine-id"); err == nil {
+		if id := strings.TrimSpace(string(data)); id != "" {
+			return id, nil
+		}
+	}
+
+	return "", fmt.Errorf("machine-id not found")
 }
