@@ -29,6 +29,7 @@ import (
 	"github.com/antimetal/agent/internal/containers"
 	"github.com/antimetal/agent/internal/endpoints"
 	"github.com/antimetal/agent/internal/hardware"
+	"github.com/antimetal/agent/internal/instance"
 	"github.com/antimetal/agent/internal/intake"
 	k8sagent "github.com/antimetal/agent/internal/kubernetes/agent"
 	"github.com/antimetal/agent/internal/kubernetes/scheme"
@@ -248,6 +249,20 @@ func main() {
 	}
 	if err := mgr.Add(instanceIntakeWorker); err != nil {
 		setupLog.Error(err, "unable to register instance intake worker")
+		os.Exit(1)
+	}
+
+	// Setup Instance Manager (for agent instance resource publishing)
+	instanceManager, err := instance.NewManager(
+		mgr.GetLogger().WithName("instance-manager"),
+		rsrcStore,
+	)
+	if err != nil {
+		setupLog.Error(err, "unable to create instance manager")
+		os.Exit(1)
+	}
+	if err := mgr.Add(instanceManager); err != nil {
+		setupLog.Error(err, "unable to register instance manager")
 		os.Exit(1)
 	}
 
