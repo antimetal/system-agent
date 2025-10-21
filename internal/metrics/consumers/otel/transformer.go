@@ -294,7 +294,7 @@ func (t *Transformer) transformMemoryStats(ctx context.Context, data any, attrs 
 		return fmt.Errorf("invalid memory stats data type")
 	}
 
-	// Memory usage by state
+	// Memory usage by state (existing metric - kept for compatibility)
 	memStates := map[string]uint64{
 		"free":      stats.MemFree * 1024, // Convert kB to bytes
 		"used":      (stats.MemTotal - stats.MemAvailable) * 1024,
@@ -310,7 +310,7 @@ func (t *Transformer) transformMemoryStats(ctx context.Context, data any, attrs 
 		}
 	}
 
-	// Swap usage
+	// Swap usage (existing metric - kept for compatibility)
 	if stats.SwapTotal > 0 {
 		if gauge, err := t.getOrCreateInt64Gauge("system.memory.swap_usage", "Swap usage", "By"); err == nil {
 			freeAttrs := append(attrs, attribute.String("state", "free"))
@@ -318,6 +318,109 @@ func (t *Transformer) transformMemoryStats(ctx context.Context, data any, attrs 
 			gauge.Record(ctx, int64(stats.SwapFree*1024), metric.WithAttributes(freeAttrs...))
 			gauge.Record(ctx, int64((stats.SwapTotal-stats.SwapFree)*1024), metric.WithAttributes(usedAttrs...))
 		}
+	}
+
+	// Swap cached memory (gauge - instantaneous value)
+	if gauge, err := t.getOrCreateInt64Gauge("system.memory.swap.cached", "Memory that was swapped out and is back in RAM", "By"); err == nil {
+		gauge.Record(ctx, int64(stats.SwapCached*1024), metric.WithAttributes(attrs...))
+	}
+
+	// Active/Inactive memory (gauges - instantaneous values)
+	if gauge, err := t.getOrCreateInt64Gauge("system.memory.active", "Memory used recently", "By"); err == nil {
+		gauge.Record(ctx, int64(stats.Active*1024), metric.WithAttributes(attrs...))
+	}
+
+	if gauge, err := t.getOrCreateInt64Gauge("system.memory.inactive", "Memory not used recently", "By"); err == nil {
+		gauge.Record(ctx, int64(stats.Inactive*1024), metric.WithAttributes(attrs...))
+	}
+
+	// Dirty/Writeback pages (gauges - instantaneous values)
+	if gauge, err := t.getOrCreateInt64Gauge("system.memory.dirty", "Memory waiting to be written back to disk", "By"); err == nil {
+		gauge.Record(ctx, int64(stats.Dirty*1024), metric.WithAttributes(attrs...))
+	}
+
+	if gauge, err := t.getOrCreateInt64Gauge("system.memory.writeback", "Memory actively being written back to disk", "By"); err == nil {
+		gauge.Record(ctx, int64(stats.Writeback*1024), metric.WithAttributes(attrs...))
+	}
+
+	// Anonymous and mapped memory (gauges - instantaneous values)
+	if gauge, err := t.getOrCreateInt64Gauge("system.memory.anon_pages", "Non-file backed pages mapped into userspace", "By"); err == nil {
+		gauge.Record(ctx, int64(stats.AnonPages*1024), metric.WithAttributes(attrs...))
+	}
+
+	if gauge, err := t.getOrCreateInt64Gauge("system.memory.mapped", "Files mapped into memory", "By"); err == nil {
+		gauge.Record(ctx, int64(stats.Mapped*1024), metric.WithAttributes(attrs...))
+	}
+
+	if gauge, err := t.getOrCreateInt64Gauge("system.memory.shmem", "Shared memory", "By"); err == nil {
+		gauge.Record(ctx, int64(stats.Shmem*1024), metric.WithAttributes(attrs...))
+	}
+
+	// Slab allocator (gauge - instantaneous values)
+	if gauge, err := t.getOrCreateInt64Gauge("system.memory.slab", "Kernel slab allocator memory by type", "By"); err == nil {
+		reclaimableAttrs := append(attrs, attribute.String("type", "reclaimable"))
+		unreclaimAttrs := append(attrs, attribute.String("type", "unreclaimable"))
+		gauge.Record(ctx, int64(stats.SReclaimable*1024), metric.WithAttributes(reclaimableAttrs...))
+		gauge.Record(ctx, int64(stats.SUnreclaim*1024), metric.WithAttributes(unreclaimAttrs...))
+	}
+
+	// Kernel memory (gauges - instantaneous values)
+	if gauge, err := t.getOrCreateInt64Gauge("system.memory.kernel_stack", "Memory used by kernel stacks", "By"); err == nil {
+		gauge.Record(ctx, int64(stats.KernelStack*1024), metric.WithAttributes(attrs...))
+	}
+
+	if gauge, err := t.getOrCreateInt64Gauge("system.memory.page_tables", "Memory used by page tables", "By"); err == nil {
+		gauge.Record(ctx, int64(stats.PageTables*1024), metric.WithAttributes(attrs...))
+	}
+
+	// Memory commit (gauges - instantaneous values)
+	if gauge, err := t.getOrCreateInt64Gauge("system.memory.commit", "Memory commit statistics by type", "By"); err == nil {
+		limitAttrs := append(attrs, attribute.String("type", "limit"))
+		committedAttrs := append(attrs, attribute.String("type", "committed_as"))
+		gauge.Record(ctx, int64(stats.CommitLimit*1024), metric.WithAttributes(limitAttrs...))
+		gauge.Record(ctx, int64(stats.CommittedAS*1024), metric.WithAttributes(committedAttrs...))
+	}
+
+	// Virtual memory allocator (gauges - instantaneous values)
+	if gauge, err := t.getOrCreateInt64Gauge("system.memory.vmalloc", "Virtual memory allocator statistics by type", "By"); err == nil {
+		totalAttrs := append(attrs, attribute.String("type", "total"))
+		usedAttrs := append(attrs, attribute.String("type", "used"))
+		gauge.Record(ctx, int64(stats.VmallocTotal*1024), metric.WithAttributes(totalAttrs...))
+		gauge.Record(ctx, int64(stats.VmallocUsed*1024), metric.WithAttributes(usedAttrs...))
+	}
+
+	// HugePages (gauges - instantaneous values)
+	if stats.HugePages_Total > 0 {
+		if gauge, err := t.getOrCreateInt64Gauge("system.memory.huge_pages", "HugePages by state", "1"); err == nil {
+			totalAttrs := append(attrs, attribute.String("state", "total"))
+			freeAttrs := append(attrs, attribute.String("state", "free"))
+			rsvdAttrs := append(attrs, attribute.String("state", "reserved"))
+			surpAttrs := append(attrs, attribute.String("state", "surplus"))
+			gauge.Record(ctx, int64(stats.HugePages_Total), metric.WithAttributes(totalAttrs...))
+			gauge.Record(ctx, int64(stats.HugePages_Free), metric.WithAttributes(freeAttrs...))
+			gauge.Record(ctx, int64(stats.HugePages_Rsvd), metric.WithAttributes(rsvdAttrs...))
+			gauge.Record(ctx, int64(stats.HugePages_Surp), metric.WithAttributes(surpAttrs...))
+		}
+
+		// HugeTLB total memory consumed (gauge - instantaneous value)
+		if gauge, err := t.getOrCreateInt64Gauge("system.memory.huge_pages.bytes", "Total memory consumed by huge pages", "By"); err == nil {
+			gauge.Record(ctx, int64(stats.Hugetlb*1024), metric.WithAttributes(attrs...))
+		}
+	}
+
+	// Counter metrics require delta calculations
+	// Skip if delta data is not available (first collection or delta mode disabled)
+	if stats.Delta == nil {
+		t.logger.V(2).Info("Memory delta data not available, skipping swap I/O counter metrics")
+		return nil
+	}
+
+	// Swap I/O activity (using deltas - these are page counts from /proc/vmstat)
+	if counter, err := t.getOrCreateInt64Counter("system.memory.swap.io", "Pages swapped in/out by direction", "1"); err == nil {
+		inAttrs := append(attrs, attribute.String("direction", "in"))
+		outAttrs := append(attrs, attribute.String("direction", "out"))
+		counter.Add(ctx, int64(stats.Delta.SwapIn), metric.WithAttributes(inAttrs...))
+		counter.Add(ctx, int64(stats.Delta.SwapOut), metric.WithAttributes(outAttrs...))
 	}
 
 	return nil
@@ -417,20 +520,58 @@ func (t *Transformer) transformDiskStats(ctx context.Context, data any, attrs []
 	for _, disk := range disks {
 		diskAttrs := append(attrs, attribute.String("device", disk.Device))
 
-		// I/O operations
-		if counter, err := t.getOrCreateInt64Counter("system.disk.operations", "Disk I/O operations", "1"); err == nil {
-			readAttrs := append(diskAttrs, attribute.String("direction", "read"))
-			writeAttrs := append(diskAttrs, attribute.String("direction", "write"))
-			counter.Add(ctx, int64(disk.ReadsCompleted), metric.WithAttributes(readAttrs...))
-			counter.Add(ctx, int64(disk.WritesCompleted), metric.WithAttributes(writeAttrs...))
+		// I/O operations in progress (gauge - instantaneous value)
+		if gauge, err := t.getOrCreateInt64Gauge("system.disk.io.in_progress", "I/O operations currently in progress", "1"); err == nil {
+			gauge.Record(ctx, int64(disk.IOsInProgress), metric.WithAttributes(diskAttrs...))
 		}
 
-		// I/O bytes
+		// Counter metrics require delta calculations
+		// Skip if delta data is not available (first collection or delta mode disabled)
+		if disk.Delta == nil {
+			t.logger.V(2).Info("Disk delta data not available, skipping counter metrics", "device", disk.Device)
+			continue
+		}
+
+		// I/O operations completed (using deltas)
+		if counter, err := t.getOrCreateInt64Counter("system.disk.operations", "Disk I/O operations completed", "1"); err == nil {
+			readAttrs := append(diskAttrs, attribute.String("direction", "read"))
+			writeAttrs := append(diskAttrs, attribute.String("direction", "write"))
+			counter.Add(ctx, int64(disk.Delta.ReadsCompleted), metric.WithAttributes(readAttrs...))
+			counter.Add(ctx, int64(disk.Delta.WritesCompleted), metric.WithAttributes(writeAttrs...))
+		}
+
+		// I/O operations merged (using deltas)
+		if counter, err := t.getOrCreateInt64Counter("system.disk.operations.merged", "Disk I/O operations merged before queuing", "1"); err == nil {
+			readAttrs := append(diskAttrs, attribute.String("direction", "read"))
+			writeAttrs := append(diskAttrs, attribute.String("direction", "write"))
+			counter.Add(ctx, int64(disk.Delta.ReadsMerged), metric.WithAttributes(readAttrs...))
+			counter.Add(ctx, int64(disk.Delta.WritesMerged), metric.WithAttributes(writeAttrs...))
+		}
+
+		// I/O bytes (using deltas)
 		if counter, err := t.getOrCreateInt64Counter("system.disk.io", "Disk I/O bytes", "By"); err == nil {
 			readAttrs := append(diskAttrs, attribute.String("direction", "read"))
 			writeAttrs := append(diskAttrs, attribute.String("direction", "write"))
-			counter.Add(ctx, int64(disk.SectorsRead*DefaultSectorSize), metric.WithAttributes(readAttrs...))
-			counter.Add(ctx, int64(disk.SectorsWritten*DefaultSectorSize), metric.WithAttributes(writeAttrs...))
+			counter.Add(ctx, int64(disk.Delta.SectorsRead*DefaultSectorSize), metric.WithAttributes(readAttrs...))
+			counter.Add(ctx, int64(disk.Delta.SectorsWritten*DefaultSectorSize), metric.WithAttributes(writeAttrs...))
+		}
+
+		// I/O operation time (using deltas - these are cumulative milliseconds)
+		if counter, err := t.getOrCreateInt64Counter("system.disk.io.time", "Time spent on disk I/O operations", "ms"); err == nil {
+			readAttrs := append(diskAttrs, attribute.String("direction", "read"))
+			writeAttrs := append(diskAttrs, attribute.String("direction", "write"))
+			counter.Add(ctx, int64(disk.Delta.ReadTime), metric.WithAttributes(readAttrs...))
+			counter.Add(ctx, int64(disk.Delta.WriteTime), metric.WithAttributes(writeAttrs...))
+		}
+
+		// Active I/O time (using deltas - cumulative milliseconds)
+		if counter, err := t.getOrCreateInt64Counter("system.disk.io.active_time", "Time disk was active doing I/O", "ms"); err == nil {
+			counter.Add(ctx, int64(disk.Delta.IOTime), metric.WithAttributes(diskAttrs...))
+		}
+
+		// Weighted I/O time (using deltas - cumulative milliseconds)
+		if counter, err := t.getOrCreateInt64Counter("system.disk.io.weighted_time", "Weighted time spent on disk I/O", "ms"); err == nil {
+			counter.Add(ctx, int64(disk.Delta.WeightedIOTime), metric.WithAttributes(diskAttrs...))
 		}
 	}
 
@@ -447,29 +588,71 @@ func (t *Transformer) transformNetworkStats(ctx context.Context, data any, attrs
 	for _, iface := range interfaces {
 		ifaceAttrs := append(attrs, attribute.String("device", iface.Interface))
 
-		// Network I/O bytes
+		// Interface state gauges (instantaneous values)
+		if gauge, err := t.getOrCreateInt64Gauge("system.network.interface.speed", "Network interface link speed", "Mbit/s"); err == nil {
+			gauge.Record(ctx, int64(iface.Speed), metric.WithAttributes(ifaceAttrs...))
+		}
+
+		if gauge, err := t.getOrCreateInt64Gauge("system.network.interface.up", "Network interface operational state", "1"); err == nil {
+			// 1 if interface is up, 0 otherwise
+			operState := int64(0)
+			if iface.OperState == "up" {
+				operState = 1
+			}
+			gauge.Record(ctx, operState, metric.WithAttributes(ifaceAttrs...))
+		}
+
+		if gauge, err := t.getOrCreateInt64Gauge("system.network.interface.carrier", "Network interface carrier detection", "1"); err == nil {
+			// 1 if carrier detected, 0 otherwise
+			carrier := int64(0)
+			if iface.LinkDetected {
+				carrier = 1
+			}
+			gauge.Record(ctx, carrier, metric.WithAttributes(ifaceAttrs...))
+		}
+
+		// Counter metrics require delta calculations
+		// Skip if delta data is not available (first collection or delta mode disabled)
+		if iface.Delta == nil {
+			t.logger.V(2).Info("Network delta data not available, skipping counter metrics", "interface", iface.Interface)
+			continue
+		}
+
+		// Network I/O bytes (using deltas)
 		if counter, err := t.getOrCreateInt64Counter("system.network.io", "Network I/O bytes", "By"); err == nil {
 			rxAttrs := append(ifaceAttrs, attribute.String("direction", "receive"))
 			txAttrs := append(ifaceAttrs, attribute.String("direction", "transmit"))
-			counter.Add(ctx, int64(iface.RxBytes), metric.WithAttributes(rxAttrs...))
-			counter.Add(ctx, int64(iface.TxBytes), metric.WithAttributes(txAttrs...))
+			counter.Add(ctx, int64(iface.Delta.RxBytes), metric.WithAttributes(rxAttrs...))
+			counter.Add(ctx, int64(iface.Delta.TxBytes), metric.WithAttributes(txAttrs...))
 		}
 
-		// Network packets
+		// Network packets (using deltas)
 		if counter, err := t.getOrCreateInt64Counter("system.network.packets", "Network packets", "1"); err == nil {
 			rxAttrs := append(ifaceAttrs, attribute.String("direction", "receive"))
 			txAttrs := append(ifaceAttrs, attribute.String("direction", "transmit"))
-			counter.Add(ctx, int64(iface.RxPackets), metric.WithAttributes(rxAttrs...))
-			counter.Add(ctx, int64(iface.TxPackets), metric.WithAttributes(txAttrs...))
+			counter.Add(ctx, int64(iface.Delta.RxPackets), metric.WithAttributes(rxAttrs...))
+			counter.Add(ctx, int64(iface.Delta.TxPackets), metric.WithAttributes(txAttrs...))
 		}
 
-		// Network errors
-		if counter, err := t.getOrCreateInt64Counter("system.network.errors", "Network errors", "1"); err == nil {
+		// Network errors (using deltas)
+		if counter, err := t.getOrCreateInt64Counter("system.network.errors", "Network transmission errors", "1"); err == nil {
 			rxAttrs := append(ifaceAttrs, attribute.String("direction", "receive"))
 			txAttrs := append(ifaceAttrs, attribute.String("direction", "transmit"))
-			counter.Add(ctx, int64(iface.RxErrors), metric.WithAttributes(rxAttrs...))
-			counter.Add(ctx, int64(iface.TxErrors), metric.WithAttributes(txAttrs...))
+			counter.Add(ctx, int64(iface.Delta.RxErrors), metric.WithAttributes(rxAttrs...))
+			counter.Add(ctx, int64(iface.Delta.TxErrors), metric.WithAttributes(txAttrs...))
 		}
+
+		// Network dropped packets (using deltas)
+		if counter, err := t.getOrCreateInt64Counter("system.network.dropped", "Network packets dropped", "1"); err == nil {
+			rxAttrs := append(ifaceAttrs, attribute.String("direction", "receive"))
+			txAttrs := append(ifaceAttrs, attribute.String("direction", "transmit"))
+			counter.Add(ctx, int64(iface.Delta.RxDropped), metric.WithAttributes(rxAttrs...))
+			counter.Add(ctx, int64(iface.Delta.TxDropped), metric.WithAttributes(txAttrs...))
+		}
+
+		// Note: Additional error types (FIFO, Frame, Compressed, Multicast, Collisions, Carrier)
+		// are not yet exported because NetworkDeltaData doesn't include delta calculations for them.
+		// These should be added to NetworkDeltaData in pkg/performance/types.go first.
 	}
 
 	return nil
@@ -482,13 +665,99 @@ func (t *Transformer) transformTCPStats(ctx context.Context, data any, attrs []a
 		return fmt.Errorf("invalid TCP stats data type")
 	}
 
-	// TCP connection counts by state
+	// TCP connection counts by state (gauge - instantaneous values)
 	if gauge, err := t.getOrCreateInt64Gauge("system.network.connections", "Network connections by protocol and state", "1"); err == nil {
 		tcpAttrs := append(attrs, attribute.String("protocol", "tcp"))
 		for state, count := range stats.ConnectionsByState {
 			stateAttrs := append(tcpAttrs, attribute.String("state", state))
 			gauge.Record(ctx, int64(count), metric.WithAttributes(stateAttrs...))
 		}
+	}
+
+	// Current established connections (gauge - instantaneous value)
+	if gauge, err := t.getOrCreateInt64Gauge("system.network.tcp.connection.established", "Current established TCP connections", "1"); err == nil {
+		gauge.Record(ctx, int64(stats.CurrEstab), metric.WithAttributes(attrs...))
+	}
+
+	// Counter metrics require delta calculations
+	// Skip if delta data is not available (first collection or delta mode disabled)
+	if stats.Delta == nil {
+		t.logger.V(2).Info("TCP delta data not available, skipping counter metrics")
+		return nil
+	}
+
+	// TCP connection establishment metrics (using deltas)
+	if counter, err := t.getOrCreateInt64Counter("system.network.tcp.connection.opens", "TCP connection openings by type", "1"); err == nil {
+		activeAttrs := append(attrs, attribute.String("type", "active"))
+		passiveAttrs := append(attrs, attribute.String("type", "passive"))
+		counter.Add(ctx, int64(stats.Delta.ActiveOpens), metric.WithAttributes(activeAttrs...))
+		counter.Add(ctx, int64(stats.Delta.PassiveOpens), metric.WithAttributes(passiveAttrs...))
+	}
+
+	// TCP connection failures (using deltas)
+	if counter, err := t.getOrCreateInt64Counter("system.network.tcp.connection.attempt_fails", "Failed TCP connection attempts", "1"); err == nil {
+		counter.Add(ctx, int64(stats.Delta.AttemptFails), metric.WithAttributes(attrs...))
+	}
+
+	// TCP connection resets from established state (using deltas)
+	if counter, err := t.getOrCreateInt64Counter("system.network.tcp.connection.estab_resets", "TCP resets from established state", "1"); err == nil {
+		counter.Add(ctx, int64(stats.Delta.EstabResets), metric.WithAttributes(attrs...))
+	}
+
+	// TCP segments (using deltas)
+	if counter, err := t.getOrCreateInt64Counter("system.network.tcp.segments", "TCP segments by direction", "1"); err == nil {
+		inAttrs := append(attrs, attribute.String("direction", "in"))
+		outAttrs := append(attrs, attribute.String("direction", "out"))
+		counter.Add(ctx, int64(stats.Delta.InSegs), metric.WithAttributes(inAttrs...))
+		counter.Add(ctx, int64(stats.Delta.OutSegs), metric.WithAttributes(outAttrs...))
+	}
+
+	// TCP retransmissions (using deltas)
+	if counter, err := t.getOrCreateInt64Counter("system.network.tcp.retrans_segs", "TCP segments retransmitted", "1"); err == nil {
+		counter.Add(ctx, int64(stats.Delta.RetransSegs), metric.WithAttributes(attrs...))
+	}
+
+	// TCP errors (using deltas)
+	if counter, err := t.getOrCreateInt64Counter("system.network.tcp.errors", "TCP errors by type", "1"); err == nil {
+		inErrAttrs := append(attrs, attribute.String("type", "in_errors"))
+		outRstAttrs := append(attrs, attribute.String("type", "out_resets"))
+		csumAttrs := append(attrs, attribute.String("type", "checksum_errors"))
+		counter.Add(ctx, int64(stats.Delta.InErrs), metric.WithAttributes(inErrAttrs...))
+		counter.Add(ctx, int64(stats.Delta.OutRsts), metric.WithAttributes(outRstAttrs...))
+		counter.Add(ctx, int64(stats.Delta.InCsumErrors), metric.WithAttributes(csumAttrs...))
+	}
+
+	// SYN cookies (using deltas)
+	if counter, err := t.getOrCreateInt64Counter("system.network.tcp.syncookies", "SYN cookies by result", "1"); err == nil {
+		sentAttrs := append(attrs, attribute.String("result", "sent"))
+		recvAttrs := append(attrs, attribute.String("result", "received"))
+		failedAttrs := append(attrs, attribute.String("result", "failed"))
+		counter.Add(ctx, int64(stats.Delta.SyncookiesSent), metric.WithAttributes(sentAttrs...))
+		counter.Add(ctx, int64(stats.Delta.SyncookiesRecv), metric.WithAttributes(recvAttrs...))
+		counter.Add(ctx, int64(stats.Delta.SyncookiesFailed), metric.WithAttributes(failedAttrs...))
+	}
+
+	// Listen queue issues (using deltas)
+	if counter, err := t.getOrCreateInt64Counter("system.network.tcp.listen_issues", "TCP listen queue issues by type", "1"); err == nil {
+		overflowAttrs := append(attrs, attribute.String("type", "overflows"))
+		dropAttrs := append(attrs, attribute.String("type", "drops"))
+		counter.Add(ctx, int64(stats.Delta.ListenOverflows), metric.WithAttributes(overflowAttrs...))
+		counter.Add(ctx, int64(stats.Delta.ListenDrops), metric.WithAttributes(dropAttrs...))
+	}
+
+	// TCP retransmission details (using deltas)
+	if counter, err := t.getOrCreateInt64Counter("system.network.tcp.retrans_detail", "TCP retransmissions by type", "1"); err == nil {
+		lostAttrs := append(attrs, attribute.String("type", "lost"))
+		fastAttrs := append(attrs, attribute.String("type", "fast"))
+		slowStartAttrs := append(attrs, attribute.String("type", "slow_start"))
+		counter.Add(ctx, int64(stats.Delta.TCPLostRetransmit), metric.WithAttributes(lostAttrs...))
+		counter.Add(ctx, int64(stats.Delta.TCPFastRetrans), metric.WithAttributes(fastAttrs...))
+		counter.Add(ctx, int64(stats.Delta.TCPSlowStartRetrans), metric.WithAttributes(slowStartAttrs...))
+	}
+
+	// TCP timeouts (using deltas)
+	if counter, err := t.getOrCreateInt64Counter("system.network.tcp.timeouts", "TCP retransmission timeouts", "1"); err == nil {
+		counter.Add(ctx, int64(stats.Delta.TCPTimeouts), metric.WithAttributes(attrs...))
 	}
 
 	return nil
@@ -543,17 +812,55 @@ func (t *Transformer) transformNUMAStats(ctx context.Context, data any, attrs []
 		return fmt.Errorf("invalid NUMA stats data type")
 	}
 
+	// Skip if NUMA is not enabled on this system
 	if !stats.Enabled {
 		return nil
 	}
 
-	// NUMA node memory usage
-	if gauge, err := t.getOrCreateInt64Gauge("system.memory.usage", "NUMA memory usage", "By"); err == nil {
-		for _, node := range stats.Nodes {
-			nodeAttrs := append(attrs,
-				attribute.String("numa_node", strconv.Itoa(node.ID)),
-				attribute.String("state", "free"))
-			gauge.Record(ctx, int64(node.MemFree), metric.WithAttributes(nodeAttrs...))
+	for _, node := range stats.Nodes {
+		nodeAttrs := append(attrs, attribute.String("numa_node", strconv.Itoa(node.ID)))
+
+		// NUMA node memory usage by type (gauges - instantaneous values)
+		if gauge, err := t.getOrCreateInt64Gauge("system.memory.numa.usage", "NUMA node memory usage by type", "By"); err == nil {
+			freeAttrs := append(nodeAttrs, attribute.String("type", "free"))
+			usedAttrs := append(nodeAttrs, attribute.String("type", "used"))
+			gauge.Record(ctx, int64(node.MemFree), metric.WithAttributes(freeAttrs...))
+			gauge.Record(ctx, int64(node.MemUsed), metric.WithAttributes(usedAttrs...))
+		}
+
+		// NUMA node memory by page type (gauges - instantaneous values)
+		if gauge, err := t.getOrCreateInt64Gauge("system.memory.numa.pages", "NUMA node memory pages by type", "By"); err == nil {
+			fileAttrs := append(nodeAttrs, attribute.String("type", "file"))
+			anonAttrs := append(nodeAttrs, attribute.String("type", "anon"))
+			gauge.Record(ctx, int64(node.FilePages), metric.WithAttributes(fileAttrs...))
+			gauge.Record(ctx, int64(node.AnonPages), metric.WithAttributes(anonAttrs...))
+		}
+
+		// Counter metrics require delta calculations
+		// Skip if delta data is not available (first collection or delta mode disabled)
+		if node.Delta == nil {
+			t.logger.V(2).Info("NUMA delta data not available, skipping counter metrics", "node", node.ID)
+			continue
+		}
+
+		// NUMA allocation events by type (using deltas - page counts)
+		if counter, err := t.getOrCreateInt64Counter("system.memory.numa.events", "NUMA memory allocation events by type", "1"); err == nil {
+			hitAttrs := append(nodeAttrs, attribute.String("type", "hit"))
+			missAttrs := append(nodeAttrs, attribute.String("type", "miss"))
+			foreignAttrs := append(nodeAttrs, attribute.String("type", "foreign"))
+			interleaveAttrs := append(nodeAttrs, attribute.String("type", "interleave_hit"))
+			counter.Add(ctx, int64(node.Delta.NumaHit), metric.WithAttributes(hitAttrs...))
+			counter.Add(ctx, int64(node.Delta.NumaMiss), metric.WithAttributes(missAttrs...))
+			counter.Add(ctx, int64(node.Delta.NumaForeign), metric.WithAttributes(foreignAttrs...))
+			counter.Add(ctx, int64(node.Delta.InterleaveHit), metric.WithAttributes(interleaveAttrs...))
+		}
+
+		// NUMA memory locality (using deltas - page counts)
+		if counter, err := t.getOrCreateInt64Counter("system.memory.numa.locality", "NUMA memory allocation locality by type", "1"); err == nil {
+			localAttrs := append(nodeAttrs, attribute.String("type", "local_node"))
+			otherAttrs := append(nodeAttrs, attribute.String("type", "other_node"))
+			counter.Add(ctx, int64(node.Delta.LocalNode), metric.WithAttributes(localAttrs...))
+			counter.Add(ctx, int64(node.Delta.OtherNode), metric.WithAttributes(otherAttrs...))
 		}
 	}
 

@@ -10,51 +10,27 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"path"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	hardwarev1 "github.com/antimetal/agent/pkg/api/antimetal/hardware/v1"
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
+	"github.com/antimetal/agent/pkg/config/environment"
+	"github.com/antimetal/agent/pkg/host"
 	"github.com/antimetal/agent/pkg/kernel"
 	"github.com/antimetal/agent/pkg/performance"
 	"github.com/antimetal/agent/pkg/proc"
 )
 
 var (
-	kindResource = string((&resourcev1.Resource{}).ProtoReflect().Descriptor().FullName())
-
-	sysDir     string
-	etcDir     string
-	varDir     string
-	machineID  string
-	systemUUID string
+	kindResource = string(proto.MessageName(&resourcev1.Resource{}))
 )
-
-func init() {
-	sysDir = os.Getenv("HOST_SYS")
-	if sysDir == "" {
-		sysDir = "/sys"
-	}
-
-	etcDir = os.Getenv("HOST_ETC")
-	if etcDir == "" {
-		etcDir = "/etc"
-	}
-
-	varDir = os.Getenv("HOST_VAR")
-	if varDir == "" {
-		varDir = "/var"
-	}
-
-	// assume these are static and set at boot time
-	machineID = getMachineID()
-	systemUUID = getSystemUUID()
-}
 
 // getSystemInfo gathers system information using existing utilities
 func (b *Builder) getSystemInfo() (arch hardwarev1.Architecture, bootTime time.Time, kernelVersion string, osInfo string) {
@@ -93,13 +69,12 @@ func (b *Builder) getSystemInfo() (arch hardwarev1.Architecture, bootTime time.T
 
 // getOSInfo reads OS information from os-release files according to freedesktop.org standard
 func getOSInfo() string {
-	// Try /etc/os-release first (primary location per freedesktop.org spec)
-	file, err := os.Open(path.Join(etcDir, "os-release"))
+	hostPaths := environment.GetHostPaths()
+	file, err := os.Open(filepath.Join(hostPaths.Etc, "os-release"))
 	if err != nil {
-		// Fall back to /usr/lib/os-release (secondary location)
 		file, err = os.Open("/usr/lib/os-release")
 		if err != nil {
-			return "Linux" // Final fallback
+			return "Linux"
 		}
 	}
 	defer file.Close()
@@ -120,17 +95,19 @@ func getOSInfo() string {
 
 // createSystemNode creates the root system node representing the machine
 func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.ResourceRef, error) {
-	// Get system information
+	canonicalName, err := host.CanonicalName()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get canonical name for system node: %w", err)
+	}
+
 	arch, bootTime, kernelVersion, osInfo := b.getSystemInfo()
 
-	// Get hostname (network identifier)
-	hostname, err := os.Hostname()
+	hostname, err := host.Hostname()
 	if err != nil {
 		b.logger.Error(err, "Failed to get hostname, using 'unknown'")
 		hostname = "unknown"
 	}
 
-	// Create system node spec
 	systemSpec := &hardwarev1.SystemNode{
 		Hostname:      hostname,
 		Architecture:  arch,
@@ -139,28 +116,25 @@ func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.Resource
 		OsInfo:        osInfo,
 	}
 
-	// Marshal the spec
 	specAny, err := anypb.New(systemSpec)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to marshal system spec: %w", err)
 	}
 
-	// Build tags list
-	tags := []*resourcev1.Tag{
-		{Key: "machine-id", Value: machineID},
+	tags := []*resourcev1.Tag{}
+
+	if machineID, err := host.MachineID(); err == nil && machineID != "" {
+		tags = append(tags, &resourcev1.Tag{Key: "machine-id", Value: machineID})
 	}
 
-	// Add system UUID tag if available
-	if systemUUID != "" {
+	if systemUUID, err := host.SystemUUID(); err == nil && systemUUID != "" {
 		tags = append(tags, &resourcev1.Tag{Key: "system-uuid", Value: systemUUID})
 	}
 
-	name := machineID
-	if name == "" {
-		name = systemUUID
+	if fqdn, err := host.FQDN(); err == nil && fqdn != "" {
+		tags = append(tags, &resourcev1.Tag{Key: "fqdn", Value: fqdn})
 	}
 
-	// Create resource with machine ID as the name (globally unique)
 	resource := &resourcev1.Resource{
 		Type: &resourcev1.TypeDescriptor{
 			Kind: kindResource,
@@ -168,17 +142,16 @@ func (b *Builder) createSystemNode() (*resourcev1.Resource, *resourcev1.Resource
 		},
 		Metadata: &resourcev1.ResourceMeta{
 			Provider:   resourcev1.Provider_PROVIDER_ANTIMETAL,
-			ProviderId: name,
-			Name:       name,
+			ProviderId: canonicalName,
+			Name:       canonicalName,
 			Tags:       tags,
 		},
 		Spec: specAny,
 	}
 
-	// Create reference
 	ref := &resourcev1.ResourceRef{
 		TypeUrl: string(systemSpec.ProtoReflect().Descriptor().FullName()),
-		Name:    name,
+		Name:    canonicalName,
 	}
 
 	return resource, ref, nil

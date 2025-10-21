@@ -40,13 +40,20 @@ func NewLogTransformer(provider log.LoggerProvider, logger logr.Logger, serviceV
 	}
 }
 
-// TransformAndEmit converts kernel messages to OpenTelemetry log records and emits them
+// TransformAndEmit converts kernel messages and process snapshots to OpenTelemetry log records and emits them
 func (t *LogTransformer) TransformAndEmit(ctx context.Context, event metrics.MetricEvent) error {
-	// Only handle kernel messages
-	if event.MetricType != metrics.MetricTypeKernel {
+	switch event.MetricType {
+	case metrics.MetricTypeKernel:
+		return t.handleKernelMessages(ctx, event)
+	case metrics.MetricTypeProcess:
+		return t.handleProcessSnapshot(ctx, event)
+	default:
 		return nil
 	}
+}
 
+// handleKernelMessages handles kernel message log events
+func (t *LogTransformer) handleKernelMessages(ctx context.Context, event metrics.MetricEvent) error {
 	switch data := event.Data.(type) {
 	case []*performance.KernelMessage:
 		// Handle array of messages (from point collection)
@@ -66,6 +73,17 @@ func (t *LogTransformer) TransformAndEmit(ctx context.Context, event metrics.Met
 	}
 
 	return nil
+}
+
+// handleProcessSnapshot handles process snapshot log events
+func (t *LogTransformer) handleProcessSnapshot(ctx context.Context, event metrics.MetricEvent) error {
+	processes, ok := event.Data.([]*performance.ProcessStats)
+	if !ok {
+		return fmt.Errorf("unexpected process data type: %T, expected []*performance.ProcessStats", event.Data)
+	}
+
+	// Emit top-N process snapshots as structured logs
+	return t.emitProcessSnapshots(ctx, processes, event)
 }
 
 // emitKernelMessage emits a single kernel message as an OpenTelemetry log record
@@ -175,4 +193,129 @@ func getKernelSeverityText(severity uint8) string {
 	default:
 		return fmt.Sprintf("UNKNOWN(%d)", severity)
 	}
+}
+
+// emitProcessSnapshots emits process snapshots as structured OTEL logs
+func (t *LogTransformer) emitProcessSnapshots(ctx context.Context, processes []*performance.ProcessStats, event metrics.MetricEvent) error {
+	if len(processes) == 0 {
+		return nil
+	}
+
+	// Processes are already sorted by CPU% and limited by the collector's TopProcesses configuration
+	// Just emit each process as a structured log entry
+	for rank, proc := range processes {
+		if err := t.emitProcessLog(ctx, proc, rank+1, len(processes), event); err != nil {
+			t.logger.V(2).Info("Failed to emit process log", "error", err, "pid", proc.PID)
+			// Continue processing other processes even if one fails
+		}
+	}
+
+	return nil
+}
+
+// emitProcessLog emits a single process as an OpenTelemetry log record
+func (t *LogTransformer) emitProcessLog(ctx context.Context, proc *performance.ProcessStats, rank int, totalProcesses int, event metrics.MetricEvent) error {
+	// Create log record
+	record := log.Record{}
+	record.SetTimestamp(event.Timestamp)
+	record.SetSeverity(log.SeverityInfo)
+	record.SetBody(log.StringValue(fmt.Sprintf("Process snapshot: rank %d by CPU", rank)))
+
+	// Build attributes following OTEL semantic conventions
+	var attrs []log.KeyValue
+
+	// Standard resource attributes
+	if event.NodeName != "" {
+		attrs = append(attrs, log.String("host.name", event.NodeName))
+	}
+	if event.ClusterName != "" {
+		attrs = append(attrs, log.String("k8s.cluster.name", event.ClusterName))
+	}
+	if event.Source != "" {
+		attrs = append(attrs, log.String("service.instance.id", event.Source))
+	}
+	if t.serviceVersion != "" {
+		attrs = append(attrs, log.String("service.version", t.serviceVersion))
+	}
+
+	// Snapshot metadata
+	attrs = append(attrs,
+		log.String("log.type", "process.snapshot"),
+		log.Int("snapshot.rank", rank),
+		log.String("snapshot.sort_by", "cpu_percent"),
+		log.Int("snapshot.total_processes", totalProcesses),
+	)
+
+	// Process identification (OTEL semantic conventions)
+	attrs = append(attrs,
+		log.Int64("process.pid", int64(proc.PID)),
+		log.String("process.executable.name", proc.Command),
+	)
+
+	if proc.PPID > 0 {
+		attrs = append(attrs, log.Int64("process.parent_pid", int64(proc.PPID)))
+	}
+
+	if proc.Cmdline != "" {
+		attrs = append(attrs, log.String("process.command_line", proc.Cmdline))
+	}
+
+	if proc.State != "" {
+		attrs = append(attrs, log.String("process.runtime.state", proc.State))
+	}
+
+	// CPU metrics
+	attrs = append(attrs,
+		log.Float64("process.cpu.utilization", proc.CPUPercent/100.0), // Convert to ratio (0-1)
+		log.Int64("process.cpu.time", int64(proc.CPUTime)),            // Total CPU time in ticks
+	)
+
+	// Memory metrics (all in bytes)
+	attrs = append(attrs,
+		log.Int64("process.memory.virtual", int64(proc.MemoryVSZ)),
+		log.Int64("process.memory.rss", int64(proc.MemoryRSS)),
+	)
+
+	if proc.MemoryPSS > 0 {
+		attrs = append(attrs, log.Int64("process.memory.pss", int64(proc.MemoryPSS)))
+	}
+	if proc.MemoryUSS > 0 {
+		attrs = append(attrs, log.Int64("process.memory.uss", int64(proc.MemoryUSS)))
+	}
+
+	// Thread and file descriptor counts
+	if proc.Threads > 0 {
+		attrs = append(attrs, log.Int64("process.thread.count", int64(proc.Threads)))
+	}
+	if proc.NumFds > 0 {
+		attrs = append(attrs, log.Int64("process.open_file_descriptors", int64(proc.NumFds)))
+	}
+
+	// Context switches
+	if proc.VoluntaryCtxt > 0 {
+		attrs = append(attrs, log.Int64("process.context_switches.voluntary", int64(proc.VoluntaryCtxt)))
+	}
+	if proc.InvoluntaryCtxt > 0 {
+		attrs = append(attrs, log.Int64("process.context_switches.involuntary", int64(proc.InvoluntaryCtxt)))
+	}
+
+	// Scheduling info
+	if proc.Nice != 0 {
+		attrs = append(attrs, log.Int64("process.nice", int64(proc.Nice)))
+	}
+	if proc.Priority != 0 {
+		attrs = append(attrs, log.Int64("process.priority", int64(proc.Priority)))
+	}
+
+	// Add start time if available
+	if !proc.StartTime.IsZero() {
+		attrs = append(attrs, log.Int64("process.start_time", proc.StartTime.Unix()))
+	}
+
+	record.AddAttributes(attrs...)
+
+	// Emit the log record
+	t.otelLogger.Emit(ctx, record)
+
+	return nil
 }

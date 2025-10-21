@@ -69,7 +69,7 @@ type DeltaConfig struct {
 // DefaultDeltaConfig returns a sensible default delta configuration
 func DefaultDeltaConfig() DeltaConfig {
 	return DeltaConfig{
-		Mode:        DeltaModeDisabled,      // Backward compatible default
+		Mode:        DeltaModeEnabled,       // Enable delta calculations by default for proper OTEL counter semantics
 		MinInterval: 100 * time.Millisecond, // Avoid division by very small intervals
 		MaxInterval: 5 * time.Minute,        // Reset state if gap is too large
 	}
