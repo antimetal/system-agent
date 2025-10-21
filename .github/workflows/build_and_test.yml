@@ -259,6 +259,11 @@ jobs:
         cache: true
         cache-dependency-path: go.sum
 
+    - name: Update system packages
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get upgrade -y -qq libsystemd-shared systemd
+
     - name: Run tests in VM using LVH Action
       uses: cilium/little-vm-helper@main
       with:
