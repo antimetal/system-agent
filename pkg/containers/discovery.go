@@ -39,18 +39,35 @@ func ParseContainerRuntime(runtime string) runtimev1.ContainerRuntime {
 	}
 }
 
-// Container represents a discovered container with its cgroup location and runtime information.
-// This structure provides the necessary information to collect resource metrics for a container.
+// Container represents a discovered container with its cgroup location, runtime information,
+// and extracted metadata. This structure provides all necessary information for container
+// resource metrics collection and graph building.
 type Container struct {
-	// ID is the container identifier (may be truncated for some runtimes)
-	ID string
-	// Runtime is the detected container runtime (docker, containerd, crio, etc.)
-	Runtime runtimev1.ContainerRuntime
-	// CgroupPath is the full path to the container's cgroup directory
-	CgroupPath string
-	// CgroupVersion indicates whether this container uses cgroup v1 or v2
-	// Note: Different runtimes on the same host may use different cgroup versions
-	CgroupVersion int
+	// Discovery fields - populated during cgroup scanning
+	ID            string                     // Container identifier (may be truncated for some runtimes)
+	Runtime       runtimev1.ContainerRuntime // Detected container runtime
+	CgroupPath    string                     // Full path to the container's cgroup directory
+	CgroupVersion int                        // Cgroup version (1 or 2)
+
+	// Image information - extracted from runtime metadata files
+	ImageName string
+	ImageTag  string
+
+	// Human-readable identifiers (container-specific only)
+	// Note: Pod-level fields (pod name, namespace, app) are available in K8s Pod resources
+	ContainerName string // "nginx", "web", "sidecar"
+	WorkloadName  string // "web-server" (deployment name, hash stripped)
+
+	// Labels - full map containing all K8s/Docker metadata
+	Labels map[string]string
+
+	// Resource limits - extracted from cgroup files
+	CPUShares        *int32
+	CPUQuotaUs       *int32
+	CPUPeriodUs      *int32
+	MemoryLimitBytes *uint64
+	CpusetCpus       string
+	CpusetMems       string
 }
 
 // Discovery provides methods to discover containers in cgroup hierarchies.

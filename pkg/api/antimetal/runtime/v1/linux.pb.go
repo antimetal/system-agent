@@ -479,7 +479,15 @@ type ContainerNode struct {
 	// cpuset_cpus contains the CPU cores this container is allowed to use.
 	CpusetCpus string `protobuf:"bytes,14,opt,name=cpuset_cpus,json=cpusetCpus,proto3" json:"cpuset_cpus,omitempty"`
 	// cpuset_mems contains the NUMA memory nodes this container is allowed to use.
-	CpusetMems    string `protobuf:"bytes,15,opt,name=cpuset_mems,json=cpusetMems,proto3" json:"cpuset_mems,omitempty"`
+	CpusetMems string `protobuf:"bytes,15,opt,name=cpuset_mems,json=cpusetMems,proto3" json:"cpuset_mems,omitempty"`
+	// container_name is the human-readable container name (e.g., "nginx", "web", "sidecar").
+	// Extracted from io.kubernetes.container.name (K8s) or com.docker.compose.service (Docker).
+	// Falls back to image_name if no explicit container name is available.
+	ContainerName string `protobuf:"bytes,16,opt,name=container_name,json=containerName,proto3" json:"container_name,omitempty"`
+	// workload_name is the Kubernetes workload name with ReplicaSet hash stripped.
+	// Examples: "web-server-7d4f8-abc" → "web-server", "nginx-deployment-xyz" → "nginx-deployment"
+	// Only populated for Kubernetes containers. For pod name/namespace/app, use Pod resource relationships.
+	WorkloadName  string `protobuf:"bytes,17,opt,name=workload_name,json=workloadName,proto3" json:"workload_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -615,6 +623,20 @@ func (x *ContainerNode) GetCpusetCpus() string {
 func (x *ContainerNode) GetCpusetMems() string {
 	if x != nil {
 		return x.CpusetMems
+	}
+	return ""
+}
+
+func (x *ContainerNode) GetContainerName() string {
+	if x != nil {
+		return x.ContainerName
+	}
+	return ""
+}
+
+func (x *ContainerNode) GetWorkloadName() string {
+	if x != nil {
+		return x.WorkloadName
 	}
 	return ""
 }
@@ -835,7 +857,7 @@ const file_antimetal_runtime_v1_linux_proto_rawDesc = "" +
 	"\n" +
 	"CgroupInfo\x12=\n" +
 	"\aversion\x18\x01 \x01(\x0e2#.antimetal.runtime.v1.CgroupVersionR\aversion\x12:\n" +
-	"\x06driver\x18\x02 \x01(\x0e2\".antimetal.runtime.v1.CgroupDriverR\x06driver\"\xc9\x06\n" +
+	"\x06driver\x18\x02 \x01(\x0e2\".antimetal.runtime.v1.CgroupDriverR\x06driver\"\x95\a\n" +
 	"\rContainerNode\x12!\n" +
 	"\fcontainer_id\x18\x01 \x01(\tR\vcontainerId\x12@\n" +
 	"\aruntime\x18\x02 \x01(\x0e2&.antimetal.runtime.v1.ContainerRuntimeR\aruntime\x12J\n" +
@@ -860,7 +882,9 @@ const file_antimetal_runtime_v1_linux_proto_rawDesc = "" +
 	"\vcpuset_cpus\x18\x0e \x01(\tR\n" +
 	"cpusetCpus\x12\x1f\n" +
 	"\vcpuset_mems\x18\x0f \x01(\tR\n" +
-	"cpusetMems\x1a9\n" +
+	"cpusetMems\x12%\n" +
+	"\x0econtainer_name\x18\x10 \x01(\tR\rcontainerName\x12#\n" +
+	"\rworkload_name\x18\x11 \x01(\tR\fworkloadName\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\r\n" +
