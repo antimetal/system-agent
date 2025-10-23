@@ -172,7 +172,10 @@ func (m *manager) collectorManager(ctx context.Context) {
 
 	configs := m.configLoader.Watch(config.Options{
 		Filters: config.Filters{
-			Types: []string{string(proto.MessageName(&agentv1.HostStatsCollectionConfig{}))},
+			Types: []string{
+				string(proto.MessageName(&agentv1.HostStatsCollectionConfig{})),
+				string(proto.MessageName(&agentv1.ProfileCollectionConfig{})),
+			},
 		},
 	})
 
@@ -259,12 +262,19 @@ func (m *manager) handleActiveConfig(ctx context.Context, config config.Instance
 	}
 }
 
-func (m *manager) startCollector(ctx context.Context, config config.Instance) (context.CancelFunc, error) {
-	configObj, ok := config.Object.(*agentv1.HostStatsCollectionConfig)
-	if !ok {
-		return nil, fmt.Errorf("invalid config type: expected HostStatsCollectionConfig, got %T", config.Object)
+func (m *manager) startCollector(ctx context.Context, cfg config.Instance) (context.CancelFunc, error) {
+	// Type switch to handle different config types
+	switch configObj := cfg.Object.(type) {
+	case *agentv1.HostStatsCollectionConfig:
+		return m.startHostStatsCollector(ctx, configObj, cfg.Name)
+	case *agentv1.ProfileCollectionConfig:
+		return m.startProfileCollector(ctx, configObj, cfg.Name)
+	default:
+		return nil, fmt.Errorf("unsupported config type: %T", cfg.Object)
 	}
+}
 
+func (m *manager) startHostStatsCollector(ctx context.Context, configObj *agentv1.HostStatsCollectionConfig, name string) (context.CancelFunc, error) {
 	collectorName := configObj.GetCollector()
 	if collectorName == "" {
 		return nil, fmt.Errorf("collector field is empty in config")
@@ -284,7 +294,7 @@ func (m *manager) startCollector(ctx context.Context, config config.Instance) (c
 		return nil, fmt.Errorf("failed to get %s collector: %w", metricType, err)
 	}
 
-	collectorLogger := m.logger.WithName(config.Name)
+	collectorLogger := m.logger.WithName(name)
 	c, err := collector(collectorLogger, collectionConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create %s collector instance: %w", metricType, err)
