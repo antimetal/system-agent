@@ -82,7 +82,7 @@ generate-ebpf-types: ebpf-typegen ## Generate Go types from eBPF header files
 .PHONY: generate-ebpf-bindings
 generate-ebpf-bindings: ## Generate Go bindings from eBPF C code
 	@echo "Generating Go bindings from eBPF C code..."
-	go generate $(ROOT)/pkg/ebpf/...
+	cd $(ROOT) && go generate ./pkg/ebpf/...
 
 .PHONY: gen-check
 gen-check: generate ## Check if generated files are up to date.
@@ -246,6 +246,9 @@ docker.builder:
 
 .PHONY: docker-build
 docker-build: docker.builder build ## Build docker image for current GOOS and GOARCH.
+	@# Copy eBPF object files to dist directory for Docker build
+	@mkdir -p $(DIST)/ebpf/build
+	@cp -v $(ROOT)/ebpf/build/*.bpf.o $(DIST)/ebpf/build/ 2>/dev/null || true
 	DOCKER_BUILDKIT=1 docker buildx build \
 		--platform ${GO_OS}/${GOARCH} \
 		-t ${IMG} \
@@ -255,6 +258,9 @@ docker-build: docker.builder build ## Build docker image for current GOOS and GO
 
 .PHONY: docker-build-all
 docker-build-all: docker.builder build-all ## Build docker image for all platforms.
+	@# Copy eBPF object files to dist directory for Docker build
+	@mkdir -p $(DIST)/ebpf/build
+	@cp -v $(ROOT)/ebpf/build/*.bpf.o $(DIST)/ebpf/build/ 2>/dev/null || true
 	DOCKER_BUILDKIT=1 docker buildx build \
 	--platform linux/amd64,linux/arm64 \
 	-t ${IMG} \
