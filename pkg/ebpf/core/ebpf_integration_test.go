@@ -195,8 +195,13 @@ func TestEBPFCollectorPrograms(t *testing.T) {
 			switch progName {
 			case "execsnoop.bpf.o":
 				if !currentKernel.IsAtLeast(5, 8) {
-					t.Skipf("execsnoop requires kernel 5.8+ for ring buffer, current is %d.%d.%d",
-						currentKernel.Major, currentKernel.Minor, currentKernel.Patch)
+					t.Skipf("%s requires kernel 5.8+ for ring buffer, current is %d.%d.%d",
+						progName, currentKernel.Major, currentKernel.Minor, currentKernel.Patch)
+				}
+			case "profiler.bpf.o":
+				if !currentKernel.IsAtLeast(5, 15) {
+					t.Skipf("%s requires kernel 5.15+ for stable BPF perf event links, current is %d.%d.%d",
+						progName, currentKernel.Major, currentKernel.Minor, currentKernel.Patch)
 				}
 			}
 
