@@ -143,6 +143,127 @@ func (x *HostStatsCollectionConfig) GetIntervalSeconds() uint32 {
 	return 0
 }
 
+// ProfileCollectionConfig configures eBPF-based CPU profiling.
+// This enables continuous collection of stack traces from running processes
+// using Linux perf events to analyze CPU performance and identify hotspots.
+//
+// Design: Single event per profiler instance for simplicity and clarity.
+// To profile multiple events (e.g., cpu-cycles + cache-misses), create
+// separate ProfileCollectionConfig instances with different names.
+type ProfileCollectionConfig struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// event_name specifies which perf event to sample (required).
+	// Only one event per profiler instance - use multiple configs for multiple events.
+	//
+	// Hardware events (require PMU access, bare metal only):
+	//   - "cpu-cycles": Hardware CPU cycles (recommended for bare metal)
+	//   - "instructions": Instructions retired
+	//   - "cache-misses": Last-level cache misses
+	//   - "branch-misses": Branch mispredictions
+	//
+	// Software events (work in VMs and containers):
+	//   - "cpu-clock": Virtual CPU time (recommended for VMs)
+	//   - "task-clock": Task clock time
+	//   - "page-faults": Page fault events
+	//
+	// Event must be available on target system. Hardware events require bare metal
+	// with PMU access; VMs should use software events.
+	EventName string `protobuf:"bytes,1,opt,name=event_name,json=eventName,proto3" json:"event_name,omitempty"`
+	// sample_period specifies how often to capture stack traces.
+	// For hardware events: sample every N cycles (e.g., 1000000 = every 1M cycles)
+	// For software events: sample every N nanoseconds (e.g., 10000000 = every 10ms)
+	//
+	// Default if unset: 1000000 for hardware events, 10000000 for software events
+	SamplePeriod uint64 `protobuf:"varint,2,opt,name=sample_period,json=samplePeriod,proto3" json:"sample_period,omitempty"`
+	// interval_seconds specifies how often to aggregate and emit profile data.
+	// Profiles are collected continuously and aggregated over this interval
+	// before being emitted as ProfileStats events.
+	//
+	// Default: 60 seconds
+	IntervalSeconds uint32 `protobuf:"varint,3,opt,name=interval_seconds,json=intervalSeconds,proto3" json:"interval_seconds,omitempty"`
+	// max_stack_depth limits the depth of captured stack traces.
+	// Range: 1-64, Default: 64
+	//
+	// Lower values reduce memory/CPU overhead but may miss deep call chains.
+	// Most application stacks are < 30 frames deep.
+	// Note: Currently not implemented - reserved for future use.
+	MaxStackDepth uint32 `protobuf:"varint,4,opt,name=max_stack_depth,json=maxStackDepth,proto3" json:"max_stack_depth,omitempty"`
+	// process_filters limits profiling to specific processes (optional).
+	// If empty, profiles all processes system-wide.
+	// Filter matches against process command name from /proc/[pid]/comm.
+	//
+	// Example: ["nginx", "postgres", "java"]
+	// Note: Currently not implemented - reserved for future use.
+	ProcessFilters []string `protobuf:"bytes,5,rep,name=process_filters,json=processFilters,proto3" json:"process_filters,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ProfileCollectionConfig) Reset() {
+	*x = ProfileCollectionConfig{}
+	mi := &file_antimetal_agent_v1_config_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProfileCollectionConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProfileCollectionConfig) ProtoMessage() {}
+
+func (x *ProfileCollectionConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_antimetal_agent_v1_config_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProfileCollectionConfig.ProtoReflect.Descriptor instead.
+func (*ProfileCollectionConfig) Descriptor() ([]byte, []int) {
+	return file_antimetal_agent_v1_config_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ProfileCollectionConfig) GetEventName() string {
+	if x != nil {
+		return x.EventName
+	}
+	return ""
+}
+
+func (x *ProfileCollectionConfig) GetSamplePeriod() uint64 {
+	if x != nil {
+		return x.SamplePeriod
+	}
+	return 0
+}
+
+func (x *ProfileCollectionConfig) GetIntervalSeconds() uint32 {
+	if x != nil {
+		return x.IntervalSeconds
+	}
+	return 0
+}
+
+func (x *ProfileCollectionConfig) GetMaxStackDepth() uint32 {
+	if x != nil {
+		return x.MaxStackDepth
+	}
+	return 0
+}
+
+func (x *ProfileCollectionConfig) GetProcessFilters() []string {
+	if x != nil {
+		return x.ProcessFilters
+	}
+	return nil
+}
+
 var File_antimetal_agent_v1_config_proto protoreflect.FileDescriptor
 
 const file_antimetal_agent_v1_config_proto_rawDesc = "" +
@@ -154,7 +275,14 @@ const file_antimetal_agent_v1_config_proto_rawDesc = "" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\"d\n" +
 	"\x19HostStatsCollectionConfig\x12\x1c\n" +
 	"\tcollector\x18\x01 \x01(\tR\tcollector\x12)\n" +
-	"\x10interval_seconds\x18\x02 \x01(\rR\x0fintervalSecondsB\xce\x01\n" +
+	"\x10interval_seconds\x18\x02 \x01(\rR\x0fintervalSeconds\"\xd9\x01\n" +
+	"\x17ProfileCollectionConfig\x12\x1d\n" +
+	"\n" +
+	"event_name\x18\x01 \x01(\tR\teventName\x12#\n" +
+	"\rsample_period\x18\x02 \x01(\x04R\fsamplePeriod\x12)\n" +
+	"\x10interval_seconds\x18\x03 \x01(\rR\x0fintervalSeconds\x12&\n" +
+	"\x0fmax_stack_depth\x18\x04 \x01(\rR\rmaxStackDepth\x12'\n" +
+	"\x0fprocess_filters\x18\x05 \x03(\tR\x0eprocessFiltersB\xce\x01\n" +
 	"\x16com.antimetal.agent.v1B\vConfigProtoP\x01Z=github.com/antimetal/agent/pkg/api/antimetal/agent/v1;agentv1\xa2\x02\x03AAX\xaa\x02\x12Antimetal.Agent.V1\xca\x02\x12Antimetal\\Agent\\V1\xe2\x02\x1eAntimetal\\Agent\\V1\\GPBMetadata\xea\x02\x14Antimetal::Agent::V1b\x06proto3"
 
 var (
@@ -169,14 +297,15 @@ func file_antimetal_agent_v1_config_proto_rawDescGZIP() []byte {
 	return file_antimetal_agent_v1_config_proto_rawDescData
 }
 
-var file_antimetal_agent_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_antimetal_agent_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_antimetal_agent_v1_config_proto_goTypes = []any{
 	(*ConfigError)(nil),               // 0: antimetal.agent.v1.ConfigError
 	(*HostStatsCollectionConfig)(nil), // 1: antimetal.agent.v1.HostStatsCollectionConfig
-	(*v1.ObjectRef)(nil),              // 2: antimetal.types.v1.ObjectRef
+	(*ProfileCollectionConfig)(nil),   // 2: antimetal.agent.v1.ProfileCollectionConfig
+	(*v1.ObjectRef)(nil),              // 3: antimetal.types.v1.ObjectRef
 }
 var file_antimetal_agent_v1_config_proto_depIdxs = []int32{
-	2, // 0: antimetal.agent.v1.ConfigError.config_ref:type_name -> antimetal.types.v1.ObjectRef
+	3, // 0: antimetal.agent.v1.ConfigError.config_ref:type_name -> antimetal.types.v1.ObjectRef
 	1, // [1:1] is the sub-list for method output_type
 	1, // [1:1] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
@@ -195,7 +324,7 @@ func file_antimetal_agent_v1_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_antimetal_agent_v1_config_proto_rawDesc), len(file_antimetal_agent_v1_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -23,10 +23,12 @@ var (
 	configParsers = map[string]configParser{}
 
 	hostStatsCollectionConfigName = string((&agentv1.HostStatsCollectionConfig{}).ProtoReflect().Descriptor().FullName())
+	profileCollectionConfigName   = string((&agentv1.ProfileCollectionConfig{}).ProtoReflect().Descriptor().FullName())
 )
 
 func init() {
 	configParsers[hostStatsCollectionConfigName] = parseHostStatsCollectionConfig
+	configParsers[profileCollectionConfigName] = parseProfileCollectionConfig
 }
 
 // Parse a config object into an Instance.
@@ -136,6 +138,24 @@ func parseHostStatsCollectionConfig(obj *typesv1.Object) (proto.Message, error) 
 	if !available {
 		return config, fmt.Errorf("collector %s is not available: %s", collectorName, reason)
 	}
+
+	return config, nil
+}
+
+func parseProfileCollectionConfig(obj *typesv1.Object) (proto.Message, error) {
+	config := &agentv1.ProfileCollectionConfig{}
+	if err := proto.Unmarshal(obj.GetData(), config); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal: %w", err)
+	}
+
+	// Validate required field
+	if config.GetEventName() == "" {
+		return config, fmt.Errorf("event_name is required")
+	}
+
+	// Note: We don't check GetCollectorStatus here because capability checks
+	// are runtime-dependent (pod security context). The profiler will fail
+	// gracefully at startup if capabilities are missing.
 
 	return config, nil
 }

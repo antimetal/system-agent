@@ -9,6 +9,10 @@ ARG TARGETARCH
 
 COPY ${TARGETOS}/${TARGETARCH}/agent /agent
 
+# Copy eBPF objects files
+# These are expected at /usr/local/lib/antimetal/ebpf/ in the container
+COPY --chown=65532:65532 ebpf/build/*.bpf.o /usr/local/lib/antimetal/ebpf/
+
 USER 65532:65532
 
 ENTRYPOINT ["/agent"]

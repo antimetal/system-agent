@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/antimetal/agent/pkg/performance"
+	"github.com/antimetal/agent/pkg/performance/cpuutil"
 	"github.com/go-logr/logr"
 )
 
@@ -431,35 +432,15 @@ func (c *MemoryInfoCollector) parseNodeCPUs(node *performance.NUMANode, nodePath
 		return // Gracefully handle missing or inaccessible cpulist file
 	}
 
-	// Parse CPU ranges from kernel-standardized format
+	// Parse CPU ranges using shared utility
 	// Examples: "0-3,8-11", "0,1,2,3", "0-3", "5"
-	cpuList := strings.TrimSpace(string(data))
-	if cpuList == "" {
+	cpus, err := cpuutil.ParseCPUList(string(data))
+	if err != nil {
+		c.Logger().V(1).Info("Failed to parse NUMA node CPU list",
+			"node_path", nodePath, "cpu_list", strings.TrimSpace(string(data)), "error", err)
 		return
 	}
-
-	ranges := strings.Split(cpuList, ",")
-	for _, r := range ranges {
-		r = strings.TrimSpace(r)
-		if strings.Contains(r, "-") {
-			// Range format: "0-3" means CPUs 0, 1, 2, 3
-			parts := strings.Split(r, "-")
-			if len(parts) == 2 {
-				start, err1 := strconv.ParseInt(parts[0], 10, 32)
-				end, err2 := strconv.ParseInt(parts[1], 10, 32)
-				if err1 == nil && err2 == nil {
-					for cpu := start; cpu <= end; cpu++ {
-						node.CPUs = append(node.CPUs, int32(cpu))
-					}
-				}
-			}
-		} else {
-			// Single CPU format: "5" means CPU 5
-			if cpu, err := strconv.ParseInt(r, 10, 32); err == nil {
-				node.CPUs = append(node.CPUs, int32(cpu))
-			}
-		}
-	}
+	node.CPUs = cpus
 }
 
 // parseNodeDistances reads inter-node distance information for a specific NUMA node.

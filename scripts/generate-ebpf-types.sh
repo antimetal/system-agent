@@ -89,7 +89,7 @@ echo -e "${GREEN}Successfully generated eBPF type definitions${NC}"
 
 # Verify the generated files compile
 echo "Verifying generated code compiles..."
-if ! go build "${PROJECT_ROOT}/pkg/performance/collectors"; then
+if ! (cd "${PROJECT_ROOT}" && go build ./pkg/performance/collectors); then
     echo -e "${RED}Generated code does not compile!${NC}"
     exit 1
 fi
