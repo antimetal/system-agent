@@ -9,15 +9,19 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"os"
 
 	"github.com/go-logr/logr"
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	"k8s.io/client-go/rest"
+	clientconfig "k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
@@ -52,6 +56,7 @@ var (
 	metricsSecure        bool
 	pprofAddr            string
 	probeAddr            string
+	enableK8s            bool
 )
 
 func init() {
@@ -77,6 +82,9 @@ func init() {
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	flag.StringVar(&pprofAddr, "pprof-address", "0",
 		"The address the pprof server binds to. Set this to '0' to disable the pprof server")
+	flag.BoolVar(&enableK8s, "enable-k8s", true,
+		"Enable Kubernetes integration. "+
+			"Set to false to run in standalone mode without K8s client, controller, or leader election.")
 
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
@@ -86,9 +94,7 @@ func init() {
 	setupLog = ctrl.Log.WithName("setup")
 }
 
-func main() {
-	ctx := ctrl.SetupSignalHandler()
-
+func createManager(withK8s bool) (manager.Manager, error) {
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will
 	// prevent from being vulnerable to the HTTP/2 Stream Cancelation and
@@ -121,12 +127,29 @@ func main() {
 		metricsServerOpts.KeyName = metricsKeyName
 	}
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	// Load appropriate REST config based on mode
+	var restConfig *rest.Config
+	var err error
+	if withK8s {
+		// Load K8s config from in-cluster or kubeconfig
+		restConfig, err = clientconfig.NewNonInteractiveDeferredLoadingClientConfig(
+			clientconfig.NewDefaultClientConfigLoadingRules(),
+			&clientconfig.ConfigOverrides{},
+		).ClientConfig()
+		if err != nil {
+			return nil, fmt.Errorf("failed to load kubernetes config: %w", err)
+		}
+	} else {
+		// Provide empty config for standalone mode
+		restConfig = &rest.Config{}
+	}
+
+	return manager.New(restConfig, manager.Options{
 		Scheme:                 scheme.Get(),
 		Metrics:                metricsServerOpts,
 		HealthProbeBindAddress: probeAddr,
 		PprofBindAddress:       pprofAddr,
-		LeaderElection:         enableLeaderElection,
+		LeaderElection:         enableLeaderElection && withK8s, // Disable leader election without K8s
 		LeaderElectionID:       "4927b366.antimetal.com",
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
@@ -140,6 +163,22 @@ func main() {
 		// after the manager stops then its usage might be unsafe.
 		// LeaderElectionReleaseOnCancel: true,
 	})
+}
+
+func main() {
+	ctx := ctrl.SetupSignalHandler()
+
+	// Validate mode configuration
+	if !enableK8s {
+		setupLog.Info("Kubernetes integration disabled - running in standalone mode")
+		// Force disable K8s controller when K8s is disabled
+		if k8sagent.Enabled() {
+			setupLog.Info("disabling Kubernetes controller due to --enable-k8s=false")
+		}
+	}
+
+	// Create controller-runtime manager (works with or without K8s)
+	mgr, err := createManager(enableK8s)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
@@ -183,21 +222,24 @@ func main() {
 	}()
 
 	// Setup K8S Intake Worker (leader-only for Kubernetes provider resources)
-	k8sIntakeWorker, err := intake.NewWorker(rsrcStore,
-		intake.WithLogger(mgr.GetLogger().WithName("k8s-intake-worker")),
-		intake.WithGRPCConn(intakeConn),
-		intake.WithMaxStreamAge(endpoints.MaxStreamAge()),
-		intake.WithResourceFilter(&resourcev1.TypeDescriptor{Type: "kubernetes"}),
-		intake.WithResourceFilter(&resourcev1.TypeDescriptor{Type: "k8s.io"}),
-		intake.WithLeaderElection(true),
-	)
-	if err != nil {
-		setupLog.Error(err, "unable to create K8S intake worker")
-		os.Exit(1)
-	}
-	if err := mgr.Add(k8sIntakeWorker); err != nil {
-		setupLog.Error(err, "unable to register K8S intake worker")
-		os.Exit(1)
+	// Only create this worker when K8s is enabled
+	if enableK8s {
+		k8sIntakeWorker, err := intake.NewWorker(rsrcStore,
+			intake.WithLogger(mgr.GetLogger().WithName("k8s-intake-worker")),
+			intake.WithGRPCConn(intakeConn),
+			intake.WithMaxStreamAge(endpoints.MaxStreamAge()),
+			intake.WithResourceFilter(&resourcev1.TypeDescriptor{Type: "kubernetes"}),
+			intake.WithResourceFilter(&resourcev1.TypeDescriptor{Type: "k8s.io"}),
+			intake.WithLeaderElection(true),
+		)
+		if err != nil {
+			setupLog.Error(err, "unable to create K8S intake worker")
+			os.Exit(1)
+		}
+		if err := mgr.Add(k8sIntakeWorker); err != nil {
+			setupLog.Error(err, "unable to register K8S intake worker")
+			os.Exit(1)
+		}
 	}
 
 	// Setup Instance Intake Worker (runs on all instances for Antimetal provider resources)
@@ -343,8 +385,8 @@ func main() {
 		}
 	}
 
-	// Setup Kubernetes Collector Controller
-	if k8sagent.Enabled() {
+	// Setup Kubernetes Collector Controller (only when K8s is enabled)
+	if enableK8s && k8sagent.Enabled() {
 		ctrl := &k8sagent.Controller{
 			Store: rsrcStore,
 		}
