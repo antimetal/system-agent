@@ -39,6 +39,8 @@ const (
 	MetricTypeMemoryInfo  MetricType = "memory_info"
 	MetricTypeDiskInfo    MetricType = "disk_info"
 	MetricTypeNetworkInfo MetricType = "network_info"
+	// eBPF-based collectors
+	MetricTypeProfile MetricType = "profile"
 )
 
 // MetricEvent represents a metrics event flowing through the pipeline.
@@ -58,6 +60,7 @@ const (
 //   - "disk_info": Static disk information
 //   - "network_info": Static network information
 //   - "numa_stats": NUMA node statistics
+//   - "profile": eBPF profiling data (stack traces)
 //
 // The Data field contains the actual metric payload, typically one of the
 // performance collector types from pkg/performance (all using pointers for efficiency):
@@ -77,6 +80,7 @@ const (
 //   - *performance.NUMAStatistics for MetricTypeNUMAStats
 //   - []*performance.CgroupCPUStats for MetricTypeCgroupCPU
 //   - []*performance.CgroupMemoryStats for MetricTypeCgroupMemory
+//   - *performance.ProfileStats for MetricTypeProfile
 //
 // Note: Consumers determine how to interpret metrics (gauge, counter, histogram, etc.)
 // based on the actual field semantics within the Data payload, as many metric types

@@ -41,6 +41,8 @@ type manager struct {
 	procPath            string
 	sysPath             string
 	devPath             string
+	nodeName            string
+	clusterName         string
 }
 
 type Option func(m *manager)
@@ -48,6 +50,18 @@ type Option func(m *manager)
 func WithLogger(logger logr.Logger) Option {
 	return func(m *manager) {
 		m.logger = logger
+	}
+}
+
+func WithNodeName(nodeName string) Option {
+	return func(m *manager) {
+		m.nodeName = nodeName
+	}
+}
+
+func WithClusterName(clusterName string) Option {
+	return func(m *manager) {
+		m.clusterName = clusterName
 	}
 }
 
@@ -152,10 +166,12 @@ func (m *manager) eventCollector(ctx context.Context) {
 			}
 
 			metricEvent := metrics.MetricEvent{
-				Timestamp:  time.Now(),
-				Source:     "performance-collector",
-				MetricType: metrics.MetricType(event.Metric),
-				Data:       event.Data,
+				Timestamp:   time.Now(),
+				Source:      "performance-collector",
+				NodeName:    m.nodeName,
+				ClusterName: m.clusterName,
+				MetricType:  metrics.MetricType(event.Metric),
+				Data:        event.Data,
 			}
 
 			if err := m.router.Publish(metricEvent); err != nil {

@@ -1,6 +1,6 @@
 module github.com/antimetal/agent
 
-go 1.24
+go 1.24.0
 
 toolchain go1.24.1
 
@@ -16,6 +16,7 @@ require (
 	github.com/go-logr/stdr v1.2.2
 	github.com/go-logr/zapr v1.3.0
 	github.com/gogo/protobuf v1.3.2
+	github.com/google/pprof v0.0.0-20251007162407-5df77e3f7d1d
 	github.com/google/uuid v1.6.0
 	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/otel v1.38.0

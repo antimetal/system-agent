@@ -33,8 +33,10 @@ import (
 	k8sagent "github.com/antimetal/agent/internal/kubernetes/agent"
 	"github.com/antimetal/agent/internal/kubernetes/scheme"
 	"github.com/antimetal/agent/internal/metrics"
+	"github.com/antimetal/agent/internal/metrics/consumers/datadog"
 	"github.com/antimetal/agent/internal/metrics/consumers/debug"
 	"github.com/antimetal/agent/internal/metrics/consumers/otel"
+	"github.com/antimetal/agent/internal/metrics/consumers/perfdata"
 	perfmanager "github.com/antimetal/agent/internal/perf/manager"
 	"github.com/antimetal/agent/internal/resource/store"
 	"github.com/antimetal/agent/internal/runtime"
@@ -253,7 +255,8 @@ func main() {
 
 	// Setup Metrics Router (if any consumer is enabled)
 	var metricsRouter metrics.Router
-	enableMetricsPipeline := otel.IsEnabled() || debug.IsEnabled() || perfmanager.Enabled()
+	var perfdataConsumer *perfdata.Consumer // For cleanup
+	enableMetricsPipeline := otel.IsEnabled() || debug.IsEnabled() || datadog.IsEnabled() || perfdata.IsEnabled() || perfmanager.Enabled()
 
 	if enableMetricsPipeline {
 		router := metrics.NewMetricsRouter(mgr.GetLogger())
@@ -295,6 +298,51 @@ func main() {
 				os.Exit(1)
 			}
 			setupLog.Info("Debug consumer started and registered")
+		}
+
+		// Register Datadog consumer if enabled
+		if datadog.IsEnabled() {
+			datadogConfig := datadog.GetConfigFromFlags()
+			if datadogConfig.Version == "" {
+				datadogConfig.Version = runtime.Version() // Use agent version if not specified
+			}
+			datadogConsumer, err := datadog.NewConsumer(datadogConfig, mgr.GetLogger())
+			if err != nil {
+				setupLog.Error(err, "unable to create Datadog consumer")
+				os.Exit(1)
+			}
+			if err := datadogConsumer.Start(ctx); err != nil {
+				setupLog.Error(err, "unable to start Datadog consumer")
+				os.Exit(1)
+			}
+			if err := router.RegisterConsumer(datadogConsumer); err != nil {
+				setupLog.Error(err, "unable to register Datadog consumer")
+				os.Exit(1)
+			}
+			setupLog.Info("Datadog consumer started and registered",
+				"service", datadogConfig.Service,
+				"env", datadogConfig.Env,
+				"agent_url", datadogConfig.AgentURL)
+		}
+
+		// Register PerfData consumer if enabled
+		if perfdata.IsEnabled() {
+			perfdataConfig := perfdata.GetConfigFromFlags()
+			var err error
+			perfdataConsumer, err = perfdata.NewConsumer(perfdataConfig, mgr.GetLogger())
+			if err != nil {
+				setupLog.Error(err, "unable to create PerfData consumer")
+				os.Exit(1)
+			}
+			if err := perfdataConsumer.Start(ctx); err != nil {
+				setupLog.Error(err, "unable to start PerfData consumer")
+				os.Exit(1)
+			}
+			if err := router.RegisterConsumer(perfdataConsumer); err != nil {
+				setupLog.Error(err, "unable to register PerfData consumer")
+				os.Exit(1)
+			}
+			setupLog.Info("PerfData consumer started and registered", "output_path", perfdataConfig.OutputPath)
 		}
 
 		// Add bus to manager
@@ -402,5 +450,13 @@ func main() {
 	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
+	}
+
+	// Cleanup: Stop perfdata consumer to flush buffers
+	if perfdataConsumer != nil {
+		setupLog.Info("Stopping perfdata consumer")
+		if err := perfdataConsumer.Stop(); err != nil {
+			setupLog.Error(err, "error stopping perfdata consumer")
+		}
 	}
 }
