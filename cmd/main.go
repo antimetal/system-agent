@@ -170,11 +170,8 @@ func main() {
 
 	// Validate mode configuration
 	if !enableK8s {
-		setupLog.Info("Kubernetes integration disabled - running in standalone mode")
-		// Force disable K8s controller when K8s is disabled
-		if k8sagent.Enabled() {
-			setupLog.Info("disabling Kubernetes controller due to --enable-k8s=false")
-		}
+		setupLog.Info("running in standalone mode - Kubernetes integration disabled")
+		// Note: K8s controller and intake worker creation is skipped below based on enableK8s flag
 	}
 
 	// Create controller-runtime manager (works with or without K8s)
