@@ -56,7 +56,6 @@ var (
 	metricsSecure        bool
 	pprofAddr            string
 	probeAddr            string
-	enableK8s            bool
 )
 
 func init() {
@@ -82,9 +81,6 @@ func init() {
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	flag.StringVar(&pprofAddr, "pprof-address", "0",
 		"The address the pprof server binds to. Set this to '0' to disable the pprof server")
-	flag.BoolVar(&enableK8s, "enable-k8s", true,
-		"Enable Kubernetes integration. "+
-			"Set to false to run in standalone mode without K8s client, controller, or leader election.")
 
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
@@ -94,7 +90,7 @@ func init() {
 	setupLog = ctrl.Log.WithName("setup")
 }
 
-func createManager(withK8s bool) (manager.Manager, error) {
+func createManager(enableK8sController bool) (manager.Manager, error) {
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will
 	// prevent from being vulnerable to the HTTP/2 Stream Cancelation and
@@ -130,7 +126,7 @@ func createManager(withK8s bool) (manager.Manager, error) {
 	// Load appropriate REST config based on mode
 	var restConfig *rest.Config
 	var err error
-	if withK8s {
+	if enableK8sController {
 		// Load K8s config from in-cluster or kubeconfig
 		restConfig, err = clientconfig.NewNonInteractiveDeferredLoadingClientConfig(
 			clientconfig.NewDefaultClientConfigLoadingRules(),
@@ -149,7 +145,7 @@ func createManager(withK8s bool) (manager.Manager, error) {
 		Metrics:                metricsServerOpts,
 		HealthProbeBindAddress: probeAddr,
 		PprofBindAddress:       pprofAddr,
-		LeaderElection:         enableLeaderElection && withK8s, // Disable leader election without K8s
+		LeaderElection:         enableLeaderElection && enableK8sController, // Disable leader election without K8s
 		LeaderElectionID:       "4927b366.antimetal.com",
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
@@ -168,14 +164,13 @@ func createManager(withK8s bool) (manager.Manager, error) {
 func main() {
 	ctx := ctrl.SetupSignalHandler()
 
-	// Validate mode configuration
-	if !enableK8s {
-		setupLog.Info("running in standalone mode - Kubernetes integration disabled")
-		// Note: K8s controller and intake worker creation is skipped below based on enableK8s flag
+	// Log deployment mode
+	if !k8sagent.Enabled() {
+		setupLog.Info("running in standalone mode - Kubernetes controller disabled")
 	}
 
-	// Create controller-runtime manager (works with or without K8s)
-	mgr, err := createManager(enableK8s)
+	// Create controller-runtime manager (works with or without K8s controller)
+	mgr, err := createManager(k8sagent.Enabled())
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
@@ -219,8 +214,8 @@ func main() {
 	}()
 
 	// Setup K8S Intake Worker (leader-only for Kubernetes provider resources)
-	// Only create this worker when K8s is enabled
-	if enableK8s {
+	// Only create this worker when K8s controller is enabled
+	if k8sagent.Enabled() {
 		k8sIntakeWorker, err := intake.NewWorker(rsrcStore,
 			intake.WithLogger(mgr.GetLogger().WithName("k8s-intake-worker")),
 			intake.WithGRPCConn(intakeConn),
@@ -382,8 +377,8 @@ func main() {
 		}
 	}
 
-	// Setup Kubernetes Collector Controller (only when K8s is enabled)
-	if enableK8s && k8sagent.Enabled() {
+	// Setup Kubernetes Collector Controller (only when K8s controller is enabled)
+	if k8sagent.Enabled() {
 		ctrl := &k8sagent.Controller{
 			Store: rsrcStore,
 		}
