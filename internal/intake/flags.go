@@ -16,3 +16,8 @@ func init() {
 		"The API key to use upload resources",
 	)
 }
+
+// APIKey returns the configured intake API key
+func APIKey() string {
+	return defaultAPIKey
+}

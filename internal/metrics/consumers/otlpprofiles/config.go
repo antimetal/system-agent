@@ -13,18 +13,27 @@ import (
 
 // Config holds configuration for the OTLP profiling consumer
 type Config struct {
-	// Endpoint is the OTLP gRPC endpoint (e.g., "otel-collector:4317")
-	Endpoint string
-	// Insecure disables TLS for gRPC connection
-	Insecure bool
+	// AuthToken is the Bearer token for authentication (optional)
+	// Populated from --intake-api-key flag (shared with intake worker)
+	// Sent via gRPC metadata key "authorization"
+	// Empty token works when intake service has auth disabled (dev mode)
+	AuthToken string
+
+	// ExportTimeout is the gRPC request timeout
+	ExportTimeout time.Duration
+
 	// ExportInterval is how often to export buffered profiles
 	ExportInterval time.Duration
+
 	// MaxQueueSize is the maximum number of profiles to buffer
 	MaxQueueSize int
+
 	// ExportBatchSize is the number of profiles to export in one batch
 	ExportBatchSize int
+
 	// ServiceName for OTLP resource attributes
 	ServiceName string
+
 	// ServiceVersion for OTLP resource attributes
 	ServiceVersion string
 }
@@ -32,8 +41,8 @@ type Config struct {
 // DefaultConfig returns a sensible default configuration
 func DefaultConfig() Config {
 	return Config{
-		Endpoint:        "localhost:4317",
-		Insecure:        false,
+		AuthToken:       "", // Empty = no auth (dev mode)
+		ExportTimeout:   30 * time.Second,
 		ExportInterval:  10 * time.Second,
 		MaxQueueSize:    1000,
 		ExportBatchSize: 100,
@@ -44,8 +53,8 @@ func DefaultConfig() Config {
 
 // Validate checks if the configuration is valid
 func (c Config) Validate() error {
-	if c.Endpoint == "" {
-		return errors.New("endpoint cannot be empty")
+	if c.ExportTimeout <= 0 {
+		return errors.New("export timeout must be positive")
 	}
 	if c.ExportInterval <= 0 {
 		return errors.New("export interval must be positive")

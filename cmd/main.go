@@ -36,6 +36,7 @@ import (
 	"github.com/antimetal/agent/internal/metrics/consumers/datadog"
 	"github.com/antimetal/agent/internal/metrics/consumers/debug"
 	"github.com/antimetal/agent/internal/metrics/consumers/otel"
+	"github.com/antimetal/agent/internal/metrics/consumers/otlpprofiles"
 	"github.com/antimetal/agent/internal/metrics/consumers/perfdata"
 	perfmanager "github.com/antimetal/agent/internal/perf/manager"
 	"github.com/antimetal/agent/internal/resource/store"
@@ -256,7 +257,7 @@ func main() {
 	// Setup Metrics Router (if any consumer is enabled)
 	var metricsRouter metrics.Router
 	var perfdataConsumer *perfdata.Consumer // For cleanup
-	enableMetricsPipeline := otel.IsEnabled() || debug.IsEnabled() || datadog.IsEnabled() || perfdata.IsEnabled() || perfmanager.Enabled()
+	enableMetricsPipeline := otel.IsEnabled() || debug.IsEnabled() || datadog.IsEnabled() || perfdata.IsEnabled() || otlpprofiles.Enabled() || perfmanager.Enabled()
 
 	if enableMetricsPipeline {
 		router := metrics.NewMetricsRouter(mgr.GetLogger())
@@ -343,6 +344,27 @@ func main() {
 				os.Exit(1)
 			}
 			setupLog.Info("PerfData consumer started and registered", "output_path", perfdataConfig.OutputPath)
+		}
+
+		// Register OTLP Profiles consumer if enabled
+		if otlpprofiles.Enabled() {
+			otlpProfilesConfig := otlpprofiles.GetConfig("antimetal-agent", runtime.Version())
+			// Reuse the same gRPC connection as the intake worker
+			otlpProfilesConsumer, err := otlpprofiles.NewConsumer(intakeConn, otlpProfilesConfig, mgr.GetLogger())
+			if err != nil {
+				setupLog.Error(err, "unable to create OTLP Profiles consumer")
+				os.Exit(1)
+			}
+			if err := otlpProfilesConsumer.Start(ctx); err != nil {
+				setupLog.Error(err, "unable to start OTLP Profiles consumer")
+				os.Exit(1)
+			}
+			if err := router.RegisterConsumer(otlpProfilesConsumer); err != nil {
+				setupLog.Error(err, "unable to register OTLP Profiles consumer")
+				os.Exit(1)
+			}
+			setupLog.Info("OTLP Profiles consumer started and registered",
+				"auth_enabled", otlpProfilesConfig.AuthToken != "")
 		}
 
 		// Add bus to manager

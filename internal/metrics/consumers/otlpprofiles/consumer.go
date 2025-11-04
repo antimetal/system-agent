@@ -14,6 +14,9 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"go.opentelemetry.io/collector/pdata/pprofile/pprofileotlp"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/antimetal/agent/internal/metrics"
 )
@@ -25,13 +28,17 @@ const (
 	consumerName = "otlp-profiles"
 )
 
-// Consumer implements metrics.Consumer for OTLP profile export
+// Consumer implements metrics.Consumer for OTLP profile export via gRPC
 type Consumer struct {
 	config Config
 	logger logr.Logger
 
 	// Transformer converts ProfileStats to OTLP format
 	transformer *Transformer
+
+	// gRPC client for sending to intake service
+	grpcConn   *grpc.ClientConn
+	grpcClient pprofileotlp.GRPCClient
 
 	// Internal state
 	mu        sync.Mutex
@@ -51,16 +58,24 @@ type Consumer struct {
 }
 
 // NewConsumer creates a new OTLP profiling consumer
-func NewConsumer(config Config, logger logr.Logger) (*Consumer, error) {
+// It accepts an existing gRPC connection to the intake service (shared with resource streaming)
+func NewConsumer(grpcConn *grpc.ClientConn, config Config, logger logr.Logger) (*Consumer, error) {
+	if grpcConn == nil {
+		return nil, fmt.Errorf("gRPC connection is required")
+	}
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
 	consumer := &Consumer{
-		config: config,
-		logger: logger.WithName(consumerName),
-		buffer: make([]*metrics.MetricEvent, 0, config.MaxQueueSize),
+		config:   config,
+		logger:   logger.WithName(consumerName),
+		buffer:   make([]*metrics.MetricEvent, 0, config.MaxQueueSize),
+		grpcConn: grpcConn,
 	}
+
+	// Create gRPC client from provided connection
+	consumer.grpcClient = pprofileotlp.NewGRPCClient(grpcConn)
 
 	// Create transformer
 	consumer.transformer = NewTransformer(logger, config.ServiceName, config.ServiceVersion)
@@ -113,15 +128,14 @@ func (c *Consumer) Start(ctx context.Context) error {
 
 	c.ctx, c.cancel = context.WithCancel(ctx)
 
-	// TODO: Initialize OTLP exporter here
-	// For now, we'll just start the export worker
+	// Start export worker
 	c.wg.Add(1)
 	go c.exportWorker()
 
 	c.logger.Info("OTLP profiling consumer started",
-		"endpoint", c.config.Endpoint,
 		"export_interval", c.config.ExportInterval,
-		"max_queue_size", c.config.MaxQueueSize)
+		"max_queue_size", c.config.MaxQueueSize,
+		"auth_enabled", c.config.AuthToken != "")
 
 	return nil
 }
@@ -167,20 +181,68 @@ func (c *Consumer) export() {
 		"batch_size", len(batch),
 		"remaining_buffer", len(c.buffer))
 
-	// TODO: Implement actual OTLP export
-	// For now, just transform to verify the pipeline works
+	// Export each profile
+	// Note: Could optimize to batch multiple profiles in one OTLP request
+	exported := 0
 	for _, event := range batch {
-		if _, err := c.transformer.Transform(*event); err != nil {
+		if err := c.exportProfile(*event); err != nil {
 			c.exportErrors.Add(1)
-			c.logger.Error(err, "failed to transform profile")
+			c.logger.Error(err, "failed to export profile",
+				"node", event.NodeName,
+				"metric_type", event.MetricType)
 			c.setLastError(err)
 		} else {
 			c.eventsExported.Add(1)
+			exported++
 		}
 	}
 
+	c.logger.V(1).Info("export completed",
+		"exported", exported,
+		"errors", len(batch)-exported)
+
 	now := time.Now()
 	c.lastExportTime.Store(&now)
+}
+
+// exportProfile exports a single profile via gRPC
+func (c *Consumer) exportProfile(event metrics.MetricEvent) error {
+	// Transform to OTLP format
+	profiles, err := c.transformer.Transform(event)
+	if err != nil {
+		return fmt.Errorf("transform failed: %w", err)
+	}
+
+	// Create OTLP export request
+	exportRequest := pprofileotlp.NewExportRequestFromProfiles(profiles)
+
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(c.ctx, c.config.ExportTimeout)
+	defer cancel()
+
+	// Add authentication via metadata if token is provided
+	// Using same format as intake worker: lowercase "bearer"
+	if c.config.AuthToken != "" {
+		ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "bearer "+c.config.AuthToken)
+	}
+
+	c.logger.V(2).Info("sending OTLP profile via gRPC")
+
+	// Send via gRPC
+	resp, err := c.grpcClient.Export(ctx, exportRequest)
+	if err != nil {
+		return fmt.Errorf("gRPC export failed: %w", err)
+	}
+
+	// Check for partial success
+	partialSuccess := resp.PartialSuccess()
+	if partialSuccess.RejectedProfiles() > 0 {
+		c.logger.V(1).Info("partial success",
+			"rejected", partialSuccess.RejectedProfiles(),
+			"message", partialSuccess.ErrorMessage())
+	}
+
+	return nil
 }
 
 // Health returns the current health status
@@ -213,6 +275,8 @@ func (c *Consumer) Stop() error {
 	c.mu.Unlock()
 
 	c.wg.Wait()
+
+	// Note: We don't close grpcConn since it's shared with other components
 
 	c.logger.Info("OTLP profiling consumer stopped",
 		"events_received", c.eventsReceived.Load(),
