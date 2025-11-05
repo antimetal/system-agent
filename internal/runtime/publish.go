@@ -10,8 +10,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"os"
-	"strings"
 
 	"github.com/go-logr/logr"
 	"google.golang.org/protobuf/proto"
@@ -24,6 +22,7 @@ import (
 	k8sv1 "github.com/antimetal/agent/pkg/api/kubernetes/v1"
 	resourcev1 "github.com/antimetal/agent/pkg/api/resource/v1"
 	"github.com/antimetal/agent/pkg/config/environment"
+	"github.com/antimetal/agent/pkg/host"
 )
 
 var (
@@ -95,7 +94,7 @@ func PublishInstance(ctx context.Context, store resource.Store, logger logr.Logg
 		if err := store.AddRelationships(relationships...); err != nil {
 			return fmt.Errorf("failed to publish relationships: %w", err)
 		}
-		logger.Info("Published Instance relationships", "count", len(relationships))
+		logger.V(1).Info("Published Instance relationships", "count", len(relationships))
 	}
 
 	return nil
@@ -170,27 +169,45 @@ func createPodRelationships(instanceRef *resourcev1.ResourceRef, podMeta *enviro
 		},
 	}
 
-	// Create RegisteredAs predicate (Pod is registered as Instance)
+	// Create forward relationship: Pod --RegisteredAs--> Instance
 	registeredAs := &k8sv1.RegisteredAs{}
 	registeredAsPredicate, err := anypb.New(registeredAs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal RegisteredAs predicate: %w", err)
 	}
 
-	predicateType := string(proto.MessageName(registeredAs))
+	registeredAsType := string(proto.MessageName(registeredAs))
 
-	// Create relationship: Pod --RegisteredAs--> Instance
-	rel := &resourcev1.Relationship{
+	registeredAsRel := &resourcev1.Relationship{
 		Type: &resourcev1.TypeDescriptor{
 			Kind: kindRelationship,
-			Type: predicateType,
+			Type: registeredAsType,
 		},
 		Subject:   podRef,
 		Predicate: registeredAsPredicate,
 		Object:    instanceRef,
 	}
 
-	return []*resourcev1.Relationship{rel}, nil
+	// Create inverse relationship: Instance --Underlying--> Pod
+	underlying := &k8sv1.Underlying{}
+	underlyingPredicate, err := anypb.New(underlying)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal Underlying predicate: %w", err)
+	}
+
+	underlyingType := string(proto.MessageName(underlying))
+
+	underlyingRel := &resourcev1.Relationship{
+		Type: &resourcev1.TypeDescriptor{
+			Kind: kindRelationship,
+			Type: underlyingType,
+		},
+		Subject:   instanceRef,
+		Predicate: underlyingPredicate,
+		Object:    podRef,
+	}
+
+	return []*resourcev1.Relationship{registeredAsRel, underlyingRel}, nil
 }
 
 func createSystemNodeRelationships(instanceRef *resourcev1.ResourceRef, systemNodeID string) ([]*resourcev1.Relationship, error) {
@@ -247,30 +264,11 @@ func createSystemNodeRelationships(instanceRef *resourcev1.ResourceRef, systemNo
 }
 
 func getSystemNodeID() (string, error) {
-	// Get machine ID from system files
-	// This logic matches pkg/host/machine_id_linux.go but is inlined
-	// to avoid CI build issues with the host package
-	id, err := getMachineID()
+	// Use canonical name for system node identification
+	// This provides a robust fallback chain: MachineInfo → CloudProviderID → FQDN → MachineID
+	name, err := host.CanonicalName()
 	if err != nil {
 		return "", fmt.Errorf("could not determine system node ID: %w", err)
 	}
-	return id, nil
-}
-
-func getMachineID() (string, error) {
-	// Try /etc/machine-id (systemd standard, most reliable)
-	if data, err := os.ReadFile("/etc/machine-id"); err == nil {
-		if id := strings.TrimSpace(string(data)); id != "" {
-			return id, nil
-		}
-	}
-
-	// Try /var/lib/dbus/machine-id as fallback
-	if data, err := os.ReadFile("/var/lib/dbus/machine-id"); err == nil {
-		if id := strings.TrimSpace(string(data)); id != "" {
-			return id, nil
-		}
-	}
-
-	return "", fmt.Errorf("machine-id not found")
+	return name, nil
 }
