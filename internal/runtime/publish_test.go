@@ -72,25 +72,33 @@ func TestCreatePodRelationships(t *testing.T) {
 
 	rels, err := createPodRelationships(instanceRef, podMeta)
 	require.NoError(t, err)
-	require.Len(t, rels, 1, "Should create one Pod → Instance relationship")
+	require.Len(t, rels, 2, "Should create bidirectional relationships")
 
-	rel := rels[0]
+	// Find forward and inverse relationships
+	var registeredAsRel, underlyingRel *resourcev1.Relationship
+	for _, rel := range rels {
+		if rel.Type.Type == "kubernetes.v1.RegisteredAs" {
+			registeredAsRel = rel
+		} else if rel.Type.Type == "kubernetes.v1.Underlying" {
+			underlyingRel = rel
+		}
+	}
 
-	// Verify relationship structure
-	assert.Equal(t, kindRelationship, rel.Type.Kind)
-	assert.Equal(t, "kubernetes.v1.RegisteredAs", rel.Type.Type)
+	require.NotNil(t, registeredAsRel, "Should have RegisteredAs relationship")
+	require.NotNil(t, underlyingRel, "Should have Underlying relationship")
 
-	// Verify subject (Pod)
-	assert.Equal(t, "k8s.io.api.core.v1.Pod", rel.Subject.TypeUrl)
-	assert.Equal(t, "test-pod", rel.Subject.Name)
-	assert.NotNil(t, rel.Subject.Namespace)
+	// Verify RegisteredAs: Pod → Instance
+	assert.Equal(t, "k8s.io.api.core.v1.Pod", registeredAsRel.Subject.TypeUrl)
+	assert.Equal(t, "test-pod", registeredAsRel.Subject.Name)
+	assert.NotNil(t, registeredAsRel.Subject.Namespace)
+	assert.Equal(t, instanceRef.TypeUrl, registeredAsRel.Object.TypeUrl)
+	assert.Equal(t, instanceRef.Name, registeredAsRel.Object.Name)
 
-	// Verify object (Instance)
-	assert.Equal(t, instanceRef.TypeUrl, rel.Object.TypeUrl)
-	assert.Equal(t, instanceRef.Name, rel.Object.Name)
-
-	// Verify predicate
-	assert.NotNil(t, rel.Predicate)
+	// Verify Underlying: Instance → Pod
+	assert.Equal(t, instanceRef.TypeUrl, underlyingRel.Subject.TypeUrl)
+	assert.Equal(t, instanceRef.Name, underlyingRel.Subject.Name)
+	assert.Equal(t, "k8s.io.api.core.v1.Pod", underlyingRel.Object.TypeUrl)
+	assert.Equal(t, "test-pod", underlyingRel.Object.Name)
 }
 
 func TestCreateSystemNodeRelationships(t *testing.T) {
