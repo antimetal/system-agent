@@ -10,7 +10,9 @@ managed:
     - file_option: go_package_prefix
       module: buf.build/googleapis/googleapis
 inputs:
-  - module: buf.build/antimetal/apis:b4f6f59de5444bc5836100b1a641b43f
+  # Temporarily use local proto for ProfileCollectionConfig development
+  - directory: /Users/john/am/jra3-apis
+  # - module: buf.build/antimetal/apis:b4f6f59de5444bc5836100b1a641b43f
 plugins:
   - remote: buf.build/protocolbuffers/go:v1.36.6
     out: pkg/api
