@@ -29,7 +29,6 @@ import (
 	"github.com/antimetal/agent/internal/containers"
 	"github.com/antimetal/agent/internal/endpoints"
 	"github.com/antimetal/agent/internal/hardware"
-	"github.com/antimetal/agent/internal/instance"
 	"github.com/antimetal/agent/internal/intake"
 	k8sagent "github.com/antimetal/agent/internal/kubernetes/agent"
 	"github.com/antimetal/agent/internal/kubernetes/scheme"
@@ -252,17 +251,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Setup Instance Manager (for agent instance resource publishing)
-	instanceManager, err := instance.NewManager(
-		mgr.GetLogger().WithName("instance-manager"),
-		rsrcStore,
-	)
-	if err != nil {
-		setupLog.Error(err, "unable to create instance manager")
-		os.Exit(1)
-	}
-	if err := mgr.Add(instanceManager); err != nil {
-		setupLog.Error(err, "unable to register instance manager")
+	// Publish Instance resource to CloudInventory (once at startup)
+	// The intake worker will handle TTL extension via delta version heartbeats
+	if err := runtime.PublishInstance(ctx, rsrcStore, setupLog.WithName("instance-publisher")); err != nil {
+		setupLog.Error(err, "unable to publish instance resource")
 		os.Exit(1)
 	}
 
