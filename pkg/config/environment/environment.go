@@ -9,6 +9,8 @@ package environment
 
 import (
 	"os"
+
+	"k8s.io/apimachinery/pkg/util/validation"
 )
 
 // GetNodeName returns the node name from NODE_NAME environment variable,
@@ -29,6 +31,41 @@ func GetNodeName() (string, error) {
 // Returns empty string if not set.
 func GetClusterName() string {
 	return os.Getenv("CLUSTER_NAME")
+}
+
+// PodMetadata contains Kubernetes pod metadata from downward API
+type PodMetadata struct {
+	Name      string // Pod name
+	Namespace string // Pod namespace
+	UID       string // Pod UID
+}
+
+// GetPodMetadata returns pod metadata from environment variables set by Kubernetes downward API.
+// Returns nil if POD_NAME is not set or if metadata fails validation.
+func GetPodMetadata() *PodMetadata {
+	podName := os.Getenv("POD_NAME")
+	if podName == "" {
+		return nil
+	}
+
+	// Validate pod name follows Kubernetes DNS-1123 label format
+	if errs := validation.IsDNS1123Label(podName); len(errs) > 0 {
+		return nil
+	}
+
+	namespace := os.Getenv("POD_NAMESPACE")
+	// Validate namespace if provided
+	if namespace != "" {
+		if errs := validation.IsDNS1123Label(namespace); len(errs) > 0 {
+			return nil
+		}
+	}
+
+	return &PodMetadata{
+		Name:      podName,
+		Namespace: namespace,
+		UID:       os.Getenv("POD_UID"),
+	}
 }
 
 // HostPaths contains the host filesystem paths for containerized environments

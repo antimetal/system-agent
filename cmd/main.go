@@ -251,6 +251,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Publish Instance resource to CloudInventory (once at startup)
+	// The intake worker will handle TTL extension via delta version heartbeats
+	if err := runtime.PublishInstance(ctx, rsrcStore, setupLog.WithName("instance-publisher")); err != nil {
+		setupLog.Error(err, "unable to publish instance resource")
+		os.Exit(1)
+	}
+
 	// Setup Metrics Router (if any consumer is enabled)
 	var metricsRouter metrics.Router
 	enableMetricsPipeline := otel.IsEnabled() || debug.IsEnabled() || perfmanager.Enabled()
