@@ -94,6 +94,15 @@ jobs:
         sudo apt-get update -qq
         sudo apt-get install -y -qq clang llvm libelf-dev libbpf-dev
 
+    - name: Install bpftool from libbpf
+      run: |
+        # Build bpftool from libbpf source (works with any kernel)
+        git clone --recurse-submodules --depth 1 https://github.com/libbpf/bpftool.git /tmp/bpftool
+        cd /tmp/bpftool/src
+        make
+        sudo make install
+        bpftool version
+
     - name: Check generated files are up to date
       run: make gen-check
 
@@ -129,6 +138,15 @@ jobs:
       run: |
         sudo apt-get update -qq
         sudo apt-get install -y -qq clang llvm libelf-dev libbpf-dev
+
+    - name: Install bpftool from libbpf
+      run: |
+        # Build bpftool from libbpf source (works with any kernel)
+        git clone --recurse-submodules --depth 1 https://github.com/libbpf/bpftool.git /tmp/bpftool
+        cd /tmp/bpftool/src
+        make
+        sudo make install
+        bpftool version
 
     - name: Build agent binary
       run: make build
@@ -209,6 +227,15 @@ jobs:
       run: |
         sudo apt-get update -qq
         sudo apt-get install -y -qq clang llvm libelf-dev libbpf-dev
+
+    - name: Install bpftool from libbpf
+      run: |
+        # Build bpftool from libbpf source (works with any kernel)
+        git clone --recurse-submodules --depth 1 https://github.com/libbpf/bpftool.git /tmp/bpftool
+        cd /tmp/bpftool/src
+        make
+        sudo make install
+        bpftool version
 
     - name: Generate code
       run: |
