@@ -41,6 +41,7 @@ func generateSingleSocketCPUCores(coreCount int32, hyperThreading bool) []perfor
 	return cores
 }
 
+//nolint:unused // used in integration tests
 func generateMultiSocketCPUCores(socketCount, coresPerSocket int32, hyperThreading bool) []performance.CPUCore {
 	cores := make([]performance.CPUCore, 0)
 	processor := int32(0)
@@ -105,6 +106,7 @@ func generateNUMANodes(nodeCount int, coresPerNode int) []performance.NUMANode {
 	return nodes
 }
 
+//nolint:unused // used in integration tests
 func generateServerDiskConfig() []*performance.DiskInfo {
 	return []*performance.DiskInfo{
 		{
@@ -132,6 +134,7 @@ func generateServerDiskConfig() []*performance.DiskInfo {
 	}
 }
 
+//nolint:unused // used in integration tests
 func generateMixedStorageConfig() []*performance.DiskInfo {
 	return []*performance.DiskInfo{
 		{
@@ -151,6 +154,7 @@ func generateMixedStorageConfig() []*performance.DiskInfo {
 	}
 }
 
+//nolint:unused // used in integration tests
 func generateRotationalDiskConfig() []*performance.DiskInfo {
 	return []*performance.DiskInfo{
 		{
@@ -170,6 +174,7 @@ func generateRotationalDiskConfig() []*performance.DiskInfo {
 	}
 }
 
+//nolint:unused // used in integration tests
 func generateServerNetworkConfig() []*performance.NetworkInfo {
 	return []*performance.NetworkInfo{
 		{
@@ -197,6 +202,7 @@ func generateServerNetworkConfig() []*performance.NetworkInfo {
 	}
 }
 
+//nolint:unused // used in integration tests
 func generateBondedNetworkConfig() []*performance.NetworkInfo {
 	return []*performance.NetworkInfo{
 		{
@@ -235,6 +241,7 @@ func generateBondedNetworkConfig() []*performance.NetworkInfo {
 	}
 }
 
+//nolint:unused // used in integration tests
 func generateMultiNICConfig() []*performance.NetworkInfo {
 	return []*performance.NetworkInfo{
 		{
@@ -273,6 +280,7 @@ func generateMultiNICConfig() []*performance.NetworkInfo {
 	}
 }
 
+//nolint:unused // used in integration tests
 func generateVirtualNetworkConfig() []*performance.NetworkInfo {
 	return []*performance.NetworkInfo{
 		{
@@ -300,6 +308,7 @@ func generateVirtualNetworkConfig() []*performance.NetworkInfo {
 	}
 }
 
+//nolint:unused // used in integration tests
 func generateLargeServerDisks(count int) []*performance.DiskInfo {
 	disks := make([]*performance.DiskInfo, count)
 	for i := 0; i < count; i++ {
@@ -326,6 +335,7 @@ func generateLargeServerDisks(count int) []*performance.DiskInfo {
 	return disks
 }
 
+//nolint:unused // used in integration tests
 func generateManyNetworkInterfaces(count int) []*performance.NetworkInfo {
 	interfaces := make([]*performance.NetworkInfo, count)
 	for i := 0; i < count; i++ {

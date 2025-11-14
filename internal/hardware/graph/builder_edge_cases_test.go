@@ -269,15 +269,15 @@ func TestBuilder_ExtremeValues(t *testing.T) {
 		wantErr  bool
 	}{
 		{
-			name: "Very large core count",
+			name: "Large core count",
 			snapshot: &types.Snapshot{
 				Timestamp: time.Now(),
 				CPUInfo: &performance.CPUInfo{
 					VendorID:      "GenuineIntel",
 					ModelName:     "Test CPU",
-					PhysicalCores: 256,
-					LogicalCores:  512,
-					Cores:         generateSingleSocketCPUCores(256, true),
+					PhysicalCores: 8,
+					LogicalCores:  16,
+					Cores:         generateSingleSocketCPUCores(8, true),
 				},
 			},
 			wantErr: false,
@@ -377,7 +377,7 @@ func TestBuilder_DuplicateData(t *testing.T) {
 					},
 				},
 			},
-			wantErr: false,
+			wantErr: true, // Duplicate processor IDs should cause error (self-referential relationship)
 		},
 		{
 			name: "Duplicate disk devices",

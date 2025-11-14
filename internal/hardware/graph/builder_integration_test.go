@@ -31,9 +31,9 @@ func TestHardwareGraph_RealSystemDiscovery(t *testing.T) {
 
 	// Create collection config
 	config := performance.CollectionConfig{
-		ProcPath: "/proc",
-		SysPath:  "/sys",
-		DevPath:  "/dev",
+		HostProcPath: "/proc",
+		HostSysPath:  "/sys",
+		HostDevPath:  "/dev",
 	}
 
 	// Create real collectors to gather actual hardware data
@@ -50,17 +50,21 @@ func TestHardwareGraph_RealSystemDiscovery(t *testing.T) {
 	require.NoError(t, err, "Failed to create network info collector")
 
 	// Collect real hardware data
-	cpuInfo, err := cpuInfoCollector.Collect()
+	cpuEvent, err := cpuInfoCollector.Collect(ctx)
 	require.NoError(t, err, "Failed to collect CPU info")
+	cpuInfo := cpuEvent.Data.(*performance.CPUInfo)
 
-	memInfo, err := memInfoCollector.Collect()
+	memEvent, err := memInfoCollector.Collect(ctx)
 	require.NoError(t, err, "Failed to collect memory info")
+	memInfo := memEvent.Data.(*performance.MemoryInfo)
 
-	diskInfo, err := diskInfoCollector.Collect()
+	diskEvent, err := diskInfoCollector.Collect(ctx)
 	require.NoError(t, err, "Failed to collect disk info")
+	diskInfo := diskEvent.Data.([]*performance.DiskInfo)
 
-	netInfo, err := netInfoCollector.Collect()
+	netEvent, err := netInfoCollector.Collect(ctx)
 	require.NoError(t, err, "Failed to collect network info")
+	netInfo := netEvent.Data.([]*performance.NetworkInfo)
 
 	// Create snapshot from real data
 	snapshot := &types.Snapshot{
@@ -85,11 +89,8 @@ func TestHardwareGraph_RealSystemDiscovery(t *testing.T) {
 
 	// Verify system node was created
 	systemRef := &resourcev1.ResourceRef{
-		Type: &resourcev1.TypeDescriptor{
-			Kind: "resource.v1.Resource",
-			Type: "antimetal.hardware.v1.SystemNode",
-		},
-		Name: "system",
+		TypeUrl: "antimetal.hardware.v1.SystemNode",
+		Name:    "system",
 	}
 	systemNode, err := testStore.GetResource(systemRef)
 	require.NoError(t, err, "System node should exist")
