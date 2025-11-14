@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/antimetal/agent/pkg/containers"
 	"github.com/antimetal/agent/pkg/performance"
@@ -56,7 +57,7 @@ var _ performance.PointCollector = (*CgroupCPUCollector)(nil)
 type CgroupCPUCollector struct {
 	performance.BaseCollector
 	cgroupPath string
-	discovery  *containers.Discovery
+	discovery  *containers.CachedDiscovery
 }
 
 // NewCgroupCPUCollector creates a new cgroup CPU collector
@@ -75,6 +76,10 @@ func NewCgroupCPUCollector(logger logr.Logger, config performance.CollectionConf
 	// Construct cgroup path from sys path
 	cgroupPath := filepath.Join(config.HostSysPath, "fs", "cgroup")
 
+	// Use cached discovery with 30-second TTL
+	// This reduces filesystem traversal overhead when collecting repeatedly
+	cacheTTL := 30 * time.Second
+
 	return &CgroupCPUCollector{
 		BaseCollector: performance.NewBaseCollector(
 			performance.MetricTypeCgroupCPU,
@@ -84,7 +89,7 @@ func NewCgroupCPUCollector(logger logr.Logger, config performance.CollectionConf
 			capabilities,
 		),
 		cgroupPath: cgroupPath,
-		discovery:  containers.NewDiscovery(cgroupPath),
+		discovery:  containers.NewCachedDiscovery(cgroupPath, cacheTTL),
 	}, nil
 }
 
