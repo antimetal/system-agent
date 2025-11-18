@@ -99,6 +99,10 @@ func (t *Transformer) TransformAndRecord(event metrics.MetricEvent) error {
 		return nil
 	case metrics.MetricTypeNUMAStats:
 		return t.transformNUMAStats(ctx, event.Data, t.buildAttributes(event))
+	case metrics.MetricTypePSI:
+		return t.transformPSIStats(ctx, event.Data, t.buildAttributes(event))
+	case metrics.MetricTypeCgroupPSI:
+		return t.transformCgroupPSIStats(ctx, event.Data, t.buildAttributes(event))
 	default:
 		t.logger.V(1).Info("Unknown metric type", "type", event.MetricType)
 		return nil
@@ -861,6 +865,115 @@ func (t *Transformer) transformNUMAStats(ctx context.Context, data any, attrs []
 			otherAttrs := append(nodeAttrs, attribute.String("type", "other_node"))
 			counter.Add(ctx, int64(node.Delta.LocalNode), metric.WithAttributes(localAttrs...))
 			counter.Add(ctx, int64(node.Delta.OtherNode), metric.WithAttributes(otherAttrs...))
+		}
+	}
+
+	return nil
+}
+
+// transformPSIStats transforms Pressure Stall Information statistics
+func (t *Transformer) transformPSIStats(ctx context.Context, data any, attrs []attribute.KeyValue) error {
+	stats, ok := data.(*performance.PSIStats)
+	if !ok {
+		return fmt.Errorf("invalid PSI stats data type")
+	}
+
+	// Transform CPU pressure
+	if stats.CPU != nil {
+		cpuAttrs := append(attrs, attribute.String("resource", "cpu"))
+		t.recordPSIResourceMetrics(ctx, stats.CPU, cpuAttrs)
+	}
+
+	// Transform Memory pressure
+	if stats.Memory != nil {
+		memAttrs := append(attrs, attribute.String("resource", "memory"))
+		t.recordPSIResourceMetrics(ctx, stats.Memory, memAttrs)
+	}
+
+	// Transform I/O pressure
+	if stats.IO != nil {
+		ioAttrs := append(attrs, attribute.String("resource", "io"))
+		t.recordPSIResourceMetrics(ctx, stats.IO, ioAttrs)
+	}
+
+	return nil
+}
+
+// recordPSIResourceMetrics records PSI metrics for a single resource (CPU, memory, or I/O)
+func (t *Transformer) recordPSIResourceMetrics(ctx context.Context, stats *performance.PSIResourceStats, attrs []attribute.KeyValue) {
+	// "some" metrics - at least one task stalled
+	someAttrs := append(attrs, attribute.String("stall_type", "some"))
+
+	if gauge, err := t.getOrCreateFloat64Gauge("system.psi.pressure.avg10", "PSI 10-second average pressure", "%"); err == nil {
+		gauge.Record(ctx, stats.SomeAvg10, metric.WithAttributes(someAttrs...))
+	}
+
+	if gauge, err := t.getOrCreateFloat64Gauge("system.psi.pressure.avg60", "PSI 60-second average pressure", "%"); err == nil {
+		gauge.Record(ctx, stats.SomeAvg60, metric.WithAttributes(someAttrs...))
+	}
+
+	if gauge, err := t.getOrCreateFloat64Gauge("system.psi.pressure.avg300", "PSI 300-second average pressure", "%"); err == nil {
+		gauge.Record(ctx, stats.SomeAvg300, metric.WithAttributes(someAttrs...))
+	}
+
+	if counter, err := t.getOrCreateInt64Counter("system.psi.pressure.total", "PSI total stall time", "us"); err == nil {
+		counter.Add(ctx, int64(stats.SomeTotal), metric.WithAttributes(someAttrs...))
+	}
+
+	// "full" metrics - all non-idle tasks stalled
+	// Note: For CPU at system level, "full" is always 0
+	fullAttrs := append(attrs, attribute.String("stall_type", "full"))
+
+	if gauge, err := t.getOrCreateFloat64Gauge("system.psi.pressure.avg10", "PSI 10-second average pressure", "%"); err == nil {
+		gauge.Record(ctx, stats.FullAvg10, metric.WithAttributes(fullAttrs...))
+	}
+
+	if gauge, err := t.getOrCreateFloat64Gauge("system.psi.pressure.avg60", "PSI 60-second average pressure", "%"); err == nil {
+		gauge.Record(ctx, stats.FullAvg60, metric.WithAttributes(fullAttrs...))
+	}
+
+	if gauge, err := t.getOrCreateFloat64Gauge("system.psi.pressure.avg300", "PSI 300-second average pressure", "%"); err == nil {
+		gauge.Record(ctx, stats.FullAvg300, metric.WithAttributes(fullAttrs...))
+	}
+
+	if counter, err := t.getOrCreateInt64Counter("system.psi.pressure.total", "PSI total stall time", "us"); err == nil {
+		counter.Add(ctx, int64(stats.FullTotal), metric.WithAttributes(fullAttrs...))
+	}
+}
+
+// transformCgroupPSIStats transforms per-container PSI statistics
+func (t *Transformer) transformCgroupPSIStats(ctx context.Context, data any, attrs []attribute.KeyValue) error {
+	statsList, ok := data.([]*performance.CgroupPSIStats)
+	if !ok {
+		return fmt.Errorf("invalid cgroup PSI stats data type")
+	}
+
+	for _, stats := range statsList {
+		containerAttrs := append(attrs,
+			attribute.String("container.id", stats.ContainerID),
+			attribute.String("cgroup.path", stats.CgroupPath),
+		)
+
+		if stats.ContainerName != "" {
+			containerAttrs = append(containerAttrs, attribute.String("container.name", stats.ContainerName))
+		}
+
+		// Transform CPU pressure
+		if stats.CPU != nil {
+			cpuAttrs := append(containerAttrs, attribute.String("resource", "cpu"))
+			t.recordPSIResourceMetrics(ctx, stats.CPU, cpuAttrs)
+		}
+
+		// Transform Memory pressure
+		if stats.Memory != nil {
+			memAttrs := append(containerAttrs, attribute.String("resource", "memory"))
+			t.recordPSIResourceMetrics(ctx, stats.Memory, memAttrs)
+		}
+
+		// Transform I/O pressure
+		if stats.IO != nil {
+			ioAttrs := append(containerAttrs, attribute.String("resource", "io"))
+			t.recordPSIResourceMetrics(ctx, stats.IO, ioAttrs)
 		}
 	}
 

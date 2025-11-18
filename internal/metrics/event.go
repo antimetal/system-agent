@@ -29,9 +29,11 @@ const (
 	MetricTypeKernel    MetricType = "kernel"
 	MetricTypeSystem    MetricType = "system"
 	MetricTypeNUMAStats MetricType = "numa_stats"
+	MetricTypePSI       MetricType = "psi" // Pressure Stall Information
 	// Runtime Container Statistics
 	MetricTypeCgroupCPU     MetricType = "cgroup_cpu"
 	MetricTypeCgroupMemory  MetricType = "cgroup_memory"
+	MetricTypeCgroupPSI     MetricType = "cgroup_psi"     // Pressure Stall Information per container
 	MetricTypeCgroupIO      MetricType = "cgroup_io"      // Future
 	MetricTypeCgroupNetwork MetricType = "cgroup_network" // Future
 	// Hardware configuration collectors
