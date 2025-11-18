@@ -27,9 +27,11 @@ const (
 	MetricTypeKernel    MetricType = "kernel"
 	MetricTypeSystem    MetricType = "system"
 	MetricTypeNUMAStats MetricType = "numa_stats"
+	MetricTypePSI       MetricType = "psi" // Pressure Stall Information
 	// Runtime Container Statistics
 	MetricTypeCgroupCPU     MetricType = "cgroup_cpu"
 	MetricTypeCgroupMemory  MetricType = "cgroup_memory"
+	MetricTypeCgroupPSI     MetricType = "cgroup_psi"     // Pressure Stall Information per container
 	MetricTypeCgroupIO      MetricType = "cgroup_io"      // Future
 	MetricTypeCgroupNetwork MetricType = "cgroup_network" // Future
 	// Hardware configuration collectors
@@ -157,6 +159,35 @@ type LoadStats struct {
 	LastPID int32 `json:"last_pid"`
 	// System uptime from /proc/uptime (1st field in seconds)
 	Uptime time.Duration `json:"uptime"`
+}
+
+// PSIStats represents Pressure Stall Information for system-level resources
+// Data sourced from /proc/pressure/{cpu,memory,io}
+// Reference: https://www.kernel.org/doc/html/latest/accounting/psi.html
+// Available since kernel 4.20
+type PSIStats struct {
+	CPU    *PSIResourceStats `json:"cpu"`    // CPU pressure from /proc/pressure/cpu
+	Memory *PSIResourceStats `json:"memory"` // Memory pressure from /proc/pressure/memory
+	IO     *PSIResourceStats `json:"io"`     // I/O pressure from /proc/pressure/io
+}
+
+// PSIResourceStats represents PSI metrics for a single resource (CPU, memory, or I/O)
+// Each file contains two lines: "some" and "full" with time-averaged percentages
+// "some" = at least some tasks were stalled
+// "full" = all non-idle tasks were stalled simultaneously (CPU "full" is always 0)
+type PSIResourceStats struct {
+	// "some" metrics - at least one task stalled
+	SomeAvg10  float64 `json:"some_avg10"`  // 10-second average percentage
+	SomeAvg60  float64 `json:"some_avg60"`  // 60-second average percentage
+	SomeAvg300 float64 `json:"some_avg300"` // 300-second average percentage
+	SomeTotal  uint64  `json:"some_total"`  // Absolute stall time in microseconds (cumulative counter)
+
+	// "full" metrics - all non-idle tasks stalled
+	// Note: For CPU, "full" is undefined at system level (always 0)
+	FullAvg10  float64 `json:"full_avg10"`  // 10-second average percentage
+	FullAvg60  float64 `json:"full_avg60"`  // 60-second average percentage
+	FullAvg300 float64 `json:"full_avg300"` // 300-second average percentage
+	FullTotal  uint64  `json:"full_total"`  // Absolute stall time in microseconds (cumulative counter)
 }
 
 // MemoryStats represents runtime memory usage statistics from /proc/meminfo
@@ -587,9 +618,11 @@ func DefaultCollectionConfig() CollectionConfig {
 			MetricTypeTCP:     true,
 			MetricTypeSystem:  true,
 			MetricTypeKernel:  true,
+			MetricTypePSI:     true,
 			// Runtime container resource collectors
 			MetricTypeCgroupCPU:    true,
 			MetricTypeCgroupMemory: true,
+			MetricTypeCgroupPSI:    true,
 			// Hardware configuration collectors
 			MetricTypeCPUInfo:     true,
 			MetricTypeMemoryInfo:  true,
@@ -894,6 +927,22 @@ type CgroupMemoryStats struct {
 	// Calculated metrics
 	UsagePercent float64 // Usage as percentage of limit
 	CachePercent float64 // Cache as percentage of total usage
+}
+
+// CgroupPSIStats represents Pressure Stall Information for a container/cgroup
+// Data sourced from cgroup {cpu,memory,io}.pressure files
+// Reference: https://www.kernel.org/doc/html/latest/accounting/psi.html
+// Available in cgroup v2 and some cgroup v1 configurations (kernel 4.20+)
+type CgroupPSIStats struct {
+	// Container identification
+	ContainerID   string
+	ContainerName string // If available from runtime
+	CgroupPath    string
+
+	// PSI metrics per resource
+	CPU    *PSIResourceStats `json:"cpu"`    // CPU pressure from cpu.pressure
+	Memory *PSIResourceStats `json:"memory"` // Memory pressure from memory.pressure
+	IO     *PSIResourceStats `json:"io"`     // I/O pressure from io.pressure
 }
 
 // ContainerInfo provides container runtime metadata
