@@ -108,10 +108,13 @@ func (c *PSICollector) readPSIFile(path string) (*performance.PSIResourceStats, 
 		return nil, fmt.Errorf("failed to read %s: %w", path, err)
 	}
 
-	return parsePSIData(string(data))
+	return ParsePSIData(string(data))
 }
 
-func parsePSIData(data string) (*performance.PSIResourceStats, error) {
+// ParsePSIData parses PSI file content into PSIResourceStats
+// Format: two lines with "some" and "full" prefix, followed by key=value pairs
+// Used by both system-level and cgroup PSI collectors
+func ParsePSIData(data string) (*performance.PSIResourceStats, error) {
 	stats := &performance.PSIResourceStats{}
 	lines := strings.Split(strings.TrimSpace(data), "\n")
 
