@@ -544,10 +544,3 @@ func TestBuilder_RapidUpdates(t *testing.T) {
 
 	t.Log("Successfully handled 10 rapid updates")
 }
-
-// TestBuilder_ConcurrentBuilds tests concurrent graph building (if supported)
-func TestBuilder_ConcurrentBuilds(t *testing.T) {
-	// Note: This tests whether concurrent builds cause race conditions or data corruption
-	// The actual implementation may not support true concurrent builds
-	t.Skip("Concurrent builds may not be supported - requires synchronization analysis")
-}

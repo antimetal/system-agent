@@ -7,6 +7,8 @@
 package hardwaregraph_test
 
 import (
+	"fmt"
+
 	"github.com/antimetal/agent/pkg/performance"
 )
 
@@ -312,20 +314,22 @@ func generateVirtualNetworkConfig() []*performance.NetworkInfo {
 func generateLargeServerDisks(count int) []*performance.DiskInfo {
 	disks := make([]*performance.DiskInfo, count)
 	for i := 0; i < count; i++ {
-		diskType := "sata"
+		var device string
 		rotational := true
 		sizeBytes := uint64(4000787030016) // 4TB
 		scheduler := "mq-deadline"
 
 		if i < 4 {
-			diskType = "nvme"
+			device = fmt.Sprintf("nvme%dn1", i)
 			rotational = false
 			sizeBytes = 1000204886016 // 1TB
 			scheduler = "none"
+		} else {
+			device = fmt.Sprintf("sd%c", 'a'+(i-4)%26)
 		}
 
 		disks[i] = &performance.DiskInfo{
-			Device:     diskType + string(rune('a'+i)),
+			Device:     device,
 			Model:      "Server Disk",
 			SizeBytes:  sizeBytes,
 			Rotational: rotational,
@@ -345,8 +349,8 @@ func generateManyNetworkInterfaces(count int) []*performance.NetworkInfo {
 		}
 
 		interfaces[i] = &performance.NetworkInfo{
-			Interface:  "eth" + string(rune('0'+i)),
-			MACAddress: "00:11:22:33:44:" + string(rune('0'+i)),
+			Interface:  fmt.Sprintf("eth%d", i),
+			MACAddress: fmt.Sprintf("00:11:22:33:44:%02x", i),
 			Speed:      speed,
 			Duplex:     "full",
 			MTU:        1500,

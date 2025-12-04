@@ -211,6 +211,5 @@ func benchmarkBuildFromSnapshot(b *testing.B, snapshot *types.Snapshot) {
 
 		b.StopTimer()
 		testStore.Close()
-		b.StartTimer()
 	}
 }
