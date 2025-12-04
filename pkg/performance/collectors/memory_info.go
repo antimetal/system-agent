@@ -15,8 +15,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/antimetal/agent/pkg/cpu"
 	"github.com/antimetal/agent/pkg/performance"
-	"github.com/antimetal/agent/pkg/performance/cpuutil"
 	"github.com/go-logr/logr"
 )
 
@@ -434,7 +434,7 @@ func (c *MemoryInfoCollector) parseNodeCPUs(node *performance.NUMANode, nodePath
 
 	// Parse CPU ranges using shared utility
 	// Examples: "0-3,8-11", "0,1,2,3", "0-3", "5"
-	cpus, err := cpuutil.ParseCPUList(string(data))
+	cpus, err := cpu.ParseCPUList(string(data))
 	if err != nil {
 		c.Logger().V(1).Info("Failed to parse NUMA node CPU list",
 			"node_path", nodePath, "cpu_list", strings.TrimSpace(string(data)), "error", err)
