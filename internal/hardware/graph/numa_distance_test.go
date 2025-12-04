@@ -149,7 +149,7 @@ func TestCreateNUMADistanceRelationship_NilReferences(t *testing.T) {
 		rel, err := builder.createNUMADistanceRelationship(nil, validRef, 0, 1, 20)
 		// Should not panic, may return relationship with nil subject
 		assert.NotPanics(t, func() {
-			builder.createNUMADistanceRelationship(nil, validRef, 0, 1, 20)
+			_, _ = builder.createNUMADistanceRelationship(nil, validRef, 0, 1, 20)
 		})
 		_ = rel
 		_ = err
@@ -159,7 +159,7 @@ func TestCreateNUMADistanceRelationship_NilReferences(t *testing.T) {
 		rel, err := builder.createNUMADistanceRelationship(validRef, nil, 0, 1, 20)
 		// Should not panic, may return relationship with nil object
 		assert.NotPanics(t, func() {
-			builder.createNUMADistanceRelationship(validRef, nil, 0, 1, 20)
+			_, _ = builder.createNUMADistanceRelationship(validRef, nil, 0, 1, 20)
 		})
 		_ = rel
 		_ = err
