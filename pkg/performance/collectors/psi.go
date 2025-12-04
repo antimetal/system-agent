@@ -166,19 +166,19 @@ func parsePSILine(line string, avg10, avg60, avg300 *float64, total *uint64) err
 
 		switch key {
 		case "avg10":
-			f, err := strconv.ParseFloat(value, 64)
+			f, err := parsePSIPercentage(value)
 			if err != nil {
 				return fmt.Errorf("failed to parse avg10: %w", err)
 			}
 			*avg10 = f
 		case "avg60":
-			f, err := strconv.ParseFloat(value, 64)
+			f, err := parsePSIPercentage(value)
 			if err != nil {
 				return fmt.Errorf("failed to parse avg60: %w", err)
 			}
 			*avg60 = f
 		case "avg300":
-			f, err := strconv.ParseFloat(value, 64)
+			f, err := parsePSIPercentage(value)
 			if err != nil {
 				return fmt.Errorf("failed to parse avg300: %w", err)
 			}
@@ -193,4 +193,16 @@ func parsePSILine(line string, avg10, avg60, avg300 *float64, total *uint64) err
 	}
 
 	return nil
+}
+
+// parsePSIPercentage parses a PSI percentage value and validates it's in range [0, 100]
+func parsePSIPercentage(value string) (float64, error) {
+	f, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return 0, err
+	}
+	if f < 0 || f > 100 {
+		return 0, fmt.Errorf("value %.2f out of valid range [0, 100]", f)
+	}
+	return f, nil
 }

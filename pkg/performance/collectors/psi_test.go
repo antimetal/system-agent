@@ -284,8 +284,14 @@ full avg10=0.000001 avg60=0.000002 avg300=0.000003 total=1`,
 		{
 			name:        "negative values",
 			psiContent:  `some avg10=-1.00 avg60=2.00 avg300=3.00 total=100`,
-			expectError: false,
-			description: "Should parse negative values (invalid but shouldn't crash)",
+			expectError: true,
+			description: "Should reject negative percentage values",
+		},
+		{
+			name:        "values over 100",
+			psiContent:  `some avg10=150.00 avg60=2.00 avg300=3.00 total=100`,
+			expectError: true,
+			description: "Should reject percentage values over 100",
 		},
 	}
 
