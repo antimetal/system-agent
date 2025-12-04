@@ -116,7 +116,15 @@ func (c *PSICollector) readPSIFile(path string) (*performance.PSIResourceStats, 
 // Used by both system-level and cgroup PSI collectors
 func ParsePSIData(data string) (*performance.PSIResourceStats, error) {
 	stats := &performance.PSIResourceStats{}
-	lines := strings.Split(strings.TrimSpace(data), "\n")
+	trimmedData := strings.TrimSpace(data)
+
+	// Empty content is valid - return zero values for graceful degradation
+	if trimmedData == "" {
+		return stats, nil
+	}
+
+	lines := strings.Split(trimmedData, "\n")
+	validLinesFound := false
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -128,11 +136,18 @@ func ParsePSIData(data string) (*performance.PSIResourceStats, error) {
 			if err := parsePSILine(strings.TrimPrefix(line, "some "), &stats.SomeAvg10, &stats.SomeAvg60, &stats.SomeAvg300, &stats.SomeTotal); err != nil {
 				return nil, fmt.Errorf("failed to parse 'some' line: %w", err)
 			}
+			validLinesFound = true
 		} else if strings.HasPrefix(line, "full ") {
 			if err := parsePSILine(strings.TrimPrefix(line, "full "), &stats.FullAvg10, &stats.FullAvg60, &stats.FullAvg300, &stats.FullTotal); err != nil {
 				return nil, fmt.Errorf("failed to parse 'full' line: %w", err)
 			}
+			validLinesFound = true
 		}
+	}
+
+	// Non-empty content with no valid PSI lines is an error (invalid/malformed file)
+	if !validLinesFound {
+		return nil, fmt.Errorf("no valid PSI data found")
 	}
 
 	return stats, nil

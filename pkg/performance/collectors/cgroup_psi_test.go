@@ -73,8 +73,9 @@ func TestCgroupPSICollector_CgroupV2(t *testing.T) {
 		// Create cgroup v2 marker
 		require.NoError(t, os.WriteFile(filepath.Join(cgroupDir, "cgroup.controllers"), []byte("cpu memory io"), 0644))
 
-		// Create a container with PSI files
-		containerPath := filepath.Join(cgroupDir, "docker", "abc123")
+		// Create a container with PSI files (container IDs must be 12+ hex chars)
+		containerID := "abc123def456"
+		containerPath := filepath.Join(cgroupDir, "docker", containerID)
 		require.NoError(t, os.MkdirAll(containerPath, 0755))
 		require.NoError(t, os.WriteFile(filepath.Join(containerPath, "cgroup.procs"), []byte("1234\n"), 0644))
 		require.NoError(t, os.WriteFile(filepath.Join(containerPath, "cpu.pressure"), []byte(cgroupValidCPUPSI), 0644))
@@ -93,7 +94,7 @@ func TestCgroupPSICollector_CgroupV2(t *testing.T) {
 		require.Len(t, stats, 1)
 
 		// Verify container stats
-		assert.Contains(t, stats[0].ContainerID, "abc123")
+		assert.Contains(t, stats[0].ContainerID, containerID)
 		assert.NotNil(t, stats[0].CPU)
 		assert.NotNil(t, stats[0].Memory)
 		assert.NotNil(t, stats[0].IO)
@@ -114,15 +115,15 @@ func TestCgroupPSICollector_CgroupV2(t *testing.T) {
 
 		require.NoError(t, os.WriteFile(filepath.Join(cgroupDir, "cgroup.controllers"), []byte("cpu memory io"), 0644))
 
-		// Container 1
-		container1Path := filepath.Join(cgroupDir, "docker", "container1")
+		// Container 1 (container IDs must be 12+ hex chars)
+		container1Path := filepath.Join(cgroupDir, "docker", "aabbccdd1111")
 		require.NoError(t, os.MkdirAll(container1Path, 0755))
 		require.NoError(t, os.WriteFile(filepath.Join(container1Path, "cgroup.procs"), []byte("100\n"), 0644))
 		require.NoError(t, os.WriteFile(filepath.Join(container1Path, "cpu.pressure"), []byte(cgroupValidCPUPSI), 0644))
 		require.NoError(t, os.WriteFile(filepath.Join(container1Path, "memory.pressure"), []byte(cgroupValidMemoryPSI), 0644))
 
 		// Container 2
-		container2Path := filepath.Join(cgroupDir, "docker", "container2")
+		container2Path := filepath.Join(cgroupDir, "docker", "aabbccdd2222")
 		require.NoError(t, os.MkdirAll(container2Path, 0755))
 		require.NoError(t, os.WriteFile(filepath.Join(container2Path, "cgroup.procs"), []byte("200\n"), 0644))
 		require.NoError(t, os.WriteFile(filepath.Join(container2Path, "cpu.pressure"), []byte(cgroupValidCPUPSI), 0644))
@@ -147,7 +148,8 @@ func TestCgroupPSICollector_CgroupV2(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(cgroupDir, "cgroup.controllers"), []byte("cpu memory io"), 0644))
 
 		// Container with only memory.pressure (CPU and IO missing)
-		containerPath := filepath.Join(cgroupDir, "docker", "partial")
+		// Container IDs must be 12+ hex chars
+		containerPath := filepath.Join(cgroupDir, "docker", "aabbccdd3333")
 		require.NoError(t, os.MkdirAll(containerPath, 0755))
 		require.NoError(t, os.WriteFile(filepath.Join(containerPath, "cgroup.procs"), []byte("1\n"), 0644))
 		require.NoError(t, os.WriteFile(filepath.Join(containerPath, "memory.pressure"), []byte(cgroupValidMemoryPSI), 0644))
@@ -176,7 +178,8 @@ func TestCgroupPSICollector_CgroupV2(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(cgroupDir, "cgroup.controllers"), []byte("cpu memory io"), 0644))
 
 		// Container with no PSI files (cgroup v1 scenario)
-		containerPath := filepath.Join(cgroupDir, "docker", "nopsi")
+		// Container IDs must be 12+ hex chars
+		containerPath := filepath.Join(cgroupDir, "docker", "aabbccdd4444")
 		require.NoError(t, os.MkdirAll(containerPath, 0755))
 		require.NoError(t, os.WriteFile(filepath.Join(containerPath, "cgroup.procs"), []byte("1\n"), 0644))
 
@@ -213,7 +216,8 @@ func TestCgroupPSICollector_ErrorHandling(t *testing.T) {
 
 		require.NoError(t, os.WriteFile(filepath.Join(cgroupDir, "cgroup.controllers"), []byte("cpu memory io"), 0644))
 
-		containerPath := filepath.Join(cgroupDir, "docker", "malformed")
+		// Container IDs must be 12+ hex chars
+		containerPath := filepath.Join(cgroupDir, "docker", "aabbccdd5555")
 		require.NoError(t, os.MkdirAll(containerPath, 0755))
 		require.NoError(t, os.WriteFile(filepath.Join(containerPath, "cgroup.procs"), []byte("1\n"), 0644))
 		require.NoError(t, os.WriteFile(filepath.Join(containerPath, "cpu.pressure"), []byte("invalid data"), 0644))
