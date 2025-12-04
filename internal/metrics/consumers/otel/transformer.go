@@ -878,21 +878,26 @@ func (t *Transformer) transformPSIStats(ctx context.Context, data any, attrs []a
 		return fmt.Errorf("invalid PSI stats data type")
 	}
 
+	// Pre-allocate slice with capacity for resource attribute
+	baseLen := len(attrs)
+	resourceAttrs := make([]attribute.KeyValue, baseLen, baseLen+1)
+	copy(resourceAttrs, attrs)
+
 	// Transform CPU pressure
 	if stats.CPU != nil {
-		cpuAttrs := append(attrs, attribute.String("resource", "cpu"))
+		cpuAttrs := append(resourceAttrs[:baseLen], attribute.String("resource", "cpu"))
 		t.recordPSIResourceMetrics(ctx, stats.CPU, cpuAttrs)
 	}
 
 	// Transform Memory pressure
 	if stats.Memory != nil {
-		memAttrs := append(attrs, attribute.String("resource", "memory"))
+		memAttrs := append(resourceAttrs[:baseLen], attribute.String("resource", "memory"))
 		t.recordPSIResourceMetrics(ctx, stats.Memory, memAttrs)
 	}
 
 	// Transform I/O pressure
 	if stats.IO != nil {
-		ioAttrs := append(attrs, attribute.String("resource", "io"))
+		ioAttrs := append(resourceAttrs[:baseLen], attribute.String("resource", "io"))
 		t.recordPSIResourceMetrics(ctx, stats.IO, ioAttrs)
 	}
 
@@ -901,8 +906,12 @@ func (t *Transformer) transformPSIStats(ctx context.Context, data any, attrs []a
 
 // recordPSIResourceMetrics records PSI metrics for a single resource (CPU, memory, or I/O)
 func (t *Transformer) recordPSIResourceMetrics(ctx context.Context, stats *performance.PSIResourceStats, attrs []attribute.KeyValue) {
+	// Pre-allocate slice with capacity for stall_type attribute to avoid hidden allocations
+	stallAttrs := make([]attribute.KeyValue, len(attrs), len(attrs)+1)
+	copy(stallAttrs, attrs)
+
 	// "some" metrics - at least one task stalled
-	someAttrs := append(attrs, attribute.String("stall_type", "some"))
+	someAttrs := append(stallAttrs, attribute.String("stall_type", "some"))
 
 	if gauge, err := t.getOrCreateFloat64Gauge("system.psi.pressure.avg10", "PSI 10-second average pressure", "%"); err == nil {
 		gauge.Record(ctx, stats.SomeAvg10, metric.WithAttributes(someAttrs...))
@@ -922,7 +931,8 @@ func (t *Transformer) recordPSIResourceMetrics(ctx context.Context, stats *perfo
 
 	// "full" metrics - all non-idle tasks stalled
 	// Note: For CPU at system level, "full" is always 0
-	fullAttrs := append(attrs, attribute.String("stall_type", "full"))
+	// Reuse stallAttrs backing array by resetting length
+	fullAttrs := append(stallAttrs[:len(attrs)], attribute.String("stall_type", "full"))
 
 	if gauge, err := t.getOrCreateFloat64Gauge("system.psi.pressure.avg10", "PSI 10-second average pressure", "%"); err == nil {
 		gauge.Record(ctx, stats.FullAvg10, metric.WithAttributes(fullAttrs...))
@@ -948,8 +958,17 @@ func (t *Transformer) transformCgroupPSIStats(ctx context.Context, data any, att
 		return fmt.Errorf("invalid cgroup PSI stats data type")
 	}
 
+	// Pre-allocate slice with capacity for container attrs + resource type
+	// to avoid repeated allocations in the loop: base + container.id + cgroup.path + container.name + resource
+	const maxExtraAttrs = 4
+	baseLen := len(attrs)
+
 	for _, stats := range statsList {
-		containerAttrs := append(attrs,
+		// Reuse a single pre-allocated slice per container iteration
+		containerAttrs := make([]attribute.KeyValue, baseLen, baseLen+maxExtraAttrs)
+		copy(containerAttrs, attrs)
+
+		containerAttrs = append(containerAttrs,
 			attribute.String("container.id", stats.ContainerID),
 			attribute.String("cgroup.path", stats.CgroupPath),
 		)
@@ -958,21 +977,23 @@ func (t *Transformer) transformCgroupPSIStats(ctx context.Context, data any, att
 			containerAttrs = append(containerAttrs, attribute.String("container.name", stats.ContainerName))
 		}
 
+		containerBaseLen := len(containerAttrs)
+
 		// Transform CPU pressure
 		if stats.CPU != nil {
-			cpuAttrs := append(containerAttrs, attribute.String("resource", "cpu"))
+			cpuAttrs := append(containerAttrs[:containerBaseLen:cap(containerAttrs)], attribute.String("resource", "cpu"))
 			t.recordPSIResourceMetrics(ctx, stats.CPU, cpuAttrs)
 		}
 
 		// Transform Memory pressure
 		if stats.Memory != nil {
-			memAttrs := append(containerAttrs, attribute.String("resource", "memory"))
+			memAttrs := append(containerAttrs[:containerBaseLen:cap(containerAttrs)], attribute.String("resource", "memory"))
 			t.recordPSIResourceMetrics(ctx, stats.Memory, memAttrs)
 		}
 
 		// Transform I/O pressure
 		if stats.IO != nil {
-			ioAttrs := append(containerAttrs, attribute.String("resource", "io"))
+			ioAttrs := append(containerAttrs[:containerBaseLen:cap(containerAttrs)], attribute.String("resource", "io"))
 			t.recordPSIResourceMetrics(ctx, stats.IO, ioAttrs)
 		}
 	}
