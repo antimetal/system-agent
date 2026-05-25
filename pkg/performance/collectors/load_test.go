@@ -687,6 +687,10 @@ func TestLoadCollector_BlockedProcsIntegration(t *testing.T) {
 }
 
 func TestLoadCollector_StatPermissions(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("Skipping file permission test when running as root")
+	}
+
 	tmpDir := t.TempDir()
 
 	// Create loadavg and uptime files

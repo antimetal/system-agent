@@ -466,6 +466,10 @@ func TestNUMAStatsCollector_NoNUMASupport(t *testing.T) {
 }
 
 func TestNUMAStatsCollector_InvalidDirectoryAccess(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("Skipping directory permission test when running as root")
+	}
+
 	// Test handling of permission denied on node directory
 	tmpDir := t.TempDir()
 	procPath := filepath.Join(tmpDir, "proc")

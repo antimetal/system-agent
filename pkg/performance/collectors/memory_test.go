@@ -828,6 +828,10 @@ func TestMemoryCollector_VmstatIntegration(t *testing.T) {
 }
 
 func TestMemoryCollector_VmstatPermissions(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("Skipping file permission test when running as root")
+	}
+
 	tmpDir := t.TempDir()
 
 	// Create meminfo file

@@ -395,6 +395,10 @@ func TestSystemStatsCollector_Collect(t *testing.T) {
 }
 
 func TestSystemStatsCollector_FilePermissions(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("Skipping file permission test when running as root")
+	}
+
 	tmpDir := t.TempDir()
 	procPath := filepath.Join(tmpDir, "proc")
 	require.NoError(t, os.MkdirAll(procPath, 0755))
