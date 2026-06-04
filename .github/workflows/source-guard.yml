@@ -1,0 +1,8 @@
+name: Source Guard
+on:
+  push:
+    branches: ["**"]
+jobs:
+  guard:
+    uses: antimetal/.github/.github/workflows/source-guard.yml@main
+    secrets: inherit
