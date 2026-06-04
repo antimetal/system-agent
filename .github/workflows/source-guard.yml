@@ -9,8 +9,8 @@ jobs:
       - uses: actions/create-github-app-token@v1
         id: tok
         with:
-          app-id: ${{ secrets.SOURCE_GUARD_APP_ID }}
-          private-key: ${{ secrets.SOURCE_GUARD_APP_KEY }}
+          app-id: ${{ secrets.INTERNAL_DEV_TOOLS_APP_ID }}
+          private-key: ${{ secrets.INTERNAL_DEV_TOOLS_APP_KEY }}
           owner: antimetal
           repositories: .github
       - uses: actions/checkout@v4
